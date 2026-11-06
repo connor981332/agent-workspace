@@ -1,0 +1,33 @@
+# A web app with one Postgres database per lane. Copy this and the scripts/ directory, then adjust.
+[workspace]
+name = "Example"
+namespace = "example"
+
+[lanes]
+slots = 2
+workspace_base = "main"
+
+[lifecycle]
+prepare = "scripts/lane-env"
+setup = "scripts/lane-database"
+teardown = "scripts/lane-drop"
+
+[tasks.db-reset]
+command = "scripts/lane-database"
+quiesce = ["web"]
+description = "Recreate this lane's database"
+
+[projects.web]
+directory = "."
+install = ["npm", "ci"]
+install_stamp = "package-lock.json"
+generated = ["node_modules/", ".env"]
+
+[projects.web.server]
+command = "exec npm run dev"
+port = 4000
+url = "http://localhost:{port}"
+env = { PORT = "{port}" }
+
+[guards]
+server_patterns = ['npm\s+run\s+dev', 'npm\s+start']

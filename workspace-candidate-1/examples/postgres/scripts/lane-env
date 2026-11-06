@@ -1,0 +1,8 @@
+#!/bin/sh
+# Runs before dependencies install. Gives every command in this lane its own database URL.
+set -eu
+
+url="postgresql://postgres:postgres@localhost:5432/example_lane$AW_LANE"
+printf 'DATABASE_URL=%s\n' "$url" > "$AW_LANE_STATE/web.env"
+# Tools that read .env directly need a copy. It is listed under `generated`.
+printf 'DATABASE_URL=%s\n' "$url" > "$AW_LANE_PATH/.env"
