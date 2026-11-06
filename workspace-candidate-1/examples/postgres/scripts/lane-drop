@@ -1,0 +1,5 @@
+#!/bin/sh
+# Runs after the lane's worktrees are removed, from the owner checkout. A failure is journaled.
+set -eu
+
+psql -h localhost -U postgres -qc "DROP DATABASE IF EXISTS \"example_lane$AW_LANE\" WITH (FORCE)"
