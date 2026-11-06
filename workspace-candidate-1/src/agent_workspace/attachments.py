@@ -13,7 +13,7 @@ import subprocess
 import sys
 import time
 
-from .procinfo import name as process_name, parent, start_identity
+from .procinfo import names, parent, start_identity
 
 SCHEMA = 1
 PROTECTED = ("Attaching", "Attached", "Uncertain")
@@ -129,7 +129,7 @@ def harness_process(harness):
         stop = int(os.environ.get('AW_HARNESS_ANCESTRY_STOP') or 1)
         pid = os.getppid()
         while pid and pid > 1 and pid != stop:
-            if process_name(pid) == harness:
+            if harness in names(pid):
                 return pid
             pid = parent(pid)
     except (OSError, ValueError):

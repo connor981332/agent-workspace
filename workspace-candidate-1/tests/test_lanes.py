@@ -45,7 +45,7 @@ class LaneTests(unittest.TestCase):
         self.addCleanup(ignore_ancestry.stop)
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self.base = Path(self.tmp.name)
+        self.base = Path(self.tmp.name).resolve()  # macOS temp directories sit behind a symlink.
         self.main = self.base / "workspace with spaces"
         self.main.mkdir()
 
@@ -105,7 +105,7 @@ class LaneTests(unittest.TestCase):
                                   text=True, capture_output=True)
 
         # Lane maintenance holds the exclusive gate: the guard still decides, in both directions.
-        holder = subprocess.Popen(["flock", "-x", str(self.main / ".git/aw-lanes.lock"), "sleep", "60"])
+        holder = subprocess.Popen([sys.executable, "-c", "import fcntl,sys,time; f=open(sys.argv[1],'a'); fcntl.flock(f,fcntl.LOCK_EX); time.sleep(60)", str(self.main / ".git/aw-lanes.lock")])
         self.addCleanup(close_process, holder)
         time.sleep(1)
         self.assertEqual(hook(f"cat '{lane}/file'").returncode, 0)

@@ -49,8 +49,9 @@ starting agents, deleting lanes, containers or applied sweeps.
 
 - **Linux** is the primary platform, and it is what this tool was developed on.
 - **macOS** uses `ps` where Linux reads `/proc`. CI runs the test suite there, but it has not been
-  used day to day, so treat it as less proven. Harness detection compares process names and may need
-  adjusting for your harness on macOS. Claude Code does not rely on it, because it passes its PID.
+  used day to day, so treat it as less proven. Harness detection compares process names and the first command
+  words, so a harness with an unusual launcher may need adjusting. Claude Code does not rely on it,
+  because it passes its PID.
 - **Windows** is not supported. The tool relies on `fcntl` locks and POSIX process groups.
 - Adapters depend on harness hook payloads, which are not stable interfaces. A harness update can
   break them, and when that happens the guard fails closed.

@@ -49,14 +49,15 @@ def parent(pid):
     return int(text) if text and text.isdigit() else None
 
 
-def name(pid):
+def names(pid):
+    """Names a process goes by. Linux has one. On macOS, ps reports the interpreter for a harness
+    started from a script, so the first two command words count as well."""
     try:
-        return Path(f'/proc/{int(pid)}/comm').read_text().strip()
+        return {Path(f'/proc/{int(pid)}/comm').read_text().strip()}
     except FileNotFoundError:
         pass
     except (OSError, ValueError):
-        return None
+        return set()
     if Path('/proc/self/stat').exists():
-        return None
-    text = _ps(pid, 'comm')
-    return Path(text).name if text else None
+        return set()
+    return {Path(word).name for word in (_ps(pid, 'command') or '').split()[:2]}

@@ -132,7 +132,7 @@ class ProcessIdentityTests(unittest.TestCase):
     def test_own_process(self):
         self.assertTrue(procinfo.start_identity(os.getpid()))
         self.assertEqual(procinfo.parent(os.getpid()), os.getppid())
-        self.assertTrue(procinfo.name(os.getpid()))
+        self.assertTrue(procinfo.names(os.getpid()))
         if not Path('/proc/self/stat').exists():  # The ps path, as on macOS. BusyBox ps lacks lstart.
             self.assertTrue(procinfo._ps(os.getpid(), 'lstart'))
 
