@@ -1,6 +1,59 @@
-# owner/pair-granted-only-by-human: to be written (plan §3.5).
+# A refused session is told the exact grant, but only the human can make it: the guard refuses an
+# agent that tries, the command refuses in agent context even when no guard saw it, and an agent
+# cannot edit its record.
 # req: R60
 # source: spec (no candidate source)
 # milestone: M3
 
-unwritten
+workspace shop --init
+! exec awtest-hook -session live-1 write web/src/app.ts
+stderr 'aw pair --session claude:live-1'
+
+! exec awtest-hook -session live-1 bash 'bin/aw pair --session claude:live-1'
+stderr 'only the human'
+! exec awtest-hook -session live-1 bash 'echo $(aw pair --session claude:live-1)'
+stderr 'only the human'
+
+# With no guard in the way: the harness's marker, then AW_SESSION.
+env CLAUDE_CODE_SESSION_ID=live-1
+! exec aw pair --session claude:live-1
+stderr 'only for the human.*CLAUDE_CODE_SESSION_ID'
+env CLAUDE_CODE_SESSION_ID=
+env AW_SESSION=claude:live-1
+! exec aw pair --session claude:live-1
+stderr 'only for the human.*AW_SESSION'
+env AW_SESSION=
+! exec awtest-hook -session live-1 write web/src/app.ts
+
+exec aw pair --session claude:live-1
+stdout 'now a pair session'
+exec awtest-hook -session live-1 write web/src/app.ts
+! stdout .
+! exec awtest-hook -session someone-else write web/src/app.ts
+stderr 'not attached to a lane'
+exec aw --json
+json stdout .pair_sessions[0].harness claude
+exec aw
+stdout 'PAIR SESSIONS'
+exec aw recap --json
+json stdout .pair_sessions[0].harness claude
+
+# Having been granted, it still cannot touch its record, or grant anyone else.
+! exec awtest-hook -session live-1 write .git/aw/state.db
+stderr 'inside a Git directory'
+! exec awtest-hook -session live-1 bash 'sqlite3 .git/aw/state.db "update sessions set pair = 1"'
+stderr 'own record'
+! exec awtest-hook -session live-1 bash 'aw pair --session claude:someone-else'
+stderr 'only the human'
+
+# A session working in a lane is not pulled out of it.
+session s-1 claude
+exec aw attach 'add feature flag'
+env AW_SESSION=
+! exec aw pair --session claude:s-1
+stderr 'attached to a lane'
+
+# The grant is made from the owner checkout.
+cd .worktrees/01
+! exec aw pair
+stderr 'for the owner checkout'

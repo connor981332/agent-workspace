@@ -84,6 +84,11 @@ var migrations = []string{
 		pid_start TEXT NOT NULL,
 		PRIMARY KEY (session, pid, pid_start)
 	) STRICT`,
+
+	// 5: pair sessions (R60), and the ID aw issued to a session whose harness later told it its own,
+	// which the session's commands still carry in AW_SESSION.
+	`ALTER TABLE sessions ADD COLUMN pair INTEGER NOT NULL DEFAULT 0;
+	ALTER TABLE sessions ADD COLUMN issued_session TEXT NOT NULL DEFAULT ''`,
 }
 
 // BackupPath is where the database is copied before migrating from schema version v.

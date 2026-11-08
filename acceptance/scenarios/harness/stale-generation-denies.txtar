@@ -7,7 +7,7 @@
 workspace solo --single --init
 session old claude
 exec aw attach 'first thing'
-exec aw discard first-thing --yes
+exec env AW_SESSION= aw discard first-thing --yes
 env AW_SESSION=
 env AW_SESSION_PID=
 exec aw attach 'second thing' --json

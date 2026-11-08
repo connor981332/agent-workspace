@@ -10,7 +10,7 @@ exec aw whoami --json
 json stdout .attached.name feature-flag
 json stdout .attached.lane 01
 json stdout .location owner
-exec aw discard feature-flag --yes
+exec env AW_SESSION= aw discard feature-flag --yes
 exec cksum .git/aw/state.db
 cp stdout $WORK/before
 exec aw whoami --json

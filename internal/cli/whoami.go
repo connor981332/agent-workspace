@@ -26,6 +26,8 @@ type whoamiInfo struct {
 	Location string  `json:"location"` // owner or lane
 	LaneRoot *string `json:"lane_root"`
 	Session  *string `json:"session"`
+	// Pair is whether this session is a pair session in the owner checkout.
+	Pair bool `json:"pair"`
 	// Attached is the lane the environment's session is attached to, when that is certain.
 	Attached *attachedInfo `json:"attached"`
 	Warnings []string      `json:"warnings"`
@@ -41,21 +43,26 @@ type attachedInfo struct {
 
 // findAttachment reports the lane this session is attached to. It only reads, and it infers nothing
 // from a record that is stale or ambiguous: it says so instead.
-func findAttachment(stateDir string, max int) (*attachedInfo, []string) {
+func findAttachment(stateDir string, max int) (*attachedInfo, bool, []string) {
 	warnings := []string{}
+	pair := false
 	ids, err := issuedIdentities()
 	if err != nil || len(ids) == 0 {
-		return nil, warnings
+		return nil, false, warnings
 	}
 	store, err := state.Open(stateDir, state.ReadOnly)
 	if err != nil {
-		return nil, warnings
+		return nil, false, warnings
 	}
 	defer store.Close()
 	var found []*attachedInfo
 	for _, id := range ids {
 		rec, err := state.SessionByHarnessID(store.DB(), id.harness, id.id)
 		if err != nil {
+			continue
+		}
+		if rec.Pair {
+			pair = pair || (rec.State == state.SessionActive && rec.Alive())
 			continue
 		}
 		if rec.Lane == 0 {
@@ -74,12 +81,12 @@ func findAttachment(stateDir string, max int) (*attachedInfo, []string) {
 		found = append(found, &attachedInfo{Lane: lanes.Dir(l.Number, max), Name: ui.Clean(l.Name), Harness: id.harness})
 	}
 	if len(found) > 1 {
-		return nil, append(warnings, "several harnesses' sessions are attached here, so aw cannot say which this is")
+		return nil, pair, append(warnings, "several harnesses' sessions are attached here, so aw cannot say which this is")
 	}
 	if len(found) == 1 && len(warnings) == 0 {
-		return found[0], warnings
+		return found[0], pair, warnings
 	}
-	return nil, warnings
+	return nil, pair, warnings
 }
 
 func newWhoamiCmd() *cobra.Command {
@@ -111,7 +118,7 @@ session, and the aw version. It only reads, and it works before setup.`,
 				info.Session = &clean
 			}
 			if dir, err := ws.StateDir(); err == nil {
-				info.Attached, info.Warnings = findAttachment(dir, c.Lanes.Max)
+				info.Attached, info.Pair, info.Warnings = findAttachment(dir, c.Lanes.Max)
 			}
 			info.Version = frameworkVersion()
 			if data, err := os.ReadFile(filepath.Join(ws.Owner, launcher.VersionPath)); err == nil {
@@ -134,6 +141,9 @@ session, and the aw version. It only reads, and it works before setup.`,
 				fmt.Fprintln(out, "location   the owner checkout")
 				if info.Attached != nil {
 					fmt.Fprintf(out, "attached   lane %s %s\n", info.Attached.Lane, info.Attached.Name)
+				}
+				if info.Pair {
+					fmt.Fprintln(out, "role       pair session, granted by the human")
 				}
 			}
 			if info.Session != nil {

@@ -72,12 +72,39 @@ func dashboard(cmd *cobra.Command, asJSON bool) error {
 		return err
 	}
 	out := cmd.OutOrStdout()
+	pairs, err := pairSessions(m)
+	if err != nil {
+		return err
+	}
 	if asJSON {
-		return writeJSON(out, map[string]any{"lanes": all})
+		return writeJSON(out, map[string]any{"lanes": all, "pair_sessions": pairs})
 	}
 	width := ui.Width(os.Stdout)
 	printSections(out, all, width, false)
+	printPairs(out, pairs, width)
 	return nil
+}
+
+// pairSessions are the live pair sessions, or none before setup.
+func pairSessions(m *lanes.Manager) ([]state.Session, error) {
+	if m.Store == nil {
+		return []state.Session{}, nil
+	}
+	out, err := state.PairSessions(m.Store.DB())
+	if out == nil {
+		out = []state.Session{}
+	}
+	return out, err
+}
+
+func printPairs(out io.Writer, pairs []state.Session, width int) {
+	if len(pairs) == 0 {
+		return
+	}
+	fmt.Fprintln(out, ui.Fit("PAIR SESSIONS (in the owner checkout)", width))
+	for _, s := range pairs {
+		fmt.Fprintln(out, ui.Fit(fmt.Sprintf("  %-16s started %s", ui.Clean(s.Harness), ago(s.Started)), width))
+	}
 }
 
 func printSections(out io.Writer, all []*lanes.LaneStatus, width int, detail bool) {
@@ -261,9 +288,15 @@ state, within a deadline. It writes nothing.`,
 			if err != nil {
 				return err
 			}
+			var pairs []state.Session
+			if o.Only == 0 { // a lane's own recap is about that lane
+				if pairs, err = pairSessions(m); err != nil {
+					return err
+				}
+			}
 			out := cmd.OutOrStdout()
 			if asJSON {
-				data, err := json.Marshal(map[string]any{"lanes": ss})
+				data, err := json.Marshal(map[string]any{"lanes": ss, "pair_sessions": pairs})
 				if err != nil {
 					return err
 				}
@@ -271,6 +304,7 @@ state, within a deadline. It writes nothing.`,
 				return err
 			}
 			printSections(out, ss, ui.Width(os.Stdout), true)
+			printPairs(out, pairs, ui.Width(os.Stdout))
 			return nil
 		}),
 	}

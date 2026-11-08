@@ -363,3 +363,37 @@ func BenchmarkDecideShell(b *testing.B) {
 		Decide(s, Call{Tool: Shell, Cwd: f.lane, Command: cmd})
 	}
 }
+
+func TestPairShellSelfModification(t *testing.T) {
+	f := newFixture(t)
+	s := Scope{Role: Pair, Owner: f.owner, Home: f.home, AskSupported: true}
+	for cmd, want := range map[string]Verdict{
+		"echo hi > notes.txt":             Allow,
+		"cp a.txt b.txt":                  Allow,
+		"cp AGENTS.md /tmp/x":             Allow,
+		"rm -rf build":                    Allow,
+		"cat workspace.toml":              Allow,
+		"sed s/a/b/ workspace.toml":       Allow,
+		"echo x 2>&1":                     Allow,
+		"echo x > /dev/null":              Allow,
+		"echo x > workspace.toml":         Ask,
+		"echo x >> CLAUDE.md":             Ask,
+		"cp a.txt AGENTS.md":              Ask,
+		"cp -t .aw a.txt":                 Ask,
+		"mv AGENTS.md old":                Ask,
+		"rm bin/aw":                       Ask,
+		"sed -i s/a/b/ workspace.toml":    Ask,
+		"dd if=x of=.claude/settings":     Ask,
+		"ln -s x .githooks/pre-push":      Ask,
+		"touch \"$X\"":                    Ask,
+		"cd api && echo x > ../AGENTS.md": Ask,
+		"echo x > .git/config":            Deny,
+		"rm -rf .git/aw":                  Deny,
+		"echo x > api/.git/config":        Deny,
+		"sqlite3 .git/aw/state.db x":      Deny,
+	} {
+		if d := Decide(s, Call{Tool: Shell, Cwd: f.owner, Command: cmd}); d.Verdict != want {
+			t.Errorf("%s: got %v (%s), want %v", cmd, d.Verdict, d.Message, want)
+		}
+	}
+}
