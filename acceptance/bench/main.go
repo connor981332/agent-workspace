@@ -100,7 +100,12 @@ func main() {
 	upTo, inProgress, err := milestones(*milestone)
 	check(err)
 
-	tmp, err := os.MkdirTemp("", "aw-bench-")
+	// On the disk users have: /tmp is often a RAM disk, where a sync costs nothing, and SQLite's syncs
+	// are most of what a state-changing command spends (docs/dev/benchmarks.md).
+	base, err := os.UserCacheDir()
+	check(err)
+	check(os.MkdirAll(base, 0o755))
+	tmp, err := os.MkdirTemp(base, "aw-bench-")
 	check(err)
 	defer os.RemoveAll(tmp)
 	fx, err := newFixture(tmp, *awBin)
@@ -161,6 +166,7 @@ func main() {
 		check(os.WriteFile(*out, data, 0o644))
 	}
 	if !rep.Pass {
+		os.RemoveAll(tmp) // os.Exit skips the deferred one
 		os.Exit(1)
 	}
 }
@@ -631,12 +637,17 @@ func (fx *fixture) addResourceOps(env []string, launcher string, signals *os.Fil
 	fx.ops["grant-next"] = &benchOp{prepare: func() { must(holder(), "serve", "bench-token") }, run: func() time.Duration {
 		_ = in(next(), "serve", "bench-token") // exits 3: it joins the queue
 		c := exec.Command(launcher, "stop", "bench-token")
-		c.Dir, c.Env = holder(), env
+		c.Dir, c.Env = holder(), append(slices.Clone(env), "AW_DEBUG=1")
 		start := time.Now()
-		if out, err := c.CombinedOutput(); err != nil {
+		out, err := c.CombinedOutput()
+		d := time.Since(start)
+		if err != nil {
 			fatalf("aw stop: %v\n%s", err, out)
 		}
-		return time.Since(start)
+		if os.Getenv("AW_BENCH_PHASES") != "" {
+			fmt.Fprintf(os.Stderr, "phases grant-next %.1fms %s\n", float64(d.Microseconds())/1000, strings.TrimSpace(string(out)))
+		}
+		return d
 	}, reset: func() {
 		must(next(), "stop", "bench-token")
 		must(holder(), "serve", "bench-token")

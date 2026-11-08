@@ -21,6 +21,7 @@ import (
 	"github.com/connor981332/agent-workspace/internal/lanes"
 	"github.com/connor981332/agent-workspace/internal/procs"
 	"github.com/connor981332/agent-workspace/internal/state"
+	"github.com/connor981332/agent-workspace/internal/timing"
 	"github.com/connor981332/agent-workspace/internal/ui"
 )
 
@@ -341,11 +342,13 @@ func newStopCmd() *cobra.Command {
 		Short: "Give up a seat, or a place in line, and stop this lane's servers on it",
 		Args:  cobra.ExactArgs(1),
 		RunE: run(func(cmd *cobra.Command, args []string) error {
+			t := timing.Start()
 			w, err := openForWrite()
 			if err != nil {
 				return err
 			}
 			defer w.Close()
+			t.Mark("open")
 			m, b := manager(w), newBroker(w)
 			r, err := b.Lookup(args[0])
 			if err != nil {
@@ -356,6 +359,12 @@ func newStopCmd() *cobra.Command {
 				return err
 			}
 			stop, grace, err := b.Release(cmd.Context(), h.Lane, r.Name)
+			t.Mark("release")
+			w.Close()
+			t.Mark("close")
+			if timing.Debug() {
+				t.Report(cmd.ErrOrStderr(), "stop")
+			}
 			if errors.Is(err, broker.ErrNotHeld) {
 				fmt.Fprintf(cmd.OutOrStdout(), "This lane holds no seat on %s.\n", r.Name)
 				return nil

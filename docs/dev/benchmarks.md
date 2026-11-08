@@ -54,21 +54,31 @@ repository at a time, stopping at the first that is not proven.
 
 Not yet measured: pending, for a maintainer with a Mac.
 
+## A correction to earlier results
+
+Until 2026-11-08 the bench kept its fixture in the system's temporary directory, which on this machine
+is a RAM disk, where a sync costs nothing. The M1 and M2 results above, and the first M3 results, were
+measured that way. The bench now uses the user's cache directory, on the real disk. On a real disk a
+state-changing command pays two syncs, about 13 ms each: one when SQLite starts a new write-ahead log,
+and one when it folds the log back into the database as the last connection closes.
+
 ## M3
 
 ### Linux laptop, 2026-11-08
 
-The same machine as M1, on power. aw built from the m3/mux branch, with every M3 guard in place.
+The same machine as M1, on power, on its NVMe disk (btrfs), with other work running (load average
+about 3). aw built from the m4/exit branch. Measured again after the correction above; v0.0.4 was released on the RAM-disk result, and every M3
+budget also holds on the disk.
 
 | Operation | n | p50 ms | p95 ms | p99 ms | max ms | limit ms | result |
 |---|---|---|---|---|---|---|---|
-| hook | 1000 | 4.53 | 5.49 | 5.93 | 6.33 | 8.00 | pass |
-| whoami | 500 | 3.91 | 4.77 | 5.25 | 6.74 | 10.00 | pass |
-| config-get | 500 | 3.99 | 4.78 | 5.24 | 5.71 | 10.00 | pass |
-| attach-from-pool | 100 | 35.13 | 38.96 | 40.88 | 48.16 | 100.00 | pass |
-| new-until-harness | 100 | 37.15 | 40.52 | 43.88 | 44.22 | 150.00 | pass |
-| dashboard | 200 | 45.08 | 48.29 | 50.31 | 52.69 | 100.00 | pass |
-| ref-hook | 1000 | 4.21 | 5.03 | 5.59 | 6.49 | 8.00 | pass |
+| hook | 1000 | 4.48 | 5.32 | 5.82 | 6.83 | 8.00 | pass |
+| whoami | 500 | 3.54 | 4.19 | 4.41 | 4.92 | 10.00 | pass |
+| config-get | 500 | 3.53 | 4.17 | 4.49 | 4.72 | 10.00 | pass |
+| attach-from-pool | 100 | 67.98 | 84.00 | 88.97 | 93.27 | 100.00 | pass |
+| new-until-harness | 100 | 74.78 | 88.11 | 104.12 | 111.08 | 150.00 | pass |
+| dashboard | 200 | 47.31 | 55.88 | 65.70 | 66.98 | 100.00 | pass |
+| ref-hook | 1000 | 3.96 | 4.74 | 5.78 | 6.54 | 8.00 | pass |
 
 ### Apple Silicon laptop
 
@@ -78,20 +88,21 @@ Not yet measured: pending, for a maintainer with a Mac.
 
 ### Linux laptop, 2026-11-08
 
-The same machine as M1, on power. aw built from the m4/exit branch.
+The same machine as M1, on power, on its NVMe disk (btrfs), with other work running (load average
+about 3). aw built from the m4/exit branch. `grant-next` misses its budget here, so the release workflow will refuse an M4 tag on this result.
 
 | Operation | n | p50 ms | p95 ms | p99 ms | max ms | limit ms | result |
 |---|---|---|---|---|---|---|---|
-| hook | 1000 | 4.80 | 5.85 | 6.41 | 7.11 | 8.00 | pass |
-| whoami | 500 | 3.91 | 4.71 | 5.00 | 5.27 | 10.00 | pass |
-| config-get | 500 | 3.95 | 4.87 | 5.37 | 6.19 | 10.00 | pass |
-| attach-from-pool | 100 | 35.74 | 39.85 | 47.20 | 48.56 | 100.00 | pass |
-| new-until-harness | 100 | 37.73 | 40.50 | 43.36 | 44.23 | 150.00 | pass |
-| dashboard | 200 | 46.42 | 49.45 | 50.41 | 52.14 | 100.00 | pass |
-| ref-hook | 1000 | 4.40 | 5.21 | 5.66 | 6.45 | 8.00 | pass |
-| serve-free-seat | 100 | 7.51 | 8.40 | 9.07 | 9.24 | 50.00 | pass |
-| grant-next | 100 | 5.20 | 6.19 | 6.44 | 6.45 | 50.00 | pass |
-| preempt | 100 | 6.76 | 7.56 | 7.88 | 8.74 | 50.00 | pass |
+| hook | 1000 | 4.48 | 5.32 | 5.82 | 6.83 | 8.00 | pass |
+| whoami | 500 | 3.54 | 4.19 | 4.41 | 4.92 | 10.00 | pass |
+| config-get | 500 | 3.53 | 4.17 | 4.49 | 4.72 | 10.00 | pass |
+| attach-from-pool | 100 | 67.98 | 84.00 | 88.97 | 93.27 | 100.00 | pass |
+| new-until-harness | 100 | 74.78 | 88.11 | 104.12 | 111.08 | 150.00 | pass |
+| dashboard | 200 | 47.31 | 55.88 | 65.70 | 66.98 | 100.00 | pass |
+| ref-hook | 1000 | 3.96 | 4.74 | 5.78 | 6.54 | 8.00 | pass |
+| serve-free-seat | 100 | 21.30 | 30.46 | 33.67 | 42.15 | 50.00 | pass |
+| grant-next | 100 | 32.91 | 52.48 | 53.69 | 57.71 | 50.00 | **FAIL** (; failed twice (first run p50 32.67, p99 54.51 ms)) |
+| preempt | 100 | 21.01 | 28.85 | 30.08 | 30.85 | 50.00 | pass |
 
 ### Apple Silicon laptop
 
