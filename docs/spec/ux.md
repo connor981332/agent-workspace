@@ -22,8 +22,8 @@ The CLI is part of the design, not an afterthought. Most of the tool's value is 
 | Command | Who | Does |
 |---|---|---|
 | `aw` | human | Dashboard: needs you, running, parked, cleanable |
-| `aw new "<purpose>" [--harness h] [--mux]` | human | Claim a lane and launch a harness in it |
-| `aw attach "<purpose>"` | agent | Claim a lane for the current session |
+| `aw new "<purpose>" [--harness h] [--mux] [--branch b]` | human | Claim a lane and launch a harness in it |
+| `aw attach "<purpose>" [--branch b]` | agent | Claim a lane for the current session |
 | `aw resume [name] [--all] [--mux]` | human | Reopen sessions where they left off |
 | `aw open <name>` | human | Start a fresh session on existing work, with the handoff injected |
 | `aw recap [--remote]` | human | Full status, for after a reboot or a weekend |
@@ -47,6 +47,10 @@ Both paths are first-class, and neither needs a separate step to create a lane.
 **`aw new "fix checkout tax rounding"`.** Claims a lane from the warm pool, names it
 `checkout-tax`, records the purpose and launches the default harness in the lane root. The harness's
 session ID is recorded from its first hook call. `--harness codex` overrides the default.
+
+**`--branch <name>`** starts the lane on an existing branch, such as a teammate's branch or a change
+set's, instead of a new one: the lane's worktrees check it out, tracking the remote branch when there
+is one. The project's lane guards still run against it.
 
 **Start the harness directly** (`claude`, `codex`) in the workspace, as today. The session starts in
 the owner checkout, and reading, searching and planning work at once. **Lanes are claimed lazily, on

@@ -1,0 +1,7 @@
+# finish/release-failure-keeps-handoff: to be written (plan §3.5).
+# req: R78
+# source: C1 test_finish_open_draft_mr_and_release_failure
+# milestone: M4
+# changed: `finish` no longer requires a pushed branch; the handoff records push state instead.
+
+unwritten

@@ -1,0 +1,6 @@
+# finish/offline-no-network: to be written (plan §3.5).
+# req: R2 R25
+# source: C1 test_local_delivery_offline_idempotent_preserves_unmerged_work
+# milestone: M2
+
+unwritten

@@ -1,0 +1,13 @@
+# Attaching never touches the owner checkout, even with uncommitted, staged and untracked work in
+# it. The runner checks every file, the index, HEAD, refs and the stash afterwards.
+# req: R23 R58
+# source: C1 test_lanes.py::test_attach_is_protected_and_idempotent
+# milestone: M2
+
+workspace shop --init
+exec sh -c 'echo edit >> README.md && echo staged > web/staged.txt && git -C web add staged.txt && echo new > api/untracked.txt'
+owner-snapshot
+exec aw attach 'add feature flag'
+exec git -C web/.worktrees/01 status --porcelain
+! stdout .
+! exists web/.worktrees/01/staged.txt api/.worktrees/01/untracked.txt

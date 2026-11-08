@@ -1,0 +1,6 @@
+# run/stdin-and-signals: to be written (plan §3.5).
+# req: R93
+# source: C1 test_real_forwarded_stdin_arguments_exit_and_signal
+# milestone: M2
+
+unwritten

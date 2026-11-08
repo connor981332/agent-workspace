@@ -1,0 +1,23 @@
+# --branch starts the lane on an existing branch, tracking origin's when it exists only there.
+# Repositories without that branch get a new lane branch. The branch's lane guards still run.
+# req: R21
+# source: C2 tests::t_lane_existing_remote_branch_tracks
+# milestone: M2
+
+workspace shop --init
+# A teammate's branch, pushed to web's origin only.
+exec git clone -q $WORK/remotes/web.git $WORK/teammate
+exec sh -c 'cd "$WORK/teammate" && git switch -qc teammate/search && echo search > search.txt && git add -A && git commit -qm search && git push -q origin teammate/search'
+exec git -C web fetch -q origin
+owner-snapshot
+
+exec aw attach 'help with search' --branch teammate/search --json
+json stdout .repos[2].project web
+json stdout .repos[2].branch teammate/search
+json stdout .repos[1].branch aw/help-search
+exists web/.worktrees/01/search.txt
+exec git -C web/.worktrees/01 rev-parse --abbrev-ref --symbolic-full-name '@{upstream}'
+stdout '^origin/teammate/search$'
+
+! exec aw attach 'nothing like it' --branch no/such-branch
+stderr 'no repository has a branch "no/such-branch"'

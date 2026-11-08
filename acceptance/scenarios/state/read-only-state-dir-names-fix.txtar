@@ -1,0 +1,13 @@
+# When the state directory cannot be written, a state-changing command says so and names the fix.
+# req: R14
+# source: C1 test_lanes.py::test_read_only_git_explains_the_fix
+# milestone: M2
+
+[root] skip 'root can write anywhere'
+workspace shop --init
+exec mkdir -p .git/aw
+exec chmod 500 .git/aw
+! exec aw attach 'add feature flag'
+stderr 'the workspace state in .*\.git/aw cannot be written \(permission denied\) → make that directory writable by you'
+! exists .worktrees/01
+exec chmod 700 .git/aw

@@ -1,0 +1,27 @@
+# A project that is not cloned stops the claim before anything is allocated, and the error names
+# the fix.
+# req: R14 R21
+# source: C1 test_tooling.py::test_attach_without_project_repos_allocates_nothing
+# milestone: M2
+
+workspace shop --init
+exec cp $WORK/three.toml workspace.toml
+exec git commit -qam 'add mobile' 
+exec git push -q
+owner-snapshot
+! exec aw attach 'add feature flag'
+stderr 'no lane was created: these projects are not cloned: mobile \(mobile\) → clone each repository into its directory'
+! exists .worktrees/01
+! exists web/.worktrees
+exec git -C web branch --list 'aw/*'
+! stdout .
+
+-- three.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[projects.web]
+[projects.api]
+[projects.mobile]

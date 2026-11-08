@@ -1,0 +1,4 @@
+# Changing the configuration of one of the owner's own branches disturbs the owner.
+# want-failure: changed: .: .git/config
+workspace w --single
+exec git config branch.main.description 'not the owner'

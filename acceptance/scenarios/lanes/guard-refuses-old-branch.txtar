@@ -1,0 +1,32 @@
+# A branch that fails a project's lane guard is refused before anything is created, with the
+# guard's message: here a database configuration that predates per-lane names.
+# req: R28
+# source: C2 tests::t_lane_guard_refuses_old_branch; C2 finding F9
+# milestone: M2
+
+workspace shop --init
+exec sh -c 'mkdir -p web/config && printf "database: shop_dev\n" > web/config/database.yml && git -C web add -A && git -C web commit -qm old && git -C web push -q'
+owner-snapshot
+! exec aw attach 'add feature flag'
+stderr 'no lane was created: the lane''s branch of project web fails the lane guard lane-db \(config/database\.yml does not match "AW_LANE"\): this branch predates per-lane databases → rebase it on main'
+! exists .worktrees/01
+! exists web/.worktrees
+
+# Fixed on main, the guard passes.
+exec sh -c 'printf "database: shop_<%%= ENV[\"AW_LANE\"] %%>\n" > web/config/database.yml && git -C web commit -qam fix && git -C web push -q'
+owner-snapshot
+exec aw attach 'add feature flag'
+exists web/.worktrees/01
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[projects.web.lane_guards.lane-db]
+file = "config/database.yml"
+matches = "AW_LANE"
+message = "this branch predates per-lane databases → rebase it on main"
+
+[projects.api]

@@ -83,10 +83,27 @@ func takeSnapshot(ts *testscript.TestScript) snapshot {
 			}
 		}
 		snap[prefix+"ref refs/stash"] = strings.TrimSpace(gitMaybe(ts, dir, "rev-parse", "-q", "--verify", "refs/stash"))
+		// Shared Git configuration, except the branch.<b>.* sections of branches the owner did not
+		// have: those belong to lanes (a lane branch that tracks a remote, or git push -u).
 		gitDir := strings.TrimSpace(git(ts, dir, "rev-parse", "--absolute-git-dir"))
-		config, err := os.ReadFile(filepath.Join(gitDir, "config"))
-		ts.Check(err)
-		sum = sha256.Sum256(config)
+		if st.ownerBranches == nil {
+			st.ownerBranches = map[string]bool{}
+			for _, line := range strings.Split(strings.TrimSpace(git(ts, dir, "for-each-ref", "--format=%(refname:short)", "refs/heads")), "\n") {
+				st.ownerBranches[repo+"\x00"+line] = true
+			}
+		}
+		var kept []string
+		for _, line := range strings.Split(git(ts, dir, "config", "--file", filepath.Join(gitDir, "config"), "--list", "-z"), "\x00") {
+			key, _, _ := strings.Cut(line, "\n")
+			if b, ok := strings.CutPrefix(key, "branch."); ok {
+				name := b[:max(0, strings.LastIndex(b, "."))]
+				if !st.ownerBranches[repo+"\x00"+name] {
+					continue
+				}
+			}
+			kept = append(kept, line)
+		}
+		sum = sha256.Sum256([]byte(strings.Join(kept, "\x00")))
 		snap[prefix+".git/config"] = hex.EncodeToString(sum[:])
 	}
 	return snap

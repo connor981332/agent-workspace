@@ -282,7 +282,7 @@ func checkIgnored(owner string, c *config.Config, add func(Check)) {
 	if c != nil {
 		for _, name := range sortedKeys(c.Projects) {
 			if d := c.Projects[name].Directory; d != "." && d != "" {
-				want = append(want, "/"+d+"/")
+				want = append(want, "/"+d)
 			}
 		}
 	}
@@ -296,7 +296,7 @@ func checkIgnored(owner string, c *config.Config, add func(Check)) {
 		add(Check{Name: "gitignore", Status: OK, Message: "lanes, the owner pointer and the project repositories are ignored"})
 	} else {
 		add(Check{Name: "gitignore", Status: Warn, Message: ".gitignore does not list " + strings.Join(missing, " "),
-			Fix: "add those lines to .gitignore, so lanes and nested repositories never show up as changes"})
+			Fix: "add those lines to .gitignore (without a trailing slash, which would not match a lane's links), so lanes and nested repositories never show up as changes"})
 	}
 }
 

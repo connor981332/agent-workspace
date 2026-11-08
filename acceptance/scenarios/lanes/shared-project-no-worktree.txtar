@@ -1,0 +1,22 @@
+# A project with lanes = "shared" gets no worktree and no link: lanes run the owner's checkout of it.
+# req: R21
+# source: C2 tests::t_lane_new_makes_worktree_env_and_links
+# milestone: M2
+
+workspace shop --init
+exec aw attach 'add feature flag' --json
+! json stdout .repos[2]
+json stdout .repos[1].project web
+! exists api/.worktrees
+! exists .worktrees/01/api
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[projects.web]
+
+[projects.api]
+lanes = "shared"

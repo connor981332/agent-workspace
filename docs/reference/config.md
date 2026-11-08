@@ -43,6 +43,7 @@ Lanes: the numbered, stable directories agents work in.
 | `hostname` | string | `"lane-{lane}.localhost"` | Each lane's hostname. {lane} is the lane number, {namespace} the namespace. |
 | `server_capacity` | integer, at least 1 | `2` | Capacity of the implicit resource "servers", which holds every server not listed in a resource. |
 | `port_stride` | integer, at least 1 | `100` | A server in seat k listens on port + port_stride × k. |
+| `branch_prefix` | string | `"aw/"` | Prefix of the branches lanes create: aw/checkout-tax. |
 
 ### `[lanes.data.<name>]`
 
@@ -83,6 +84,20 @@ The project repositories. The key is the project's name.
 | `install` | string | — | Installs dependencies. Rerun when its stamp changes. |
 | `run` | string | — | The default command for aw run <project> with no command. |
 | `needs` | array of strings | — | Resources the project's commands need. |
+| `secrets` | array of strings | — | Files that are not in Git, such as .env, linked read-only into every lane from the owner checkout, relative to the project. |
+| `generated` | array of strings | — | Ignored paths (Git pathspecs) that builds create and that do not block recycling a lane, such as node_modules or tmp. Other ignored files may be someone's work, so they keep the lane. |
+
+### `[projects."<name>".lane_guards.<name>]`
+
+Checks a branch must pass before a lane is created on it (R28). The key names the guard.
+
+`<name>`: lowercase letters, digits and hyphens, starting with a letter.
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `file` | string | — | A file in the branch, relative to the project. |
+| `matches` | string | — | A regular expression the file must match. |
+| `message` | string | — | What is wrong with a branch that fails, and how to fix it. |
 
 ### `[projects."<name>".lifecycle]`
 

@@ -1,0 +1,20 @@
+# In a single-repository workspace the lane root is the repository's own worktree: no links.
+# req: R21
+# source: C1 test_generic.py::HostLaneTests::test_single_repo_lane_from_init_to_cleanup
+# milestone: M2
+
+workspace solo --single --init
+exec aw attach 'add feature flag' --json
+json stdout .name feature-flag
+json stdout .root $OWNER/.worktrees/01
+json stdout .repos[0].project solo
+json stdout .repos[0].path $OWNER/.worktrees/01
+! json stdout .repos[1]
+exists .worktrees/01/bin/aw .worktrees/01/.aw/owner
+exec git -C .worktrees/01 symbolic-ref --short HEAD
+stdout '^aw/feature-flag$'
+exec git -C .worktrees/01 status --porcelain
+! stdout .
+cd .worktrees/01
+exec aw whoami --json
+json stdout .location lane

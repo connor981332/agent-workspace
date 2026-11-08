@@ -1,0 +1,6 @@
+# sweep/partial-failure-journaled-retry: to be written (plan §3.5).
+# req: R25 R31
+# source: C1 test_change_before_apply_and_partial_failure
+# milestone: M2
+
+unwritten

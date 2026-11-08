@@ -179,3 +179,17 @@ func TestMigrationBacksUpFirst(t *testing.T) {
 		t.Errorf("version after a failed migration: %d", s.Version())
 	}
 }
+
+func TestEveryTableExists(t *testing.T) {
+	s, err := Open(t.TempDir(), ReadWrite)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	for _, table := range []string{"meta", "lanes", "lane_repos", "sessions", "journal"} {
+		var n int
+		if err := s.DB().QueryRow(`SELECT count(*) FROM sqlite_schema WHERE type = 'table' AND name = ?`, table).Scan(&n); err != nil || n != 1 {
+			t.Errorf("table %s: %d, %v", table, n, err)
+		}
+	}
+}

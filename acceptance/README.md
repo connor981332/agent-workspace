@@ -63,14 +63,19 @@ forward and `in_progress` to the next milestone.
   that the owner checkout is exactly as the last snapshot recorded it. A scenario that changes the
   owner checkout on purpose declares `owner-may-change`.
 
+## Conditions
+
+Besides testscript's own (`[exec:name]`, `[unix]`, …), `[root]` is true when the suite runs as
+root, which can write where the scenario expects a permission error.
+
 ## Custom commands
 
 | Command | Does |
 |---|---|
-| `workspace <name> [--single] [--repos a,b] [--forge github\|gitlab\|none]` | Builds an owner checkout and changes into it. The default is a workspace repository with nested project repositories `web` and `api` (gitignored in the workspace repository). `--single` makes the workspace repository the only one. Each repository has a bare remote under `$WORK/remotes`, one commit on `main`, and tracks `origin/main`. The archive's `workspace.toml`, when present, is committed. The path contains spaces and a quote (`…/it's a workspace/<name>`) and is reached through a symlink (on macOS, through `/var`), so it is never canonical. Sets `$OWNER` and `$AW_TEST_FORGE`, and takes the owner snapshot. |
+| `workspace <name> [--single] [--init] [--repos a,b] [--forge github\|gitlab\|none]` | Builds an owner checkout and changes into it. With `--init` it then runs `aw init` as a maintainer would (the archive's `workspace.toml`, if any, replacing the generated one), commits and pushes the result, and runs `aw version` once so the binary is cached. The default is a workspace repository with nested project repositories `web` and `api` (gitignored in the workspace repository). `--single` makes the workspace repository the only one. Each repository has a bare remote under `$WORK/remotes`, one commit on `main`, and tracks `origin/main`. The archive's `workspace.toml`, when present, is committed. The path contains spaces and a quote (`…/it's a workspace/<name>`) and is reached through a symlink (on macOS, through `/var`), so it is never canonical. Sets `$OWNER` and `$AW_TEST_FORGE`, and takes the owner snapshot. |
 | `stubs <name>…` | Puts the named stubs from `stubs/` first on `PATH`. |
 | `json <file> <path> [value]` | `<file>` is `stdout`, `stderr` or a file. `<path>` is `.` or a sequence of `.key` and `[n]`. With a value, the value at the path must equal it: a JSON string compares as its text, anything else as compact JSON (`0`, `true`, `null`, `[]`). Without a value, the path must exist. `!` negates. |
-| `owner-snapshot` | Records the owner checkout now: for each repository, its files outside `.git` and `.worktrees` (content, mode, symlink target; ignored files included), the index (`git ls-files --stage`), `HEAD`, every ref, `refs/stash` and `.git/config`. |
+| `owner-snapshot` | Records the owner checkout now: for each repository, its files outside `.git` and `.worktrees` (content, mode, symlink target; ignored files included), the index (`git ls-files --stage`), `HEAD`, every ref, `refs/stash` and `.git/config` (without the `branch.<b>.*` sections of branches the owner did not have, which belong to lanes). |
 | `owner-unchanged` | The owner checkout is as the last snapshot recorded it. New refs are allowed (lanes' branches, `refs/aw/*`), except a new stash. `!` asserts that something changed. |
 | `owner-may-change` | Skips the automatic owner check at the end. |
 | `git-fail <args-regexp>` | Fault injection: a `git` wrapper first on `PATH` fails, with `git-fail: injected failure for: git …` on stderr, when its arguments match the extended regexp, and runs the real Git otherwise. Patterns accumulate. |

@@ -138,7 +138,9 @@ func Init(opts InitOptions) (*InitResult, error) {
 	for _, p := range projects {
 		res.Projects = append(res.Projects, p.Name)
 		if p.Directory != "." {
-			ignore = append(ignore, "/"+p.Directory+"/")
+			// No trailing slash: it ignores the repository in the owner checkout and the link to
+			// the project's worktree in each lane root.
+			ignore = append(ignore, "/"+p.Directory)
 		}
 	}
 	added, err := ensureIgnored(filepath.Join(dir, ".gitignore"), ignore)

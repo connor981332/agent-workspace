@@ -19,11 +19,11 @@ exec cksum .git/aw/state.db
 cp stdout $WORK/before
 
 exec aw doctor
-stdout '^! state: state schema 99 is newer than this aw''s 1, so this aw only reads it and guards refuse → run bin/aw'
+stdout '^! state: state schema 99 is newer than this aw''s [0-9]+, so this aw only reads it and guards refuse → run bin/aw'
 
 exec sh $WORK/hook.sh
 stdout '^status=2$'
-stderr 'this call is refused: .*state\.db is read-only: it has state schema 99, newer than this aw''s 1 → run the workspace''s pinned aw'
+stderr 'this call is refused: .*state\.db is read-only: it has state schema 99, newer than this aw''s [0-9]+ → run the workspace''s pinned aw'
 
 exec cksum .git/aw/state.db
 cmp stdout $WORK/before

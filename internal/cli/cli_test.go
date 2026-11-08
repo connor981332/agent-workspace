@@ -4,10 +4,14 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
+
+	"github.com/connor981332/agent-workspace/internal/config"
+	"github.com/connor981332/agent-workspace/internal/state"
 )
 
 func runCLI(t *testing.T, args ...string) (code int, stdout, stderr string) {
@@ -22,7 +26,7 @@ func TestVersionHuman(t *testing.T) {
 	if code != ExitOK {
 		t.Fatalf("exit %d, stderr %q", code, errOut)
 	}
-	want := "aw dev (config schema 1, state schema 1)\n"
+	want := fmt.Sprintf("aw dev (config schema %d, state schema %d)\n", config.SchemaVersion, state.SchemaVersion)
 	if out != want {
 		t.Fatalf("stdout %q, want %q", out, want)
 	}
@@ -37,7 +41,7 @@ func TestVersionJSON(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &got); err != nil {
 		t.Fatalf("stdout is not JSON: %v\n%s", err, out)
 	}
-	want := map[string]any{"version": "dev", "config_schema": float64(1), "state_schema": float64(1)}
+	want := map[string]any{"version": "dev", "config_schema": float64(config.SchemaVersion), "state_schema": float64(state.SchemaVersion)}
 	if len(got) != len(want) {
 		t.Fatalf("got keys %v, want exactly %v", got, want)
 	}

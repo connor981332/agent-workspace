@@ -1,0 +1,13 @@
+# Four concurrent attaches by one session make one lane, and all four callers get it.
+# req: R23
+# source: C1 test_lanes.py::test_concurrent_attach_by_one_session_makes_one_lane
+# milestone: M2
+# changed: all four callers get the same lane, instead of losers being told to retry.
+
+workspace shop --init
+exec sh -c 'for i in 1 2 3 4; do aw attach "fix checkout tax" --harness claude --session same --json > "$WORK/out$i.json" & done; wait'
+exec sh -c 'cat "$WORK"/out*.json | grep "\"lane\"" | sort | uniq -c'
+stdout '^ *4 +"lane": "01",$'
+! exists .worktrees/02
+exec sh -c 'git worktree list | wc -l'
+stdout '^ *2$'

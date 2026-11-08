@@ -225,6 +225,7 @@ func params(files []string) testscript.Params {
 		Files:               files,
 		Setup:               cmds.Setup(cfg),
 		Cmds:                cmds.Commands(),
+		Condition:           cmds.Condition,
 		RequireExplicitExec: true,
 		RequireUniqueNames:  true,
 	}

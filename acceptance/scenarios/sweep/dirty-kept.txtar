@@ -1,0 +1,7 @@
+# sweep/dirty-kept: to be written (plan §3.5).
+# req: R25
+# source: t_lane_rm_protects_unsaved_work
+# milestone: M2
+# changed: a pushed but unmerged lane is kept (R25); C2 allowed its removal.
+
+unwritten

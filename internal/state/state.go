@@ -75,6 +75,9 @@ func Open(dir string, mode Mode) (*Store, error) {
 	case statErr != nil:
 		return nil, &UnreadableError{Path: path, Err: statErr}
 	}
+	if mode == ReadWrite && !writable(dir) {
+		return nil, fmt.Errorf("the workspace state in %s cannot be written (permission denied) → make that directory writable by you (chmod u+w); a sandboxed harness needs it among its writable roots", dir)
+	}
 
 	db, err := sql.Open("sqlite", dsn(path, mode))
 	if err != nil {
@@ -110,9 +113,23 @@ func Open(dir string, mode Mode) (*Store, error) {
 		// An older schema is read as it is; the next writer migrates it.
 		s.readOnly = &ReadOnlyError{Path: path, Reason: "opened for reading", Fix: "this is a read-only command"}
 	default:
-		if err := s.migrate(); err != nil {
-			db.Close()
-			return nil, err
+		if s.version < SchemaVersion {
+			// Migrate under a lock, re-reading the version under it, so that processes opening a
+			// new or old database at the same moment migrate it once.
+			unlock, err := lockFile(filepath.Join(dir, "state.lock"))
+			if err != nil {
+				db.Close()
+				return nil, fmt.Errorf("locking %s to migrate it: %w", path, err)
+			}
+			err = s.db.QueryRow(`PRAGMA user_version`).Scan(&s.version)
+			if err == nil {
+				err = s.migrate()
+			}
+			unlock()
+			if err != nil {
+				db.Close()
+				return nil, err
+			}
 		}
 		if err := os.Chmod(path, 0o600); err != nil {
 			db.Close()
@@ -129,9 +146,11 @@ func Open(dir string, mode Mode) (*Store, error) {
 }
 
 func dsn(path string, mode Mode) string {
+	// journal_mode is not set here: switching to WAL needs an exclusive lock, which SQLite refuses at
+	// once rather than waiting for. WAL is persistent, so migrate sets it once, at creation.
 	q := []string{"_pragma=busy_timeout(5000)", "_txlock=immediate"}
 	if mode == ReadWrite {
-		q = append(q, "_pragma=journal_mode(WAL)", "_pragma=synchronous(NORMAL)", "_pragma=foreign_keys(1)")
+		q = append(q, "_pragma=synchronous(NORMAL)", "_pragma=foreign_keys(1)")
 	}
 	return "file:" + path + "?" + strings.Join(q, "&")
 }

@@ -17,6 +17,52 @@ var migrations = []string{
 		key   TEXT PRIMARY KEY,
 		value TEXT NOT NULL
 	) STRICT`,
+
+	// 2: lanes, their repositories, and sessions (M2).
+	`CREATE TABLE lanes (
+		number     INTEGER PRIMARY KEY CHECK (number > 0),
+		name       TEXT UNIQUE,
+		purpose    TEXT NOT NULL DEFAULT '',
+		state      TEXT NOT NULL,
+		generation INTEGER NOT NULL DEFAULT 0,
+		created    TEXT NOT NULL,
+		claimed    TEXT,
+		updated    TEXT NOT NULL,
+		pooled     TEXT
+	) STRICT;
+	CREATE TABLE lane_repos (
+		lane     INTEGER NOT NULL REFERENCES lanes (number) ON DELETE CASCADE,
+		project  TEXT NOT NULL,
+		path     TEXT NOT NULL,
+		branch   TEXT NOT NULL,
+		base_ref TEXT NOT NULL,
+		base_sha TEXT NOT NULL,
+		PRIMARY KEY (lane, project)
+	) STRICT;
+	CREATE TABLE sessions (
+		id              INTEGER PRIMARY KEY,
+		harness         TEXT NOT NULL,
+		harness_session TEXT NOT NULL,
+		lane            INTEGER REFERENCES lanes (number) ON DELETE SET NULL,
+		lane_generation INTEGER,
+		purpose         TEXT NOT NULL DEFAULT '',
+		state           TEXT NOT NULL,
+		started         TEXT NOT NULL,
+		last_activity   TEXT NOT NULL,
+		pid             INTEGER,
+		pid_start       TEXT,
+		UNIQUE (harness, harness_session)
+	) STRICT;
+	CREATE TABLE journal (
+		id      INTEGER PRIMARY KEY,
+		kind    TEXT NOT NULL,
+		lane    INTEGER,
+		step    TEXT NOT NULL,
+		status  TEXT NOT NULL,
+		detail  TEXT NOT NULL DEFAULT '',
+		started TEXT NOT NULL,
+		ended   TEXT
+	) STRICT`,
 }
 
 // BackupPath is where the database is copied before migrating from schema version v.
@@ -41,6 +87,12 @@ func (s *Store) migrate() error {
 		}
 	}
 	from := s.version
+	if from == 0 {
+		var mode string
+		if err := s.db.QueryRow(`PRAGMA journal_mode = WAL`).Scan(&mode); err != nil || mode != "wal" {
+			return fmt.Errorf("putting %s in WAL mode: %v (mode %q) → check that the file system supports it", s.path, err, mode)
+		}
+	}
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
