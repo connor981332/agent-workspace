@@ -1,6 +1,20 @@
-# harness/hook-from-project-subdir: to be written (plan §3.5).
+# A hook called from deep inside a lane, through a project link or by the worktree's real path, still knows its lane.
 # req: R49 R55 R58
 # source: C1 test_real_hook_and_routing
 # milestone: M3
 
-unwritten
+workspace shop --init
+exec aw attach 'add feature flag'
+mkdir .worktrees/01/web/src/deep
+cd .worktrees/01/web/src/deep
+exec awtest-hook read ../README.md
+! exec awtest-hook read $OWNER/README.md
+stderr 'is outside lane feature-flag'
+cd $OWNER/web/.worktrees/01/src/deep
+exec awtest-hook bash 'cat ../x.ts'
+! exec awtest-hook bash 'cat ../../../../README.md'
+stderr 'is outside lane feature-flag'
+
+# The same read from the owner checkout is the owner's to make.
+cd $OWNER
+exec awtest-hook read README.md

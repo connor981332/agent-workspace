@@ -410,16 +410,21 @@ func serverRule(s Scope, c shell.Command) Decision {
 		words = append(words, a.Text)
 	}
 	for _, sv := range s.Servers {
-		pattern := slices.DeleteFunc(slices.Clone(sv.Words), func(w string) bool { return w == "exec" })
+		// The command itself: up to its first option or placeholder, since the agent's flags and port
+		// will differ from the configured ones.
+		var pattern []string
+		for _, w := range slices.DeleteFunc(slices.Clone(sv.Words), func(w string) bool { return w == "exec" }) {
+			if strings.HasPrefix(w, "-") || strings.Contains(w, "{") {
+				break
+			}
+			pattern = append(pattern, w)
+		}
 		if len(pattern) == 0 || len(words) < len(pattern) {
 			continue
 		}
 		match := true
 		for i, p := range pattern {
-			if strings.Contains(p, "{port}") {
-				continue
-			}
-			if words[i] != p && filepath.Base(words[i]) != p {
+			if words[i] != p && filepath.Base(words[i]) != filepath.Base(p) {
 				match = false
 				break
 			}

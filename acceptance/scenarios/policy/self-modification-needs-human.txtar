@@ -1,6 +1,27 @@
-# policy/self-modification-needs-human: to be written (plan §3.5).
+# A pair session may edit the owner checkout, but the workspace's own instructions, hooks and configuration need the human, and destructive Git stays refused.
 # req: R63
 # source: spec (no candidate source)
 # milestone: M3
 
-unwritten
+workspace shop --init
+exec sh $WORK/pair.sh
+exec aw config get user.owner_sessions
+stdout pair
+exec awtest-hook write web/src/app.ts
+! stdout .
+exec awtest-hook bash 'echo hi > notes.txt'
+exec awtest-hook write workspace.toml
+stdout '"permissionDecision":"ask"'
+stdout 'needs|reviews'
+exec awtest-hook write AGENTS.md
+stdout '"permissionDecision":"ask"'
+exec awtest-hook write .claude/settings.json
+stdout '"permissionDecision":"ask"'
+! exec awtest-hook -harness codex write workspace.toml
+! exec awtest-hook bash 'git branch -D main'
+stderr 'deletes, moves or forces a branch'
+! exec awtest-hook bash 'git reset --hard'
+
+-- pair.sh --
+mkdir -p "$XDG_CONFIG_HOME/agent-workspace"
+printf '[user]\nowner_sessions = "pair"\n' > "$XDG_CONFIG_HOME/agent-workspace/shop.toml"

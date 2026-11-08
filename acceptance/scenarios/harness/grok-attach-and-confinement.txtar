@@ -1,6 +1,27 @@
-# harness/grok-attach-and-confinement: to be written (plan §3.5).
+# Grok attaches through its own session variable, and is confined like any other harness, including when it keeps running from the owner checkout.
 # req: R56 R58
 # source: C1 test_grok_attach_and_confinement
 # milestone: M3
 
-unwritten
+# changed: C1 refused an attach with no grok process above it. Here the session's first hook records
+# the process, as for Codex, so a sandbox that hides the process does not block attaching.
+
+workspace shop --init
+env GROK_SESSION_ID=grok-one
+exec aw attach 'add feature flag' --json
+json stdout .lane 01
+env GROK_SESSION_ID=
+env LANE=$OWNER/.worktrees/01
+! exec awtest-hook -harness grok -session grok-one bash 'git status'
+stderr 'this session belongs to lane feature-flag'
+exec awtest-hook -harness grok -session grok-one read $LANE/README.md
+! exec awtest-hook -harness grok -session grok-one read $OWNER/README.md
+exec awtest-hook -harness grok -session grok-one edit $LANE/web/x.ts
+! exec awtest-hook -harness grok -session grok-one write $OWNER/x
+exec sh $WORK/cd.sh
+exec awtest-hook -harness grok -session someone-else bash 'git status'
+
+-- cd.sh --
+set -e
+awtest-hook -harness grok -session grok-one bash "cd \"$LANE\" && git status"
+if awtest-hook -harness grok -session grok-one bash "cd \"$LANE\" && cat \"$OWNER/README.md\"" 2>/dev/null; then exit 1; fi

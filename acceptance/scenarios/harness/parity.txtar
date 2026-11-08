@@ -1,6 +1,42 @@
-# harness/parity: to be written (plan §3.5).
+# Every harness reaches the same decision on the same call: this table runs through each adapter. Asking is left out, since not every harness can ask.
 # req: R56
 # source: spec (no candidate source)
 # milestone: M3
 
-unwritten
+workspace shop --init
+exec aw attach 'add feature flag'
+cd .worktrees/01
+exec sh $WORK/table.sh
+! stdout DIFFERS
+stdout 'all harnesses agree on 18 calls'
+
+-- table.sh --
+n=0
+check() {
+	want=$1 tool=$2 arg=$3
+	n=$((n + 1))
+	for h in claude codex grok; do
+		awtest-hook -harness "$h" "$tool" "$arg" >/dev/null 2>&1
+		got=$?
+		[ "$got" = "$want" ] || echo "DIFFERS: $h $tool $arg: exit $got, want $want"
+	done
+}
+check 0 bash 'ls -la && git status'
+check 0 bash 'cat web/README.md'
+check 2 bash 'cat ../../README.md'
+check 2 bash 'cd ../.. && ls'
+check 2 bash 'cat "$(git rev-parse --show-toplevel)/x"'
+check 2 bash 'bin/aw discard x'
+check 2 bash 'echo $(bin/aw pair)'
+check 2 bash 'git push --force origin x'
+check 2 bash 'git branch -D main'
+check 2 bash 'docker compose down'
+check 2 bash 'pkill node'
+check 2 bash 'printenv'
+check 2 bash 'echo unterminated "'
+check 0 read web/README.md
+check 2 read ../../README.md
+check 0 edit web/README.md
+check 2 write ../../x
+check 2 edit "$OWNER/README.md"
+echo "all harnesses agree on $n calls"

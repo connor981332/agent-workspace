@@ -1,6 +1,23 @@
-# policy/publication-asks-by-default: to be written (plan §3.5).
+# Anything outward-facing asks first by default, where the harness can ask; where it cannot, it is refused. Rewriting published history is refused either way.
 # req: R72
 # source: spec (no candidate source)
 # milestone: M3
 
-unwritten
+workspace shop --init
+exec aw attach 'add feature flag'
+cd .worktrees/01
+exec awtest-hook bash 'git push origin aw/feature-flag'
+stdout '"permissionDecision":"ask"'
+stdout 'git push publishes commits to the remote'
+exec awtest-hook -harness grok bash 'gh pr create --fill'
+stdout '"decision":"ask"'
+! exec awtest-hook -harness codex bash 'git push origin aw/feature-flag'
+stderr 'git push publishes commits'
+exec awtest-hook bash 'glab mr merge 3'
+stdout '"permissionDecision":"ask"'
+exec awtest-hook bash 'npm publish'
+stdout '"permissionDecision":"ask"'
+! exec awtest-hook bash 'git push --force origin aw/feature-flag'
+stderr 'rewrites the remote''s history'
+exec awtest-hook bash 'gh pr view 3'
+! stdout .

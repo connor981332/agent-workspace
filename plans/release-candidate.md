@@ -63,17 +63,22 @@ publication had no scenario, and R94 (the safety model) is a document, to be che
 (PR #24). The adapters and the hook wired to the policy (PR #25), with the role taken from the working
 directory until the session record is consulted. Codex 0.167.0 and Grok 1.0.77 payloads, recorded by the maintainer, replaced the assumed shapes
 (PR #26). The hook resolves a call to its session's record, the first hook call records a session's ID and
-process, and `aw attach` takes its identity from the harness's environment (PR #27). The Git hooks dispatcher and `reference-transaction` hook, with a first `aw setup` (PR #29). Now
-(`m3/harness-config`): `aw setup` also merges aw's hooks into each harness's project configuration,
-and a session is told where it is when it starts.
+process, and `aw attach` takes its identity from the harness's environment (PR #27). The Git hooks dispatcher and `reference-transaction` hook, with a first `aw setup` (PR #29). `aw setup` also merges aw's hooks into each harness's project configuration, and a session is told
+where it is when it starts (PR #30). Now (`m3/guard-scenarios`): the policy, parity and confinement
+scenarios that needed only the engine, with server matching on the command rather than its flags.
 
 **Next step:** resumed processes joining a record and the session-start revival rule, purpose capture
-from the first prompt, `aw doctor`'s hooks-path check, `aw pair`, `compose`, team guards.
+from the first prompt, `whoami` with attachments, `aw doctor`'s hooks-path check, `aw pair`, `compose`,
+team guards, terminal multiplexers, `aw resume` and `aw open`.
 
 **Open question for the spec owner:** architecture.md names OpenCode's `tool.execute.before` plugin
 hook, which cancels a call on a deny. OpenCode 2.x documents a new plugin interface (`ctx.tool`,
 `execute.before`) and no way for it to cancel a call. OpenCode's adapter denies every call until
 this is settled and its payloads are recorded.
+
+**Open question for the spec owner:** C1's `policy/before-setup-diagnosis-only` allows only a few
+diagnostic commands in a workspace that has not been set up. The spec does not define that state, and
+its lazy claiming lets any session read from the start.
 
 **Pending manual checks:** the hot-path and budget benchmarks on an Apple Silicon laptop (T3, M1, M2;
 docs/dev/benchmarks.md).

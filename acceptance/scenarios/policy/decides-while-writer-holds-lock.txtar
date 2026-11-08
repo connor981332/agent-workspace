@@ -1,6 +1,13 @@
-# policy/decides-while-writer-holds-lock: to be written (plan §3.5).
+# A long state-changing command holding the write lock does not hold up a guard: it still decides, both ways, at once.
 # req: R1 R55
 # source: C1 test_guard_hook_fails_closed_and_ignores_the_gate; C1 test_v2_guard_without_maintenance_gate
 # milestone: M3
 
-unwritten
+workspace shop --init
+exec aw attach 'add feature flag'
+exec sh -c 'awtest-sqlite -hold .git/aw/state.db "$WORK/held" "$WORK/release" >/dev/null 2>&1 & i=0; while [ ! -e "$WORK/held" ] && [ $i -lt 200 ]; do sleep 0.05; i=$((i + 1)); done; test -e "$WORK/held"'
+cd .worktrees/01
+exec awtest-hook bash 'cat README.md'
+! exec awtest-hook bash 'cat ../../README.md'
+stderr 'is outside lane feature-flag'
+exec touch $WORK/release
