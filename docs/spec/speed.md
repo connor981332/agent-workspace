@@ -6,6 +6,10 @@ should be imperceptible.
 
 This is a requirement, not an aspiration. It has budgets, and CI enforces them.
 
+The guard budget was 5 ms until the M0 spike measured a prototype hot path at 5.6 to 6.0 ms p99 on
+Linux, almost all of it process start-up ([docs/dev/spikes.md](../dev/spikes.md)). The spec owner
+kept the design and set the budget to 8 ms on 2026-11-07.
+
 ## Budgets
 
 Measured on a typical developer laptop with a warm file system cache, from process start to exit,
@@ -13,7 +17,7 @@ including the `bin/aw` launcher. Time spent in the project's own commands is exc
 
 | Operation | Budget (p99) |
 |---|---|
-| Guard decision for one tool call | 5 ms |
+| Guard decision for one tool call | 8 ms |
 | `aw whoami`, `aw config get` | 10 ms |
 | `aw` dashboard and `aw recap` (local only) | 100 ms for 10 lanes across 4 repositories |
 | `aw attach` from the warm pool | 100 ms, plus the project's `reset` hooks |
@@ -36,8 +40,11 @@ A guard decision runs on every tool call of every agent. It may only:
 3. Read the session's attachment and pending notifications from SQLite.
 4. Parse the command and decide.
 
-It may not run Git, Docker, the devcontainer CLI, a forge CLI or any network request, and it may not
-take a write lock except to record activity, which is batched and never waited on.
+It may not run Git, Docker, the devcontainer CLI, a forge CLI or any network request. It writes only
+three things: activity, a session's ID on its first hook call, and the delivery of a notification.
+None of these writes waits for a lock: a write that cannot be made at once is retried on the next
+call. Notifications are therefore delivered at least once, and each carries an ID, so a repeat is
+recognizable.
 
 ## Techniques
 
@@ -60,8 +67,14 @@ take a write lock except to record activity, which is batched and never waited o
 
 ## Enforcement
 
-- A benchmark suite runs each budgeted operation against a fixture workspace and fails CI when a
-  budget is exceeded on the reference runners.
+- A benchmark suite runs each budgeted operation against a fixture workspace. CI fails when a
+  budget is exceeded at p99 on the Linux reference runner, GitHub-hosted `ubuntu-24.04` (amd64).
+  The macOS reference runner, `macos-15` (arm64), is a virtual machine whose process start alone
+  takes several milliseconds, so there CI fails on a regression against the last run on the main
+  branch instead of on the budget itself.
+- A maintainer measures every budget twice per milestone on a Linux laptop and on an Apple Silicon
+  laptop. Those measurements are the budgets' real test, since the budgets are defined on a
+  developer laptop.
 - Commands log their own duration and phase timings at debug level, so a slow report from a user can
   be diagnosed with `aw doctor --timings`.
 - A pull request that adds work to the hot path must say why in its description.

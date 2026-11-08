@@ -14,34 +14,29 @@ milestone named in its row.
 
 **Updated:** 2026-11-07
 
-**Branches / MRs:** [PR #5](https://github.com/connor981332/agent-workspace/pull/5) (this plan, merged),
-[PR #6](https://github.com/connor981332/agent-workspace/pull/6) (the settled questions, merged),
-[PR #7](https://github.com/connor981332/agent-workspace/pull/7) (T1, `m0/skeleton`, merged),
-[PR #8](https://github.com/connor981332/agent-workspace/pull/8) (T2, `m0/acceptance`, merged).
-[PR #9](https://github.com/connor981332/agent-workspace/pull/9) (GoReleaser, merged).
-`m0/spikes` (spike results, open). `spike/hot-path` (T3 and the ref-hook spike, never merged).
+**Branches / MRs:** [PR #5](https://github.com/connor981332/agent-workspace/pull/5) (this plan),
+[PR #6](https://github.com/connor981332/agent-workspace/pull/6) (settled questions),
+[PR #7](https://github.com/connor981332/agent-workspace/pull/7) (T1),
+[PR #8](https://github.com/connor981332/agent-workspace/pull/8) (T2),
+[PR #9](https://github.com/connor981332/agent-workspace/pull/9) (GoReleaser),
+[PR #10](https://github.com/connor981332/agent-workspace/pull/10) (spike results), all merged.
+`m0/budget` (the 8 ms budget, open). `spike/hot-path` (T3 and the ref-hook spike, never merged).
 
-**Done:** Read the spec and both candidates. Wrote this plan: milestones M0 to M12, v0.1 defined at
-the end of M7, R1 to R94 assigned, the acceptance suite design and its inventory, the module layout,
-benchmarks, the release pipeline, CI, risks, spec issues and the first tasks. Settled all five of
-the spec's open questions with the spec owner (§8); the spec records the answers under "Settled
-questions" in its README. The spec owner accepted every proposed answer in
-[Spec issues](#spec-issues) (S1 to S19) on 2026-11-07; each is recorded in the spec by the PR of the
-milestone that needs it. T1: the Go module, `aw version`, the exit codes, the `lint` and `unit` CI
-jobs on all four runners, and the PR template. T1 reworded §4.3 rule 3, because `cmd/aw` links the
-command tree (cobra's flag library imports `net`) and so cannot meet the transitive rule. T2: the
-acceptance module, runner, owner check, stubs, the M0 scenarios, the M1 scenarios as pending files,
-the coverage check and the `acceptance` CI job.
+**Done:** Read the spec and both candidates and wrote this plan. Settled the spec's five open
+questions (§8). The spec owner accepted every proposed answer in [Spec issues](#spec-issues) (S1 to
+S19) on 2026-11-07; each is recorded in the spec by the PR of the milestone that needs it (S5 and S6
+are recorded). **M0 is complete:** the Go module and CI matrix (T1; §4.3 rule 3 reworded because
+`cmd/aw` links the command tree), the acceptance harness with three passing scenarios and the M1
+scenarios pending (T2), GoReleaser with a reproducible snapshot build in CI, the PR template with
+the hot-path check, and the hot-path and ref-hook spikes ([docs/dev/spikes.md](../docs/dev/spikes.md)).
+T3 missed its 3 ms target; the spec owner kept the design and set the guard budget to 8 ms p99
+(the M0 target to 6 ms, which the prototype meets on ubuntu-24.04 at 5.58 ms), with budgets on
+macOS CI checked for regressions only.
 
-GoReleaser configuration and the `release-snapshot` job (§6). T3 and the ref-hook spike, recorded
-in [docs/dev/spikes.md](../docs/dev/spikes.md).
+**In progress:** Recording the budget decision in the spec and this plan (`m0/budget`).
 
-**In progress:** Blocked. **T3 is a no-go against the M0 exit criterion's 3 ms target**: the
-prototype hot path measured 5.58 ms p99 on ubuntu-24.04 and 22.3 ms p99 on macos-15, and risk 1's
-snapshot fallback alone does not reach 3 ms. As the exit criterion requires, the fallback options
-(listed in docs/dev/spikes.md) are with the spec owner. M1 does not start until they decide.
-
-**Next step:** Apply the spec owner's decision on the hot path, then finish M0's exit criterion.
+**Next step:** M1: configuration, state and launcher. Start by turning the M1 scenarios in
+`acceptance/scenarios/` from `unwritten` into real scripts.
 
 **Pending manual checks:** hot-path benchmark on an Apple Silicon laptop (T3).
 
@@ -124,10 +119,11 @@ questions that could force a spec change (hot-path latency and Git's ref hook).
 
 **Exit criterion:** CI passes on all four platforms. The acceptance harness runs at least three
 scenarios. The prototype hot path (the launcher, then the binary, which opens SQLite, reads one
-row, decodes a config cache and parses one shell command) measures **under 3 ms p99** on both
-reference runners. That leaves 2 ms of the 5 ms budget for the real rules. The ref-hook behavior
-matrix is recorded in `docs/dev/spikes.md`. If the 3 ms target is missed, stop and take the
-fallback options in risk 1 to the spec owner before starting M1.
+row, decodes a config cache and parses one shell command) measures **under 6 ms p99** on the Linux
+reference runner. That leaves 2 ms of the 8 ms budget for the real rules. The ref-hook behavior
+matrix is recorded in `docs/dev/spikes.md`. If the target is missed, stop and take the fallback
+options in risk 1 to the spec owner before starting M1. (The target was 3 ms of a 5 ms budget
+until the spike missed it; see risk 1.)
 
 ### M1: Configuration, state and launcher
 
@@ -147,12 +143,12 @@ fallback options in risk 1 to the spec owner before starting M1.
 - `aw whoami`, `aw doctor` (read-only, works before setup, every failure names its fix: R14),
   `--json` everywhere and the exit-code table (R93).
 - A hook stub, `aw hook <harness> <event>`, that loads the cache, opens state read-only and returns
-  allow. It exists so that the 5 ms guard budget is enforced from M1, before real rules arrive.
+  allow. It exists so that the 8 ms guard budget is enforced from M1, before real rules arrive.
 - Debug phase timings, and `aw doctor --timings`.
 
 **Exit criterion:** the M1 scenarios pass (the `config/`, `state/`, `launcher/`, `init/`, `doctor/`
-and `cli/` areas in §3.5). CI enforces these budgets on the reference runners: `aw whoami` and
-`aw config get` under 10 ms p99, and the hook stub under 5 ms p99.
+and `cli/` areas in §3.5). CI enforces these budgets (§5.2): `aw whoami` and `aw config get` under 10 ms
+p99, and the hook stub under 8 ms p99.
 
 ### M2: Lanes and merge proof
 
@@ -229,8 +225,8 @@ a computed path); the owner checkout is protected from lane agents (files, refs,
 configuration, processes, data: R58); ref protection inside Git works even with `--no-verify`.
 
 **Exit criterion:** the M3 scenarios and the parity suite pass on all four platforms against the
-Git versions in the CI matrix. CI enforces the guard budget: 5 ms p99, including the launcher, on
-both reference runners. The ref hook has the same budget (S3).
+Git versions in the CI matrix. CI enforces the guard budget (§5.2): 8 ms p99, including the
+launcher. The ref hook has the same budget (S3).
 
 ### M4: Resources and the queue
 
@@ -401,7 +397,7 @@ agreement.
 
 | R | Requirement (short) | Milestone | Notes |
 |---|---|---|---|
-| R1 | Guard decision < 5 ms p99 | M1 (stub), M3 | Enforced in CI from M1. |
+| R1 | Guard decision < 8 ms p99 | M1 (stub), M3 | Enforced in CI from M1. |
 | R2 | No network, engine or forge in hooks and read-only commands | M1 onward | Structural import check plus recording stubs (§5.3). |
 | R3 | Command budgets | M1, M2, M4 | Each budget is enforced in the milestone that adds its command. |
 | R4 | CI benchmarks fail on budgets | M0 onward | §5. |
@@ -918,8 +914,8 @@ process each time. It measures from just before process start to exit, which inc
 
 | Operation | Iterations | Budget (p99) | Enforced from |
 |---|---|---|---|
-| Hook decision, allow and deny mix, per adapter | 1000 | 5 ms | M1 (stub), M3 (real rules) |
-| `reference-transaction` hook, `prepared` state | 1000 | 5 ms (S3) | M3 |
+| Hook decision, allow and deny mix, per adapter | 1000 | 8 ms | M1 (stub), M3 (real rules) |
+| `reference-transaction` hook, `prepared` state | 1000 | 8 ms (S3) | M3 |
 | `aw whoami`, `aw config get` | 500 | 10 ms | M1 |
 | `aw` dashboard, `aw recap` (10 lanes, 4 repositories) | 200 | 100 ms | M2 |
 | `aw attach` from the pool | 100 | 100 ms | M2 |
@@ -937,14 +933,18 @@ summary for the CI job page.
 
 ### 5.2 CI enforcement
 
-- **Reference runners:** GitHub-hosted `ubuntu-24.04` (amd64) and `macos-15` (arm64). See S5.
+- **Reference runners:** GitHub-hosted `ubuntu-24.04` (amd64) and `macos-15` (arm64). See S5. The
+  budgets are enforced absolutely on `ubuntu-24.04` only. `macos-15` is a virtual machine whose
+  process start alone costs 8 ms p99 (docs/dev/spikes.md), so there an operation fails when its p99
+  grows more than 25 % over master's last run, with the same rerun rule.
 - A `bench` job runs on every pull request and on every push to master, from M1 on (M0 runs the
   spike prototype only).
 - An operation fails when its p99 exceeds its budget. A failing operation is measured once more in
   the same job. Two failures in a row fail CI, and both runs are reported. One noisy run on a shared
   runner cannot fail CI on its own, while a consistent regression still does.
 - Results from master are kept as artifacts, and the PR summary shows the change from master's last
-  run. A p99 that grows more than 25 % is flagged in the summary but does not fail CI.
+  run. On `ubuntu-24.04`, a p99 that grows more than 25 % is flagged in the summary
+but does not fail CI.
 - Twice per milestone, a maintainer runs `bench` on a real laptop (one Linux, one Apple Silicon Mac)
   and records the results in `docs/dev/benchmarks.md`, because the budgets are defined on developer
   laptops.
@@ -1055,7 +1055,7 @@ Ranked by likelihood times impact.
 
 | # | Risk | Mitigation |
 |---|---|---|
-| 1 | **The hook latency budget (5 ms p99 including the launcher) is missed**, especially on macOS, where process start is slower and the first run of a new binary is scanned. Every tool call of every agent pays this. | The architecture is proven in M0 before anything is built on it (T3, with a 3 ms target that leaves room for the rules). The budget is enforced from M1. The hot path is structurally limited (§4.3). The CLI framework is bypassed. If the target is missed, the fallbacks, in order: shrink package initialization on the hot path; read a small per-session snapshot file that state changes write, instead of opening SQLite (a spec change, taken to the spec owner first); keep binary size down. The cached binary is executed before the first hook, at `aw setup`, so the one-time scan never lands in a hook. |
+| 1 | **The hook latency budget (8 ms p99 including the launcher; 5 ms until the M0 spike) is missed**, especially on macOS, where process start is slower and the first run of a new binary is scanned. Every tool call of every agent pays this. | The architecture is proven in M0 before anything is built on it (T3, with a 3 ms target that leaves room for the rules). The budget is enforced from M1. The hot path is structurally limited (§4.3). The CLI framework is bypassed. If the target is missed, the fallbacks, in order: shrink package initialization on the hot path; read a small per-session snapshot file that state changes write, instead of opening SQLite (a spec change, taken to the spec owner first); keep binary size down. The cached binary is executed before the first hook, at `aw setup`, so the one-time scan never lands in a hook. **Outcome of T3:** the prototype measured 5.6 to 6.0 ms p99 on Linux, against a 3 ms target. The spec owner kept the design (launcher, SQLite, one binary) and raised the budget to 8 ms, with a 6 ms M0 target (2026-11-07). The measured savings of each fallback are in docs/dev/spikes.md, for if the budget is missed again. |
 | 2 | **Harness payloads change without notice.** An adapter that fails closed blocks every tool call of that harness. | Recorded fixtures per harness version. Adapters detect the version from the payload's shape and the environment. The deny message names the fix (update `aw`, or pin the harness version). A weekly scheduled CI job diffs the hook input types published by each harness (for example the Claude Agent SDK's type definitions, Codex's hook documentation and OpenCode's plugin types) against the fixtures, and opens an issue on a change. With four built-in adapters this is the most frequent kind of maintenance, which is also why declarative adapters (M12) matter. Patch releases are reserved for adapter fixes. |
 | 3 | **The `reference-transaction` hook behaves differently across Git versions**, or Git updates refs that the rule did not anticipate (fetch, stash, worktree creation, `aw`'s own operations from a lane), leading to false refusals or gaps. | The M0 spike records the behavior matrix. The allowed-ref rules are written from it (S3). The `git-versions` CI job gates M3. The guards remain the first line of protection. `aw doctor` checks the Git version and `core.hooksPath`. Fast exit for the `committed` and `aborted` states, which cannot reject. |
 | 4 | **Devcontainer identity on macOS**: Docker Desktop, OrbStack and Colima differ in file sharing, path case, the `/private` symlinks and port publishing, and container PIDs are not visible from the host. GitHub's macOS runners have no Docker. | Paths are canonicalized everywhere. Same-path mounts (S7). A host-side keeper process per container server, for liveness and eviction (S8). Stubbed acceptance tests on macOS CI. A manual checklist on Docker Desktop and OrbStack at M6 and before each release. Supported engines are documented. |
@@ -1080,13 +1080,13 @@ needs. Each row has a proposed answer. None is adopted without the spec owner's 
 |---|---|---|---|---|
 | S1 | **Seats and capacity disagree.** The glossary calls a seat "one unit of a resource's capacity" with seat 0 reserved for the owner. With `capacity = 1` (the Rails example) that leaves no seat for agents, yet the example has agents holding it. | README glossary, resources.md | Capacity counts concurrent holders, including the owner when `owner_counts = true`. The seat number only chooses ports: the owner always uses seat 0 (the base ports), and agents use seats 1 to `capacity`. So the ports for seats 0 to `capacity` are published when containers are created. | M4 |
 | S2 | **Who starts a granted lane's servers?** When a seat is released and the next lane is not waiting in the foreground, there is no daemon to start its servers, and the releasing command (perhaps the owner's `aw stop`) should not start them under its own session. | resources.md | A grant to a lane that is not waiting is a reservation with a claim window (`claim_window`, default 2 minutes). The agent is told on its next tool call and runs `aw serve` to start its servers. An unclaimed reservation passes to the next lane. A `--wait` caller is granted and starts its servers itself. | M4 |
-| S3 | **The ref hook's allowed refs are not defined, and it has no budget.** Fetches update `refs/remotes/*`; `refs/stash` is shared by every worktree, so refusing stash rewrites means lanes cannot use `git stash`; `aw`'s own operations from a lane (finish, recycle) must pass. | owner-checkout.md, speed.md | Allowed from a lane: its own branches, worktree-private refs (`HEAD`, `ORIG_HEAD`, `FETCH_HEAD`, bisect refs), and `refs/remotes/*` from fetch. Refused: other branches, tags, `refs/aw/*`, and `refs/stash` (lanes are told to commit to a work-in-progress branch instead). `aw` authorizes its own updates with a short-lived token recorded in state. Budget: 5 ms p99, like a guard. Final rules follow the M0 spike. | M3 |
+| S3 | **The ref hook's allowed refs are not defined, and it has no budget.** Fetches update `refs/remotes/*`; `refs/stash` is shared by every worktree, so refusing stash rewrites means lanes cannot use `git stash`; `aw`'s own operations from a lane (finish, recycle) must pass. | owner-checkout.md, speed.md | Allowed from a lane: its own branches, worktree-private refs (`HEAD`, `ORIG_HEAD`, `FETCH_HEAD`, bisect refs), and `refs/remotes/*` from fetch. Refused: other branches, tags, `refs/aw/*`, and `refs/stash` (lanes are told to commit to a work-in-progress branch instead). `aw` authorizes its own updates with a short-lived token recorded in state. Budget: 8 ms p99, like a guard. Final rules follow the M0 spike, whose refinements are in docs/dev/spikes.md: decide at `prepared` only, allow all worktree-private pseudo-refs and `refs/bisect/*`, allow updates that leave a ref's resolved value unchanged (`pack-refs`, `gc`), and refuse `refs/notes/*`. | M3 |
 | S4 | **"Plus the project's reset hooks"** in the `aw attach` and `aw new` budgets contradicts lifecycle.md, where those hooks run in the background after the command returns. | speed.md, lifecycle.md | The budgets end when the command returns or the harness launches, and they exclude every hook, which runs in the background. | M2 |
-| S5 | **"Reference runners" and "developer laptop" are not defined**, so a budget cannot be enforced exactly as written. | speed.md | CI enforces the budgets on GitHub-hosted `ubuntu-24.04` (amd64) and `macos-15` (arm64), with the rerun rule in §5.2. Laptop measurements are recorded twice per milestone. | M1 |
-| S6 | **The hot path must write.** Recording a session ID from its first hook call, and marking a notification delivered, are writes, but speed.md allows only activity writes. | speed.md, ux.md | Allow these two writes on the hot path, with the same rule as activity: never wait for a lock. If the write cannot be made at once, it is retried on the next call, and notifications are delivered at least once (each carries an ID, so a repeat is recognizable). | M1 |
+| S5 | **"Reference runners" and "developer laptop" are not defined**, so a budget cannot be enforced exactly as written. | speed.md | CI enforces the budgets on GitHub-hosted `ubuntu-24.04` (amd64), and checks `macos-15` (arm64) for regressions against master, with the rerun rule in §5.2 (amended after the M0 spike: an empty Go process costs 8 ms p99 on `macos-15`). Laptop measurements are recorded twice per milestone. **Recorded in speed.md.** | M1 |
+| S6 | **The hot path must write.** **Recorded in speed.md.** Recording a session ID from its first hook call, and marking a notification delivered, are writes, but speed.md allows only activity writes. | speed.md, ux.md | Allow these two writes on the hot path, with the same rule as activity: never wait for a lock. If the write cannot be made at once, it is retried on the next call, and notifications are delivered at least once (each carries an ID, so a repeat is recognizable). | M1 |
 | S7 | **Same paths inside and outside the container** (R47) conflicts with C2's template, which mounts a project at `/<directory>`. The spec takes C2's container model, but does not say how the project's committed `devcontainer.json`, which the whole team shares, gets a same-path mount and the seat ports. | requirements.md, architecture.md | The project's devcontainer uses `${localWorkspaceFolder}` as both the mount source and target, and as `workspaceFolder`. `aw` supplies the seat ports through a managed Compose fragment. `aw doctor` and the runner's mount check refuse anything else, with the fix. | M6 |
 | S8 | **Lease liveness for servers inside a container**: the spec records a holder's PID and start time, but on macOS the container's processes run in a VM and are invisible from the host. | resources.md | Each container server is started by a host-side keeper (`aw` itself, detached) that runs `docker exec` and stays attached. The keeper's host PID is the lease holder. Stopping the keeper stops the server's process group in the container. If the keeper dies uncleanly, recovery stops the recorded process group through `docker exec` on the next state-changing command. | M6 |
-| S9 | **Team guards as executables** (R54) would run a process on every tool call, which cannot fit the 5 ms budget. | requirements.md, architecture.md | Team guards are declarative (command patterns over the parsed syntax tree, and path rules) and run in-process. Executable team guards are allowed only for specific tool kinds, are excluded from the budget, and are documented as such. | M3 |
+| S9 | **Team guards as executables** (R54) would run a process on every tool call, which cannot fit the 8 ms budget. | requirements.md, architecture.md | Team guards are declarative (command patterns over the parsed syntax tree, and path rules) and run in-process. Executable team guards are allowed only for specific tool kinds, are excluded from the budget, and are documented as such. | M3 |
 | S10 | **How owner-only commands recognize an agent** when the guard is not in the way (a harness without hooks, or a command run some other way). Decisions.md keeps C1's "wrapper detection" but the spec does not describe it. | owner-checkout.md, decisions.md | A call is in agent context when the harness environment markers known to an adapter are present, when `AW_SESSION` (set by `aw new`, `aw resume` and `aw pair`) is present, or when the process ancestry includes a known harness. The ancestry is checked only for owner-only commands, off the hot path. Owner-only commands refuse in agent context unless a delegation covers them. | M3 |
 | S11 | **Is `install` a lifecycle hook?** Architecture.md lists `install` among the hooks; R29 does not. The state diagram also leaves out `setting-up` and `incomplete`, which the table includes. | requirements.md, architecture.md, lifecycle.md | `install` is a per-project key with a stamp, not a hook, but it is journaled like one. The diagram gains the two states. | M5 |
 | S12 | **"A command that needs setup waits for exactly the step it depends on"**, but nothing declares what a command depends on. | lifecycle.md | By default, `aw run <project>` and team commands wait for the workspace's `prepare` and their project's `install` and `setup` (or `reset`). A team command can name other steps in `after = [...]`. | M5 |
