@@ -1,6 +1,33 @@
-# finish/refuses-dirty-detached-moving-head: to be written (plan §3.5).
+# aw finish refuses a repository that is dirty, detached, on another branch, or moving while it
+# runs.
 # req: R78
-# source: C1 test_local_delivery_validation_concurrency_and_release_retry
+# source: C1 test_lanes.py::test_local_delivery_validation_concurrency_and_release_retry
 # milestone: M2
 
-unwritten
+workspace shop --init
+exec aw attach 'add feature flag'
+exec git -C web/.worktrees/01 switch -q -c other
+! exec aw finish feature-flag --summary 'done'
+stderr 'web is on other, not the lane''s branch aw/feature-flag → switch back to aw/feature-flag'
+exec git -C web/.worktrees/01 switch -q aw/feature-flag
+
+# A commit landing while finish runs is caught: a git wrapper commits in the lane when finish
+# reads the web head a second time.
+exec sh $WORK/mover.sh
+env PATH=$WORK/mover:$PATH
+! exec aw finish feature-flag --summary 'done'
+stderr 'a repository changed while aw finish ran → finish again when the work is settled'
+
+-- mover.sh --
+mkdir -p "$WORK/mover"
+real=$(command -v git)
+cat > "$WORK/mover/git" <<EOS
+#!/bin/sh
+case "\$PWD:\$*" in
+*web/.worktrees/01:rev-parse\ --verify\ HEAD*)
+	n=\$(cat "$WORK/mover/count" 2>/dev/null || echo 0); n=\$((n + 1)); echo \$n > "$WORK/mover/count"
+	if [ "\$n" = 2 ]; then echo moved >> moved.txt; "$real" add moved.txt; "$real" -c user.name=x -c user.email=x@x commit -qm moved; fi ;;
+esac
+exec "$real" "\$@"
+EOS
+chmod +x "$WORK/mover/git"

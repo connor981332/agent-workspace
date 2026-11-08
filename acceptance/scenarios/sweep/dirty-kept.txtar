@@ -1,7 +1,13 @@
-# sweep/dirty-kept: to be written (plan §3.5).
+# Uncommitted changes keep a lane.
 # req: R25
-# source: t_lane_rm_protects_unsaved_work
+# source: C2 tests::t_lane_rm_protects_unsaved_work
 # milestone: M2
-# changed: a pushed but unmerged lane is kept (R25); C2 allowed its removal.
 
-unwritten
+workspace shop --init
+exec aw attach 'add feature flag'
+exec sh -c 'echo edit >> web/.worktrees/01/README.md'
+exec aw sweep --apply --json
+json stdout .lanes[0].action keep
+stdout 'web: 1 changed or untracked \(M README\.md\)'
+exists web/.worktrees/01
+exec grep edit web/.worktrees/01/README.md

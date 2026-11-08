@@ -1,7 +1,14 @@
-# sweep/pushed-unmerged-kept: to be written (plan §3.5).
+# A branch pushed to the remote but not merged keeps the lane.
 # req: R25
-# source: t_lane_rm_protects_unsaved_work
+# source: C2 tests::t_lane_rm_protects_unsaved_work
 # milestone: M2
 # changed: a pushed but unmerged lane is kept (R25); C2 allowed its removal.
 
-unwritten
+workspace solo --single --init
+exec aw attach 'add feature flag'
+lane-commit 01 file.txt 'work'
+exec git -C .worktrees/01 push -q origin aw/feature-flag
+exec aw sweep --apply --json
+json stdout .lanes[0].action keep
+stdout 'not proven merged: 1 commit not in'
+exists .worktrees/01/file.txt

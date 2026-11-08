@@ -1,6 +1,38 @@
-# sweep/pool-size-and-retention: to be written (plan §3.5).
+# Proven-merged lanes return to a pool of [lanes] pool lanes; lanes beyond it are removed, and warm
+# lanes older than [lanes] retention are removed.
 # req: R26
-# source: C1 test_pool_age_unknown_and_caller
+# source: C1 test_lanes.py::test_pool_age_unknown_and_caller
 # milestone: M2
 
-unwritten
+workspace solo --single --init
+exec aw attach 'one'
+exec aw attach 'two'
+exec aw sweep --apply --json
+json stdout .lanes[0].action recycle
+json stdout .lanes[1].action destroy
+stdout 'the pool is full \(\[lanes\] pool\), so it is removed'
+exists .worktrees/01
+! exists .worktrees/02
+! exec git rev-parse --verify --quiet refs/heads/aw/two
+
+# Past retention, the warm lane is removed too.
+exec sleep 2
+exec aw sweep --apply --json
+json stdout .lanes[0].action destroy
+stdout 'in the pool for more than 1s'
+! exists .worktrees/01
+exec aw sweep --json
+! json stdout .lanes[0]
+
+-- workspace.toml --
+[workspace]
+name = "Solo"
+namespace = "solo"
+schema = 1
+
+[lanes]
+pool = 1
+retention = "1s"
+
+[projects.solo]
+directory = "."

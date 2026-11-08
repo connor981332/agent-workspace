@@ -1,6 +1,17 @@
-# cli/lane-name-validated: to be written (plan §3.5).
-# req: R46 R49 R55 R58
-# source: C1 test_real_hook_and_routing; t_lane_slots_and_limits
+# Lane names given on the command line are checked before they reach a path, a branch or a query.
+# req: R55 R58
+# source: C1 test_lanes.py::test_real_hook_and_routing; C2 tests::t_lane_slots_and_limits
 # milestone: M2
 
-unwritten
+workspace solo --single --init
+exec aw attach 'add feature flag'
+! exec aw park '../x'
+stderr '"\.\./x" is not a lane name → use the name aw shows'
+! exec aw discard 'x; rm -rf /' --yes
+stderr 'is not a lane name'
+! exec aw park nope
+stderr 'there is no lane named "nope"'
+exec aw park 1
+stdout 'Lane feature-flag is parked'
+exec aw unpark feat
+stdout 'Lane feature-flag is working'

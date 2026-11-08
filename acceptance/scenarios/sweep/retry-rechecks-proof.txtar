@@ -1,6 +1,17 @@
-# sweep/retry-rechecks-proof: to be written (plan §3.5).
+# Retrying a failed recycle checks the proof again: work added since keeps the lane.
 # req: R25 R31
-# source: C1 test_partial_worktree_retry_and_changed_head
+# source: C1 test_lanes.py::test_partial_worktree_retry_and_changed_head
 # milestone: M2
 
-unwritten
+workspace solo --single --init
+exec aw attach 'one'
+git-fail '^branch -d aw/one$'
+! exec aw sweep --apply --json
+json stdout .lanes[0].result failed
+exec rm $WORK/.git-fail/git
+exec git -C .worktrees/01 switch -q aw/one
+lane-commit 01 more.txt 'new work'
+exec aw sweep --apply --retry 1 --json
+json stdout .lanes[0].action keep
+stdout 'not proven merged: 1 commit'
+exists .worktrees/01/more.txt

@@ -1,6 +1,17 @@
-# finish/plan-symlink-escape-refused: to be written (plan §3.5).
-# req: R9
-# source: C1 test_unknown_config_and_symlinks_refused
+# A plan must be a file inside the lane: one reached through a symlink out of the lane is refused.
+# req: R78
+# source: C1 test_tooling.py::test_unknown_config_and_symlinks_refused
 # milestone: M2
 
-unwritten
+workspace solo --single --init
+exec aw attach 'add feature flag'
+lane-commit 01 docs/plan.md '# Plan'
+exec sh -c 'echo secret > "$WORK/outside.md" && ln -s "$WORK/outside.md" .worktrees/01/plan.md'
+cd .worktrees/01
+! exec aw finish --summary 'done' --plan plan.md
+stderr 'the plan plan.md is outside the lane \(it resolves to .*outside\.md\) → give a file inside the lane'
+! exec aw finish --summary 'done' --plan ../../README.md
+stderr 'is outside the lane'
+exec rm plan.md
+exec aw finish --summary 'done' --plan docs/plan.md --json
+json stdout .plan docs/plan.md

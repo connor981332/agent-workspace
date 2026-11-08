@@ -78,7 +78,8 @@ func takeSnapshot(ts *testscript.TestScript) snapshot {
 		snap[prefix+"HEAD"] = strings.TrimSpace(gitMaybe(ts, dir, "symbolic-ref", "-q", "HEAD")) +
 			" " + strings.TrimSpace(gitMaybe(ts, dir, "rev-parse", "-q", "--verify", "HEAD"))
 		for _, line := range strings.Split(strings.TrimSpace(git(ts, dir, "for-each-ref", "--format=%(refname) %(objectname)")), "\n") {
-			if ref, oid, ok := strings.Cut(line, " "); ok {
+			// Lane branches (aw/…) and aw's own refs (refs/aw/…) are never the owner's.
+			if ref, oid, ok := strings.Cut(line, " "); ok && !strings.HasPrefix(ref, "refs/heads/aw/") && !strings.HasPrefix(ref, "refs/aw/") {
 				snap[prefix+"ref "+ref] = oid
 			}
 		}

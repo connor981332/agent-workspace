@@ -1,6 +1,26 @@
-# sweep/unknown-age-kept: to be written (plan §3.5).
+# A warm lane whose time in the pool cannot be read is kept, not removed.
 # req: R26
-# source: C1 test_pool_age_unknown_and_caller
+# source: C1 test_lanes.py::test_pool_age_unknown_and_caller
 # milestone: M2
 
-unwritten
+workspace solo --single --init
+exec aw attach 'one'
+exec aw sweep --apply
+# The only place the suite edits a record: an unreadable age cannot arise through aw's commands.
+exec awtest-sqlite .git/aw/state.db 'UPDATE lanes SET pooled = ''not a time'''
+exec aw sweep --apply --json
+json stdout .lanes[0].action keep
+json stdout .lanes[0].reason 'its age in the pool is unknown, so it is kept'
+exists .worktrees/01
+
+-- workspace.toml --
+[workspace]
+name = "Solo"
+namespace = "solo"
+schema = 1
+
+[lanes]
+retention = "1s"
+
+[projects.solo]
+directory = "."

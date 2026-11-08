@@ -112,6 +112,10 @@ func Commands() map[string]func(ts *testscript.TestScript, neg bool, args []stri
 		"owner-may-change": cmdOwnerMayChange,
 		"git-fail":         cmdGitFail,
 		"unwritten":        cmdUnwritten,
+		"lane-commit":      cmdLaneCommit,
+		"git-merge":        mergeCmd("merge"),
+		"git-squash":       mergeCmd("squash"),
+		"git-cherry-pick":  mergeCmd("cherry-pick"),
 		FinalCheck:         cmdOwnerCheckFinal,
 	}
 }

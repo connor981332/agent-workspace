@@ -63,6 +63,18 @@ var migrations = []string{
 		started TEXT NOT NULL,
 		ended   TEXT
 	) STRICT`,
+
+	// 3: handoffs, written by aw finish (M2).
+	`CREATE TABLE handoffs (
+		id         INTEGER PRIMARY KEY,
+		lane       INTEGER NOT NULL,
+		generation INTEGER NOT NULL,
+		created    TEXT NOT NULL,
+		summary    TEXT NOT NULL,
+		plan       TEXT NOT NULL DEFAULT '',
+		heads      TEXT NOT NULL
+	) STRICT;
+	CREATE INDEX handoffs_lane ON handoffs (lane, generation)`,
 }
 
 // BackupPath is where the database is copied before migrating from schema version v.

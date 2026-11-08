@@ -1,6 +1,18 @@
-# sweep/parked-keeps: to be written (plan §3.5).
+# A parked lane is kept even when its work is merged, until it is unparked.
 # req: R25 R79
-# source: C1 test_classifier_and_observational_cli
+# source: C1 test_lanes.py::test_classifier_and_observational_cli
 # milestone: M2
 
-unwritten
+workspace solo --single --init
+exec aw attach 'add feature flag'
+exec aw park feature-flag
+stdout 'Lane feature-flag is parked\.'
+exec aw sweep --apply --json
+json stdout .lanes[0].action keep
+json stdout .lanes[0].reason parked
+exec aw unpark feature-flag
+stdout 'is working'
+exec aw sweep --json
+json stdout .lanes[0].action recycle
+! exec aw unpark feature-flag
+stderr 'is working, not parked'

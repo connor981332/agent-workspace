@@ -1,6 +1,16 @@
-# finish/ready-stays-protected: to be written (plan §3.5).
+# A lane that is ready for review stays protected while its work is unmerged, and is recycled once
+# it is proven merged.
 # req: R23 R78
 # source: C2 finding F8
 # milestone: M2
 
-unwritten
+workspace solo --single --init
+exec aw attach 'add feature flag'
+lane-commit 01 file.txt 'work'
+exec aw finish feature-flag --summary 'Ready.'
+exec aw sweep --apply --json
+json stdout .lanes[0].action keep
+git-merge . aw/feature-flag
+exec aw sweep --apply --json
+json stdout .lanes[0].action recycle
+json stdout .lanes[0].result done

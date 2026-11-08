@@ -1,6 +1,14 @@
-# sweep/ignored-files-block: to be written (plan §3.5).
+# An ignored file that the project does not declare generated keeps the lane: it may be someone's
+# work.
 # req: R25
-# source: C1 test_plain_removal_and_ignored_artifacts
+# source: C1 test_lanes.py::test_plain_removal_and_ignored_artifacts
 # milestone: M2
 
-unwritten
+workspace shop --init
+exec sh -c 'printf "*.log\n" > web/.gitignore && git -C web add .gitignore && git -C web commit -qm ignore && git -C web push -q'
+owner-snapshot
+exec aw attach 'add feature flag'
+exec sh -c 'echo important > web/.worktrees/01/debug.log'
+exec aw sweep --json
+json stdout .lanes[0].action keep
+stdout 'web: 1 ignored files that are not declared generated \(debug\.log\)'

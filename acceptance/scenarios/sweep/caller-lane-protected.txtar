@@ -1,6 +1,14 @@
-# sweep/caller-lane-protected: to be written (plan §3.5).
+# The lane a command runs in is never swept, even when it is proven merged.
 # req: R26
-# source: C1 test_pool_age_unknown_and_caller
+# source: C1 test_lanes.py::test_pool_age_unknown_and_caller
 # milestone: M2
 
-unwritten
+workspace solo --single --init
+exec aw attach 'add feature flag'
+cd .worktrees/01
+exec aw sweep --apply --json
+json stdout .lanes[0].action keep
+json stdout .lanes[0].reason 'this command runs in it'
+cd $OWNER
+exec aw sweep --json
+json stdout .lanes[0].action recycle
