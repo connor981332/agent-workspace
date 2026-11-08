@@ -16,7 +16,7 @@ milestone named in its row.
 
 **Branches / MRs:** [PR #5](https://github.com/connor981332/agent-workspace/pull/5) (this plan, merged),
 [PR #6](https://github.com/connor981332/agent-workspace/pull/6) (`plan/open-questions`: the
-settled questions, in the spec and here). No implementation branches yet.
+settled questions, in the spec and here, merged). `m0/skeleton` (T1, open).
 
 **Done:** Read the spec and both candidates. Wrote this plan: milestones M0 to M12, v0.1 defined at
 the end of M7, R1 to R94 assigned, the acceptance suite design and its inventory, the module layout,
@@ -24,11 +24,14 @@ benchmarks, the release pipeline, CI, risks, spec issues and the first tasks. Se
 the spec's open questions with the spec owner (§8); the spec records the answers under "Settled
 questions" in its README.
 
-**In progress:** Nothing. PR #6 waits for review.
+**In progress:** [T1](#t1-go-module-skeleton-and-ci-matrix) on `m0/skeleton`: the Go module
+skeleton, `aw version`, the exit codes, the `lint` and `unit` jobs on the four runners, and the PR
+template. T1 also reworded §4.3 rule 3, because `cmd/aw` links the command tree (cobra's flag
+library imports `net`) and so cannot meet the transitive rule.
 
-**Next step:** After PR #6 merges, start [T1](#t1-go-module-skeleton-and-ci-matrix): the Go module
-skeleton and the four-platform CI matrix, on a branch named `m0/skeleton`. Before M1 starts, the
-spec owner must answer the spec issues needed by M1 (S5 and S6 in [Spec issues](#spec-issues)).
+**Next step:** Once T1 merges, start [T2](#t2-acceptance-harness-skeleton) and
+[T3](#t3-hot-path-latency-spike), as separate PRs. Before M1 starts, the spec owner must answer the
+spec issues needed by M1 (S5 and S6 in [Spec issues](#spec-issues)).
 
 ## How to use this plan
 
@@ -863,9 +866,13 @@ Rules, checked by a test that runs `go list -deps`:
    import only other leaves.
 2. Components do not import `app` or `cli`. Flows that touch several components live in `app`.
 3. **The hot path is `cmd/aw` → `harness` → `policy` → `shell`, plus read-only use of `config`,
-   `state`, `sessions`, `workspace` and `gitx`.** None of these may import `os/exec`, `net` or
-   `net/http`, directly or transitively. This is why `gitx/run` and `harness/launch` are separate
-   packages. It enforces R2 for hooks structurally (§5.3).
+   `state`, `sessions`, `workspace` and `gitx`.** None of these packages except `cmd/aw` may import
+   `os/exec`, `net` or `net/http`, directly or transitively. This is why `gitx/run` and
+   `harness/launch` are separate packages. It enforces R2 for hooks structurally (§5.3). `cmd/aw`
+   may not import them directly, but it also links the command tree (`cli`, whose flag library
+   imports `net`, and later `app`, which reaches `os/exec`), so it cannot meet the transitive rule.
+   Rule 4 keeps that code from running on the hot path, and T3 measures what its package
+   initialization costs.
 4. `cmd/aw` checks for `hook` and `git-hook` as its first argument and dispatches before the command
    tree is built, so the CLI framework's setup cost never reaches the hot path.
 
