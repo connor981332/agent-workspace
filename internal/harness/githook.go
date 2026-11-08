@@ -17,6 +17,14 @@ import (
 	"github.com/connor981332/agent-workspace/internal/workspace"
 )
 
+// GitHookNames are the client-side hooks the dispatcher answers for, so a team's hook keeps running
+// whichever one it is.
+var GitHookNames = []string{
+	"applypatch-msg", "pre-applypatch", "post-applypatch", "pre-commit", "pre-merge-commit", "prepare-commit-msg",
+	"commit-msg", "post-commit", "pre-rebase", "post-checkout", "post-merge", "pre-push", "pre-auto-gc", "post-rewrite",
+	"reference-transaction", "post-index-change",
+}
+
 // GitHook is the Git hooks dispatcher (owner-checkout.md, "The Git hooks dispatcher"): aw's own
 // check for reference-transaction, then the team's hook of the same name. It runs in a lane only:
 // in the owner checkout the dispatcher script never starts aw, so plain Git there needs no aw.
@@ -28,6 +36,10 @@ func GitHook(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return Deny
 	}
 	name, rest := args[0], args[1:]
+	if !slices.Contains(GitHookNames, name) {
+		fmt.Fprintf(stderr, "aw git-hook: %q is not a Git hook aw dispatches, so it is refused → run aw setup again\n", name)
+		return Deny
+	}
 	if name != "reference-transaction" {
 		return execTeamHook(name, rest, stderr)
 	}

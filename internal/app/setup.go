@@ -10,15 +10,8 @@ import (
 
 	"github.com/connor981332/agent-workspace/internal/config"
 	"github.com/connor981332/agent-workspace/internal/gitx/run"
+	"github.com/connor981332/agent-workspace/internal/harness"
 )
-
-// gitHookNames are the client-side hooks the dispatcher answers for, so a team's hook keeps running
-// whichever one it is.
-var gitHookNames = []string{
-	"applypatch-msg", "pre-applypatch", "post-applypatch", "pre-commit", "pre-merge-commit", "prepare-commit-msg",
-	"commit-msg", "post-commit", "pre-rebase", "post-checkout", "post-merge", "pre-push", "pre-auto-gc", "post-rewrite",
-	"reference-transaction", "post-index-change",
-}
 
 // HooksResult says what aw setup did to one repository.
 type HooksResult struct {
@@ -76,7 +69,7 @@ func installHooks(ctx context.Context, owner, dir string) (HooksResult, error) {
 	if err := os.MkdirAll(hooks, 0o755); err != nil {
 		return res, err
 	}
-	for _, name := range gitHookNames {
+	for _, name := range harness.GitHookNames {
 		data := []byte(dispatcher(owner, team, name))
 		path := filepath.Join(hooks, name)
 		if old, err := os.ReadFile(path); err == nil && string(old) == string(data) {
