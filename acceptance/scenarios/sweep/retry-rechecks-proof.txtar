@@ -1,0 +1,6 @@
+# sweep/retry-rechecks-proof: to be written (plan §3.5).
+# req: R25 R31
+# source: C1 test_partial_worktree_retry_and_changed_head
+# milestone: M2
+
+unwritten

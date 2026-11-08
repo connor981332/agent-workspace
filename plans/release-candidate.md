@@ -16,7 +16,7 @@ milestone named in its row.
 
 **Branches / MRs:** PRs [#5](https://github.com/connor981332/agent-workspace/pull/5) to
 [#15](https://github.com/connor981332/agent-workspace/pull/15), merged: the plan and settled
-questions (#5, #6), M0 (#7 to #11), M1 (#12 to #15). `m1/bench` (the M1 bench, open).
+questions (#5, #6), M0 (#7 to #11), M1 (#12 to #16). `m2/lanes` (M2 lanes and `aw attach`, open).
 `spike/hot-path` (T3 and the ref-hook spike, never merged).
 
 **Done:** Read the spec and both candidates and wrote this plan. Settled the spec's five open
@@ -28,7 +28,7 @@ are recorded).
   ref-hook spikes ([docs/dev/spikes.md](../docs/dev/spikes.md)). T3 missed its 3 ms target; the spec
   owner kept the design and set the guard budget to 8 ms p99 (M0 target 6 ms, met at 5.58 ms on
   ubuntu-24.04), with macOS CI checked for regressions only.
-- **M1 complete** (with `m1/bench`). Configuration: three layers, locks, provenance, strict errors
+- **M1 complete.** Configuration: three layers, locks, provenance, strict errors
   with file, line and fix, the compiled cache, `aw config get|explain|validate`, and the reference
   generated from the schema. State: SQLite in WAL mode with versioned migrations, backups, and
   read-only mode. The `bin/aw` launcher (exact pins, checksums, a local mirror, and hooks that fail
@@ -39,12 +39,15 @@ are recorded).
   `requirements.toml` gained `in_progress`, so a milestone's written scenarios and benchmarks run
   in CI from the PR that adds them.
 
-**In progress:** `m1/bench`: the bench (§5) with budgets checked against speed.md, recording stubs
-for the hot path, the `bench` CI job, three more M1 scenarios (R2, R10, R17), and moving the
-acceptance suite to `current = "M1"`.
+**In progress:** M2. The M2 rows of §3.5 are pending scenario files (73), with seven rows that
+need hooks, seats or `aw open` moved to M3 and M4. S4 and S17 are recorded in the spec. First PR
+(`m2/lanes`): state schema 2 (lanes, lane repositories, sessions, journal), lane names from
+purpose, `aw attach` with worktrees, links, the owner pointer, secret links, lane guards, the lane
+limit, `--branch`, and claiming from the pool.
 
-**Next step:** M2: lanes and merge proof. Before it starts, record the accepted answers to S4 and
-S17 in the spec.
+**Next step:** M2 merge proof (ancestry and patch equivalence), `aw sweep`, `aw discard`,
+`aw park`, `aw finish`, then forge proof, sessions, `aw new`, `aw run`, the dashboard and the
+first pre-release.
 
 **Pending manual checks:** the hot-path and budget benchmarks on an Apple Silicon laptop (T3, M1;
 docs/dev/benchmarks.md).
@@ -1096,7 +1099,7 @@ needs. Each row has a proposed answer. None is adopted without the spec owner's 
 | S1 | **Seats and capacity disagree.** The glossary calls a seat "one unit of a resource's capacity" with seat 0 reserved for the owner. With `capacity = 1` (the Rails example) that leaves no seat for agents, yet the example has agents holding it. | README glossary, resources.md | Capacity counts concurrent holders, including the owner when `owner_counts = true`. The seat number only chooses ports: the owner always uses seat 0 (the base ports), and agents use seats 1 to `capacity`. So the ports for seats 0 to `capacity` are published when containers are created. | M4 |
 | S2 | **Who starts a granted lane's servers?** When a seat is released and the next lane is not waiting in the foreground, there is no daemon to start its servers, and the releasing command (perhaps the owner's `aw stop`) should not start them under its own session. | resources.md | A grant to a lane that is not waiting is a reservation with a claim window (`claim_window`, default 2 minutes). The agent is told on its next tool call and runs `aw serve` to start its servers. An unclaimed reservation passes to the next lane. A `--wait` caller is granted and starts its servers itself. | M4 |
 | S3 | **The ref hook's allowed refs are not defined, and it has no budget.** Fetches update `refs/remotes/*`; `refs/stash` is shared by every worktree, so refusing stash rewrites means lanes cannot use `git stash`; `aw`'s own operations from a lane (finish, recycle) must pass. | owner-checkout.md, speed.md | Allowed from a lane: its own branches, worktree-private refs (`HEAD`, `ORIG_HEAD`, `FETCH_HEAD`, bisect refs), and `refs/remotes/*` from fetch. Refused: other branches, tags, `refs/aw/*`, and `refs/stash` (lanes are told to commit to a work-in-progress branch instead). `aw` authorizes its own updates with a short-lived token recorded in state. Budget: 8 ms p99, like a guard. Final rules follow the M0 spike, whose refinements are in docs/dev/spikes.md: decide at `prepared` only, allow all worktree-private pseudo-refs and `refs/bisect/*`, allow updates that leave a ref's resolved value unchanged (`pack-refs`, `gc`), and refuse `refs/notes/*`. | M3 |
-| S4 | **"Plus the project's reset hooks"** in the `aw attach` and `aw new` budgets contradicts lifecycle.md, where those hooks run in the background after the command returns. | speed.md, lifecycle.md | The budgets end when the command returns or the harness launches, and they exclude every hook, which runs in the background. | M2 |
+| S4 | **"Plus the project's reset hooks"** in the `aw attach` and `aw new` budgets contradicts lifecycle.md, where those hooks run in the background after the command returns. | speed.md, lifecycle.md | The budgets end when the command returns or the harness launches, and they exclude every hook, which runs in the background. **Recorded in speed.md.** | M2 |
 | S5 | **"Reference runners" and "developer laptop" are not defined**, so a budget cannot be enforced exactly as written. | speed.md | CI enforces the budgets on GitHub-hosted `ubuntu-24.04` (amd64), and checks `macos-15` (arm64) for regressions against master, with the rerun rule in §5.2 (amended after the M0 spike: an empty Go process costs 8 ms p99 on `macos-15`). Laptop measurements are recorded twice per milestone. **Recorded in speed.md.** | M1 |
 | S6 | **The hot path must write.** **Recorded in speed.md.** Recording a session ID from its first hook call, and marking a notification delivered, are writes, but speed.md allows only activity writes. | speed.md, ux.md | Allow these two writes on the hot path, with the same rule as activity: never wait for a lock. If the write cannot be made at once, it is retried on the next call, and notifications are delivered at least once (each carries an ID, so a repeat is recognizable). | M1 |
 | S7 | **Same paths inside and outside the container** (R47) conflicts with C2's template, which mounts a project at `/<directory>`. The spec takes C2's container model, but does not say how the project's committed `devcontainer.json`, which the whole team shares, gets a same-path mount and the seat ports. | requirements.md, architecture.md | The project's devcontainer uses `${localWorkspaceFolder}` as both the mount source and target, and as `workspaceFolder`. `aw` supplies the seat ports through a managed Compose fragment. `aw doctor` and the runner's mount check refuse anything else, with the fix. | M6 |
@@ -1109,7 +1112,7 @@ needs. Each row has a proposed answer. None is adopted without the spec owner's 
 | S14 | **The plan state vocabulary** that R82 refers to is not in the spec. | requirements.md | Adopt C1's: `DRAFT`, `PLANNED`, `PARTIALLY IMPLEMENTED`, `FULLY IMPLEMENTED`, `FULLY VERIFIED`. This plan already uses it. | M10 |
 | S15 | **Port collisions between two workspaces on one machine** (F6). Seat ports come from team configuration, so two workspaces that both use 3000 collide. | resources.md | An individual-layer `[ports] offset` added to every port of a workspace. `aw doctor` reads the other workspaces registered on the machine (`~/.local/state/agent-workspace/workspaces`) and reports overlaps. | M4 |
 | S16 | **Pinning the devcontainer CLI** (F4) is not in the spec. | — | A runner key for the devcontainer CLI command and version, an environment block for it (for example `BUILDX_BAKE_ENTITLEMENTS_FS=0`), and an `aw doctor` check that it is pinned. | M6 |
-| S17 | **Starting a lane on an existing branch**, such as a teammate's branch or a change set's branch, has no command. C2 supported it. | ux.md | `aw new` and `aw attach` take `--branch <name>`, which tracks the remote branch when it exists. Lane guards still run against it. | M2 |
+| S17 | **Starting a lane on an existing branch**, such as a teammate's branch or a change set's branch, has no command. C2 supported it. | ux.md | `aw new` and `aw attach` take `--branch <name>`, which tracks the remote branch when it exists. Lane guards still run against it. **Recorded in ux.md.** | M2 |
 | S18 | **Databases that project code creates**, such as Rails' parallel test databases (`shop_test_03_0`, `_1` …), are not recorded by the provider, so dropping by exact recorded name leaves them behind. C2 found and dropped them with a query. | lifecycle.md | The provider records, at `create` and after each `setup` and `reset`, every database whose name begins with one of the lane's recorded names followed by `_`. After that they are recorded names like any other. | M5 |
 | S19 | **The "restore hook"** mentioned in lifecycle.md (for migrating after restoring an old snapshot, F13) is not among the defined hooks. Postgres also cannot copy a database in use (F14), and the spec does not say whether snapshotting stops the lane's servers. | lifecycle.md | Add an optional `restore` lifecycle hook, run after a provider restore. `aw snapshot` and `aw restore` stop the lane's servers first and start them again afterwards, as C1's `quiesce` did. | M5 |
 

@@ -55,6 +55,7 @@ type Lanes struct {
 	Hostname       string           `json:"hostname"`
 	ServerCapacity int              `json:"server_capacity"`
 	PortStride     int              `json:"port_stride"`
+	BranchPrefix   string           `json:"branch_prefix"`
 	Data           map[string]*Data `json:"data"`
 }
 
@@ -73,15 +74,25 @@ type WorkspaceLifecycle struct {
 }
 
 type Project struct {
-	Directory string             `json:"directory"`
-	Repo      string             `json:"repo"`
-	Lanes     string             `json:"lanes"`
-	Runner    string             `json:"runner"`
-	Install   string             `json:"install"`
-	Run       string             `json:"run"`
-	Needs     []string           `json:"needs"`
-	Lifecycle ProjectLifecycle   `json:"lifecycle"`
-	Servers   map[string]*Server `json:"servers"`
+	Directory  string                `json:"directory"`
+	Repo       string                `json:"repo"`
+	Lanes      string                `json:"lanes"`
+	Runner     string                `json:"runner"`
+	Install    string                `json:"install"`
+	Run        string                `json:"run"`
+	Needs      []string              `json:"needs"`
+	Secrets    []string              `json:"secrets"`
+	Generated  []string              `json:"generated"`
+	LaneGuards map[string]*LaneGuard `json:"lane_guards"`
+	Lifecycle  ProjectLifecycle      `json:"lifecycle"`
+	Servers    map[string]*Server    `json:"servers"`
+}
+
+// LaneGuard is a check a branch must pass before a lane is created on it.
+type LaneGuard struct {
+	File    string `json:"file"`
+	Matches string `json:"matches"`
+	Message string `json:"message"`
 }
 
 type ProjectLifecycle struct {
@@ -584,6 +595,27 @@ func (c *Config) check(team *doc) Errors {
 			}
 		}
 		c.checkNeeds(pr.Needs, p.child("needs"), fail)
+		for i, sec := range pr.Secrets {
+			if clean := filepath.ToSlash(filepath.Clean(sec)); filepath.IsAbs(sec) || clean != sec || clean == "." || strings.HasPrefix(clean, "../") || clean == ".." {
+				fail(p.child("secrets").index(i), fmt.Sprintf("%q is not a clean path inside the project", sec), "name the file relative to the project, e.g. \".env\"")
+			}
+		}
+		for _, gname := range sortedMap(pr.LaneGuards) {
+			g, gp := pr.LaneGuards[gname], p.child("lane_guards").child(gname)
+			switch {
+			case g.File == "":
+				fail(gp, "has no file", `add file = "<path in the branch>"`)
+			case g.Matches == "":
+				fail(gp, "has no matches", `add matches = "<regular expression the file must match>"`)
+			case g.Message == "":
+				fail(gp, "has no message", `add message = "<what is wrong with a failing branch, and the fix>"`)
+			}
+			if g.Matches != "" {
+				if _, err := regexp.Compile(g.Matches); err != nil {
+					fail(gp.child("matches"), fmt.Sprintf("is not a regular expression: %v", err), "fix the expression (Go RE2 syntax)")
+				}
+			}
+		}
 		for _, h := range []struct {
 			name string
 			hook *Hook

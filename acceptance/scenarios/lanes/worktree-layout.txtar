@@ -1,0 +1,49 @@
+# A lane has a root that is a worktree of the workspace repository at .worktrees/NN, a worktree of
+# each project inside the project (<project>/.worktrees/NN), relative links from the lane root to
+# them, and a gitignored .aw/owner pointer. Git runs on the host (C2 F11).
+# req: R21 R47
+# source: C2 finding F11
+# milestone: M2
+
+workspace shop --init
+exec aw attach 'fix checkout tax rounding' --json
+json stdout .lane 01
+json stdout .name checkout-tax
+json stdout .state working
+json stdout .repos[0].project ''
+json stdout .repos[0].branch aw/checkout-tax
+json stdout .repos[1].project api
+json stdout .repos[2].project web
+
+# The lane root and the project worktrees.
+exists .worktrees/01/workspace.toml .worktrees/01/bin/aw
+exists api/.worktrees/01/README.md web/.worktrees/01/README.md
+exec readlink .worktrees/01/web
+stdout '^\.\./\.\./web/\.worktrees/01$'
+exec readlink .worktrees/01/api
+stdout '^\.\./\.\./api/\.worktrees/01$'
+exec cat .worktrees/01/.aw/owner
+stdout 'it''s a workspace/shop$'
+
+# Every worktree is on the lane's branch.
+exec git -C .worktrees/01 symbolic-ref --short HEAD
+stdout '^aw/checkout-tax$'
+exec git -C web/.worktrees/01 symbolic-ref --short HEAD
+stdout '^aw/checkout-tax$'
+exec git -C api/.worktrees/01 symbolic-ref --short HEAD
+stdout '^aw/checkout-tax$'
+
+# Nothing in the lane shows up as a change: the links, the owner pointer and the worktrees are
+# ignored.
+exec git -C .worktrees/01 status --porcelain
+! stdout .
+exec git -C web/.worktrees/01 status --porcelain
+! stdout .
+
+# From inside the lane, aw sees the lane and runs the owner's pin.
+cd .worktrees/01
+exec aw whoami
+stdout '^location   lane root .*/\.worktrees/01$'
+cd web
+exec aw whoami --json
+json stdout .location lane

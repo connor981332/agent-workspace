@@ -1,0 +1,6 @@
+# sessions/observation-writes-nothing: to be written (plan §3.5).
+# req: R25 R77
+# source: C1 test_attachment_reservations_are_observational; C1 test_observe_sessions_does_not_refresh_record
+# milestone: M2
+
+unwritten

@@ -1,0 +1,6 @@
+# finish/refuses-dirty-detached-moving-head: to be written (plan §3.5).
+# req: R78
+# source: C1 test_local_delivery_validation_concurrency_and_release_retry
+# milestone: M2
+
+unwritten

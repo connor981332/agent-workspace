@@ -22,8 +22,8 @@ grep '^[0-9a-f]{64}  aw_'$AW_VERSION'_[a-z]+_(amd64|arm64)$' .aw/lock
 grep '^[0-9a-f]{64}  bin/aw$' .aw/managed
 grep '^/\.worktrees/$' .gitignore
 grep '^/\.aw/owner$' .gitignore
-grep '^/web/$' .gitignore
-grep '^/api/$' .gitignore
+grep '^/web$' .gitignore
+grep '^/api$' .gitignore
 
 # The project repositories are ignored, so the workspace repository sees only its own files.
 exec git status --porcelain

@@ -1,0 +1,24 @@
+# When every lane is in use, a claim is refused with what can be cleaned up.
+# req: R46
+# source: C1 test_lanes.py::test_attach_exhaustion_and_process_death; C2 tests::t_lane_slots_and_limits
+# milestone: M2
+
+workspace shop --init
+exec aw attach 'first thing'
+exec aw attach 'second thing'
+! exec aw attach 'third thing'
+stderr 'all 2 lanes are in use → run aw sweep to see which lanes are proven merged, then aw sweep --apply; or raise \[lanes\] max'
+! exists .worktrees/03
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+max = 2
+pool = 1
+
+[projects.web]
+[projects.api]

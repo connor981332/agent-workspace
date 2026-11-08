@@ -120,6 +120,14 @@ var schema = table("",
 		"server_capacity", integer("Capacity of the implicit resource \"servers\", which holds every server not "+
 			"listed in a resource.").atLeast(1).withDefault(int64(2)),
 		"port_stride", integer("A server in seat k listens on port + port_stride × k.").atLeast(1).withDefault(int64(100)),
+		"branch_prefix", str("Prefix of the branches lanes create: aw/checkout-tax.").withDefault("aw/").
+			checked(func(v any) (string, string) {
+				s := v.(string)
+				if s == "" || strings.ContainsAny(s, " ~^:?*[\\") || strings.Contains(s, "..") || strings.HasPrefix(s, "/") || strings.HasPrefix(s, "-") {
+					return "is not a valid branch prefix", `use a prefix such as "aw/" or "lane-"`
+				}
+				return "", ""
+			}),
 		"data", mapOf("Per-lane data, owned by a provider. The key names the data, e.g. db.", nameRE, nameFix,
 			table("",
 				"provider", str("postgres, redis, or external (through the extension protocol).").oneOf("postgres", "redis", "external"),
@@ -147,6 +155,16 @@ var schema = table("",
 			"install", str("Installs dependencies. Rerun when its stamp changes."),
 			"run", str("The default command for aw run <project> with no command."),
 			"needs", strList("Resources the project's commands need."),
+			"secrets", strList("Files that are not in Git, such as .env, linked read-only into every lane from the owner "+
+				"checkout, relative to the project."),
+			"generated", strList("Ignored paths (Git pathspecs) that builds create and that do not block recycling a lane, "+
+				"such as node_modules or tmp. Other ignored files may be someone's work, so they keep the lane."),
+			"lane_guards", mapOf("Checks a branch must pass before a lane is created on it (R28). The key names the guard.",
+				nameRE, nameFix, table("",
+					"file", str("A file in the branch, relative to the project."),
+					"matches", str("A regular expression the file must match."),
+					"message", str("What is wrong with a branch that fails, and how to fix it."),
+				)),
 			"lifecycle", table("Per-project lifecycle hooks.",
 				"setup", hook("After installs, for a newly created lane."),
 				"reset", hook("Instead of setup, for a lane recycled from the pool."),

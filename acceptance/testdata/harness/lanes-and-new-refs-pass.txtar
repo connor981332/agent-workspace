@@ -8,3 +8,5 @@ exec git worktree add -q -b lane-03 .worktrees/03
 exec git -C .worktrees/03 commit -q --allow-empty -m 'lane work'
 exec git update-ref refs/aw/archive/old HEAD
 exec sh -c 'mkdir -p "$(git rev-parse --git-common-dir)/aw" && echo db > "$(git rev-parse --git-common-dir)/aw/state.db"'
+# A lane branch's own configuration (an upstream) is not the owner's.
+exec git -C .worktrees/03 branch --set-upstream-to=origin/main lane-03

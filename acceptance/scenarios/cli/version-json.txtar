@@ -1,14 +1,17 @@
 # aw version --json gives the same three numbers as JSON, for scripts and agents.
 # req: R93
 # milestone: M0
-# changed: both schema versions are 1 since the configuration and state schemas exist (M1); they were 0 before.
+# changed: the schema versions are checked as numbers that agree between the two forms, since they
+# grow with each migration (they were 0 before M1).
 
 exec aw version --json
 json stdout .version
-json stdout .config_schema 1
-json stdout .state_schema 1
+json stdout .config_schema
+json stdout .state_schema
+exec sh -c 'aw version --json | tr -d " \n"'
+stdout '"config_schema":[1-9][0-9]*,"state_schema":[1-9][0-9]*'
+cp stdout $WORK/json.txt
 ! stderr .
 
 # The text form and the JSON form agree.
-exec aw version
-stdout '\(config schema 1, state schema 1\)'
+exec sh -c 'c=$(sed "s/.*config_schema\":\([0-9]*\).*/\1/" "$WORK/json.txt"); s=$(sed "s/.*state_schema\":\([0-9]*\).*/\1/" "$WORK/json.txt"); aw version | grep -F "(config schema $c, state schema $s)"'

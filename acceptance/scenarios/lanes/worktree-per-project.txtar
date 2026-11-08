@@ -1,0 +1,23 @@
+# Each lane-enabled project gets a worktree on the lane's branch, from the owner's branch, and the
+# lane records each repository's base. A second lane is independent of the first.
+# req: R21
+# source: C2 tests::t_lane_new_makes_worktree_env_and_links
+# milestone: M2
+
+workspace shop --init --repos web,api,mobile
+exec aw attach 'add feature flag' --json
+json stdout .lane 01
+json stdout .name feature-flag
+json stdout .repos[0].base_ref refs/remotes/origin/main
+exec sh -c 'for p in web api mobile; do git -C $p/.worktrees/01 rev-parse HEAD; git -C $p rev-parse main; done | uniq -c | wc -l'
+stdout '^ *3$'
+
+exec aw attach 'feature flag for admins' --json
+json stdout .lane 02
+json stdout .name feature-flag-2
+exists web/.worktrees/02 api/.worktrees/02 mobile/.worktrees/02 .worktrees/02
+
+# Work in one lane is invisible in the other and in the owner checkout.
+exec sh -c 'echo change >> web/.worktrees/01/README.md'
+exec git -C web/.worktrees/02 status --porcelain
+! stdout .

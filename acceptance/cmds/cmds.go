@@ -37,6 +37,9 @@ type state struct {
 	mayChange bool
 	pathDirs  map[string]bool // directories already put on PATH
 	gitFail   string          // file of git-fail patterns
+	// ownerBranches are the branches each repository had when the workspace was built, keyed by
+	// "<repo>\x00<branch>".
+	ownerBranches map[string]bool
 }
 
 func get(ts *testscript.TestScript) *state { return ts.Value(stateKey{}).(*state) }
@@ -88,6 +91,15 @@ const gitConfig = `[user]
 [advice]
 	detachedHead = false
 `
+
+// Condition adds the suite's conditions: [root] (running as root, which can write anywhere).
+func Condition(cond string) (bool, error) {
+	switch cond {
+	case "root":
+		return os.Geteuid() == 0, nil
+	}
+	return false, fmt.Errorf("unknown condition %q", cond)
+}
 
 // Commands returns the custom commands.
 func Commands() map[string]func(ts *testscript.TestScript, neg bool, args []string) {
@@ -158,13 +170,15 @@ func cmdWorkspace(ts *testscript.TestScript, neg bool, args []string) {
 		ts.Fatalf("workspace: this scenario already has a workspace at %s", st.owner)
 	}
 	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
-		ts.Fatalf("usage: workspace <name> [--single] [--repos a,b] [--forge github|gitlab|none]")
+		ts.Fatalf("usage: workspace <name> [--single] [--init] [--repos a,b] [--forge github|gitlab|none]")
 	}
-	name, single, repos, forge := args[0], false, []string{"web", "api"}, "github"
+	name, single, repos, forge, initialize := args[0], false, []string{"web", "api"}, "github", false
 	for i := 1; i < len(args); i++ {
 		switch args[i] {
 		case "--single":
 			single = true
+		case "--init":
+			initialize = true
 		case "--repos", "--forge":
 			if i+1 == len(args) {
 				ts.Fatalf("workspace: %s needs a value", args[i])
@@ -217,10 +231,16 @@ func cmdWorkspace(ts *testscript.TestScript, neg bool, args []string) {
 		git(ts, dir, "push", "-q", "-u", "origin", "main")
 	}
 
-	// workspace.toml comes from the scenario's archive, when it has one.
+	// workspace.toml comes from the scenario's archive, when it has one. With --init, aw init writes
+	// it first and the archive's then replaces it.
 	files := map[string]string{"README.md": "# " + name + "\n"}
-	if data, err := os.ReadFile(filepath.Join(work, "workspace.toml")); err == nil {
-		files["workspace.toml"] = string(data)
+	team, haveTeam := os.ReadFile(filepath.Join(work, "workspace.toml"))
+	if haveTeam == nil {
+		// Consumed: left at $WORK, it would make $WORK itself look like a workspace.
+		ts.Check(os.Rename(filepath.Join(work, "workspace.toml"), filepath.Join(work, ".workspace.toml")))
+	}
+	if haveTeam == nil && !initialize {
+		files["workspace.toml"] = string(team)
 	}
 	if single {
 		repos = []string{"."}
@@ -244,6 +264,18 @@ func cmdWorkspace(ts *testscript.TestScript, neg bool, args []string) {
 	ts.Setenv("OWNER", owner)
 	ts.Setenv("AW_TEST_FORGE", forge)
 	ts.Check(ts.Chdir(owner))
+
+	if initialize {
+		// As a maintainer would: aw init, commit and push what it wrote, and warm the binary cache.
+		ts.Check(ts.Exec("aw", "init"))
+		if haveTeam == nil {
+			ts.Check(os.WriteFile(filepath.Join(owner, "workspace.toml"), team, 0o644))
+		}
+		git(ts, owner, "add", "-A")
+		git(ts, owner, "commit", "-q", "-m", "Set up Agent Workspace")
+		git(ts, owner, "push", "-q")
+		ts.Check(ts.Exec("aw", "version"))
+	}
 	st.snap = takeSnapshot(ts)
 }
 

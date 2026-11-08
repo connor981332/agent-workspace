@@ -20,11 +20,16 @@ including the `bin/aw` launcher. Time spent in the project's own commands is exc
 | Guard decision for one tool call | 8 ms |
 | `aw whoami`, `aw config get` | 10 ms |
 | `aw` dashboard and `aw recap` (local only) | 100 ms for 10 lanes across 4 repositories |
-| `aw attach` from the warm pool | 100 ms, plus the project's `reset` hooks |
-| `aw new` until the harness launches | 150 ms, plus the project's `reset` hooks |
+| `aw attach` from the warm pool | 100 ms |
+| `aw new` until the harness launches | 150 ms |
 | `aw serve` until the server command starts, with a free seat | 50 ms |
 | Granting a seat to the next queued lane after a release | 50 ms |
 | Owner preemption, until the evicted processes receive SIGTERM | 50 ms |
+
+A budget ends when the command returns or, for `aw new`, when the harness launches. It excludes
+every lifecycle hook: `reset`, `setup` and the rest run in the background afterwards
+([lifecycle.md](lifecycle.md#creating-and-claiming)), and a command that needs one waits for exactly
+that step.
 
 Operations that depend on things outside the tool have no fixed budget, but must show progress and
 must not hold locks while waiting: `git worktree add` on a large repository, dependency installs,

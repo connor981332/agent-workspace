@@ -1,0 +1,7 @@
+# lanes/number-reused-after-destroy: to be written (plan §3.5).
+# req: R46
+# source: t_lane_slots_and_limits
+# milestone: M2
+# changed: slots become lanes plus seats.
+
+unwritten

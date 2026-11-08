@@ -1,0 +1,10 @@
+# The workspace state is private: its directory is 0700 and its database 0600.
+# req: R68
+# source: C1 test_lanes.py::test_finish_no_plan_idempotence_and_session; C2 tests::t_lane_new_makes_worktree_env_and_links
+# milestone: M2
+
+workspace shop --init
+exec aw attach 'add feature flag'
+exec sh -c 'ls -ld .git/aw .git/aw/state.db | cut -c1-10'
+stdout '^drwx------$'
+stdout '^-rw-------$'

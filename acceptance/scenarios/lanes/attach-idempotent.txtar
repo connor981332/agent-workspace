@@ -1,0 +1,28 @@
+# A session that attaches again gets the same lane; another session gets its own.
+# req: R23
+# source: C1 test_lanes.py::test_attach_is_protected_and_idempotent
+# milestone: M2
+
+workspace shop --init
+exec aw attach 'fix checkout tax rounding' --harness claude --session s-1 --json
+json stdout .lane 01
+json stdout .reused false
+exec aw attach 'something else entirely' --harness claude --session s-1 --json
+json stdout .lane 01
+json stdout .name checkout-tax
+json stdout .reused true
+env AW_SESSION=claude:s-1
+exec aw attach 'fix checkout tax rounding'
+stdout '^Already attached to lane 01 checkout-tax'
+env AW_SESSION=
+exec aw attach 'fix checkout tax rounding' --harness codex --session s-1 --json
+json stdout .lane 02
+json stdout .name checkout-tax-2
+! exists .worktrees/03
+
+# Half an identity is refused.
+! exec aw attach 'x' --session only
+stderr '--harness and --session go together'
+env AW_SESSION=garbage
+! exec aw attach 'x'
+stderr 'AW_SESSION is "garbage", not <harness>:<session id>'
