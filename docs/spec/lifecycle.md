@@ -1,0 +1,191 @@
+# Lane lifecycle
+
+## States
+
+```
+          claim                    finish                  proven merged
+ pool ──────────────▶ working ──────────────▶ ready ──────────────────────▶ recyclable
+  ▲                  │      ▲                  │                               │
+  │             park │      │ unpark           │ more work                     │ recycle
+  │                  ▼      │                  ▼                               │
+  │                 parked ─┘               working                            │
+  └────────────────────────────────────────────────────────────────────────────┘
+                                         discard (explicit) ──▶ archived, destroyed
+```
+
+| State | Meaning | Protected from cleanup |
+|---|---|---|
+| `pool` | Recycled, reset to the base, ready to claim | n/a |
+| `setting-up` | Claimed; setup steps still running in the background | yes |
+| `working` | Has work in progress; zero or more sessions attached | yes |
+| `incomplete` | A setup step failed; `aw run` refuses until it is retried | yes |
+| `ready` | Handed off for review; exact heads recorded | yes |
+| `parked` | Shelved on purpose | yes |
+| `recyclable` | Every repository proven merged and clean | no |
+
+A lane belongs to work. Sessions attach to it and detach from it, crash or end, and the lane stays.
+
+## Creating and claiming
+
+`aw new` and `aw attach` claim a lane:
+
+1. If the pool has a lane, take it. Otherwise allocate a new numbered lane, unless `[lanes] max` is
+   reached, in which case the error names what can be cleaned up.
+2. Record the lane's name and purpose, bump its generation, and create the lane branch in every
+   lane-enabled project.
+3. Return to the caller. Everything below runs in the background, and its progress is visible in `aw`.
+4. Providers create or reset the lane's data.
+5. Lifecycle steps run in order: `prepare`, each project's `install` (skipped when its stamp is
+   unchanged), `setup` (or `reset` for a recycled lane). Independent projects run in parallel.
+6. The lane becomes `working`. A command that needs setup waits for exactly the step it depends on.
+
+Before creating worktrees, each project's lane guards run against the branch. A branch that fails
+them (for example, a database configuration that ignores `AW_LANE`) is refused with the fix
+(candidate 2, finding 9).
+
+## Lifecycle hooks
+
+Hooks are team (or module) commands run at fixed points. They live per project or at the workspace
+level.
+
+```toml
+[lifecycle]                         # workspace level
+prepare = "scripts/lane-env"        # write every project's env file
+teardown = "scripts/lane-cleanup"
+
+[projects.web.lifecycle]
+setup = { run = "bin/rails db:prepare", timeout = "10m" }
+reset = { run = "bin/rails db:seed:replant" }
+
+[projects.api.lifecycle]
+setup = { run = "npm run build:assets", needs = ["build-slot"] }
+```
+
+| Hook | When | Working directory |
+|---|---|---|
+| `prepare` | After data is provisioned, before installs | lane root or project worktree |
+| `install` | Per project, when its stamp changed | project worktree |
+| `setup` | After installs, for a newly created lane | project worktree |
+| `reset` | Instead of `setup`, for a lane recycled from the pool | project worktree |
+| `teardown` | Before data is dropped, when a lane is destroyed | lane root |
+
+- Hooks must be safe to rerun. `aw setup <lane>` reruns from the first incomplete step.
+- `needs` makes a step queue for resources like any command.
+- Each step's start, end, exit status and log path are journaled. A failed step marks the lane
+  `incomplete` and names the retry command. A failed teardown is resumable with
+  `aw sweep --apply --retry <id>`.
+- Hooks run with the user's privileges. They are part of the workspace's own configuration, so
+  changes to them need human review (requirement R63).
+
+### Environment contract
+
+Every hook, team command and server receives:
+
+| Variable | Meaning |
+|---|---|
+| `AW_LANE` | Stable lane number, e.g. `03` |
+| `AW_LANE_NAME` | The work's name, e.g. `checkout-tax` |
+| `AW_LANE_ROOT` | Lane root directory |
+| `AW_LANE_STATE` | Private state directory for the lane |
+| `AW_PROJECT`, `AW_PROJECT_PATH` | The project the step runs in, and its worktree |
+| `AW_OWNER` | Owner checkout of the workspace |
+| `AW_NAMESPACE` | Workspace namespace |
+| `AW_HOSTNAME` | The lane's hostname, e.g. `lane-03.localhost` |
+| `AW_FRESH` | `1` when the lane's data was just created or reset |
+| `AW_PHASE` | `prepare`, `install`, `setup`, `reset` or `teardown` |
+| `AW_<DATA>_*` | Variables from each provider, e.g. `AW_DB_URL`, `AW_CACHE_URL` |
+| `AW_SEAT_<RESOURCE>`, `AW_PORT_<SERVER>`, `AW_TOKEN_<RESOURCE>` | Set while the lane holds a seat |
+| `AW_TOOL` | Path to `bin/aw`, so hooks can call `"$AW_TOOL" run <project> …` |
+
+If `prepare` writes `$AW_LANE_STATE/<project>.env` (plain `KEY=VALUE` lines), every command in that
+project receives it, on either runner.
+
+## Providers
+
+Providers own per-lane data, where getting teardown wrong destroys something.
+
+```toml
+[lanes.data.db]
+provider = "postgres"
+template = "shop_template"            # protected: nothing may connect to it
+databases = ["shop_development", "shop_test"]
+env = { DATABASE_URL = "{url:shop_development}" }
+
+[lanes.data.cache]
+provider = "redis"
+```
+
+| Verb | Does |
+|---|---|
+| `env` | Return the variables a lane's commands receive |
+| `create` | Create the lane's data, from the template where there is one |
+| `reset` | Return the data to its initial state, for a recycled lane |
+| `snapshot <name>` / `restore <name>` / `snapshots` | Named copies, e.g. after onboarding sandbox accounts |
+| `drop` | Remove the lane's data, by exact name |
+| `describe` | Report what exists, for `aw` and `aw doctor` |
+
+Built in: **postgres** (lane databases `<name>_<lane>` cloned with `CREATE DATABASE … TEMPLATE`,
+optional termination of connections before restore and drop) and **redis** (a database number per
+lane, flushed on reset and drop). Others, such as an object-store bucket per lane, use the extension
+protocol ([architecture.md](architecture.md#extension-protocol)).
+
+Rules for every provider: drop by exact recorded name, never through project code; never connect to
+the template; refuse to act on data not recorded as belonging to the lane.
+
+Restoring a snapshot taken on an older schema leaves the data behind the code. Teams run migrations in
+`reset` or in a `restore` hook (candidate 2, finding 13).
+
+## External-service stand-ins
+
+Modules provide shared stand-ins. Isolation per lane for some of them is an open question:
+
+| Service | First release | Open |
+|---|---|---|
+| Mail catcher | Shared inbox; lanes can filter by a per-lane tag or recipient | A real per-lane inbox |
+| Object store | A bucket per lane through a provider | — |
+| DNS stand-in | A fixture zone, with lane hostnames | Per-lane zones |
+| Webhook forwarding | Forward a provider's sandbox webhooks to the lane that registered | Routing when several lanes share one sandbox account |
+| Provider sandbox accounts | Shared; snapshots keep onboarded state | One account per lane |
+
+## Finishing
+
+`aw finish --summary "…" [--plan <path>]`, run by the agent:
+
+1. Records the exact head of every repository in the lane.
+2. Writes the handoff note (summary, plan link, what the human should verify).
+3. Releases every lease the lane holds and stops its servers.
+4. Moves the lane to `ready`. It stays protected while the human verifies it.
+
+A session that ends without finishing leaves its lane `working`. After a crash it is shown as
+interrupted.
+
+## Merge proof
+
+A lane becomes `recyclable` only when every repository in it is clean and has one of these:
+
+1. Its head is an ancestor of the base branch.
+2. Its commits are patch-equivalent to commits on the base, for histories without merge commits.
+3. A forge reports exactly one merged change from the same repository at exactly this head.
+
+A deleted remote branch, a handoff and a quiet session prove nothing. Ignored files that a project
+does not list as `generated` block recycling, because they may be someone's work. Removal never
+forces.
+
+## Warm pool
+
+`aw sweep` previews which lanes are recyclable and why the rest are kept. `aw sweep --apply`
+recycles them: worktrees are reset to the base and cleaned, providers reset the data, the lane is
+renamed back to its number and returns to the pool. The pool keeps `[lanes] pool` lanes. Lanes beyond
+that, and lanes older than `[lanes] retention`, are destroyed: `teardown` runs, providers drop the
+data and the worktrees are removed. Every step is journaled.
+
+Individuals can set `auto_sweep = true`, which recycles proven-merged lanes in the background. It is
+safe because it uses the same proof.
+
+## Parking and discarding
+
+- `aw park <lane>` releases the lane's leases, stops its servers and protects it indefinitely.
+  `aw unpark` returns it to `working`.
+- `aw discard <lane>` abandons unmerged work. It asks for confirmation (or `--yes` from the owner),
+  archives each repository's branch under `refs/aw/archive/<lane-name>/<date>`, then destroys the
+  lane. Agents cannot run it.

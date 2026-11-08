@@ -1,5 +1,7 @@
 # Agent Workspace Wishlist
 
+> The maintained, numbered requirements are now in [docs/spec/requirements.md](docs/spec/requirements.md). This list is kept as their origin.
+
 Agent Workspace has three levels of specialization, and every item below should be read in that light:
 
 - **Framework** (generic): lives in this repository and knows nothing about any particular product.

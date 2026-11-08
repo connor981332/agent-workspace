@@ -29,13 +29,15 @@ This repository currently holds **candidate implementations**, competing approac
 | Candidate | Approach | State |
 |---|---|---|
 | [`workspace-candidate-1`](workspace-candidate-1/) | Python 3.11+, no dependencies. A single `workspace.toml` manifest describes the project, and the `aw` command manages agent "lanes", server slots, hooks and cleanup. Modeled on the RideTracker workspace. | On master, with tests and CI. Its [README](workspace-candidate-1/README.md) documents what it does. |
-| `workspace-candidate-2` | Shell-based workspace kit: `ws` and `lane` commands, a project template, and optional add-on modules (mail catcher, object store, DNS stand-in, browser MCP and others). Modeled on the FabWorks workspace. | In progress. Not yet merged to master. |
+| [`workspace-candidate-2`](workspace-candidate-2/) | Shell-based workspace kit: `ws` and `lane` commands, a project template, and optional add-on modules (mail catcher, object store, DNS stand-in, browser MCP and others). Modeled on the FabWorks workspace. | On master, with tests and CI. Its [README](workspace-candidate-2/README.md) documents what it does. |
 
 Both were derived from real workspaces that already run parallel agents day to day, which is why they reflect those teams' conventions. Neither is yet a general-purpose framework.
 
+**Release candidate.** We have settled on the design for the version we will publish: a new Go codebase that takes the safety core of candidate 1 and the container and resource work of candidate 2. The candidates are now research material and the reference for its acceptance tests. The design is in the [specification](docs/spec/README.md).
+
 ## Where it is going
 
-The target is described in the [wishlist](wishlist.md): a framework that supports the three levels above and covers, among other things:
+The target is described in the [specification](docs/spec/README.md), whose [requirements](docs/spec/requirements.md) grew out of the original [wishlist](wishlist.md): a framework that supports the three levels above and covers, among other things:
 
 - layered configuration with visible provenance, and clone-and-go onboarding;
 - pinned, deliberately updated framework versions that detect local edits;
@@ -45,10 +47,11 @@ The target is described in the [wishlist](wishlist.md): a framework that support
 - named team commands, composed instructions, team-defined hooks, and human review of changes to the workspace itself;
 - secrets handling, forge integration, roles, and plans and docs owned at the right level.
 
-The wishlist is the working list of requirements. It is expected to change as the candidates teach us what matters.
+The specification adds two principles the wishlist did not state: the tool is never what anyone waits on, and the owner's own checkout is never disturbed by agents.
 
 ## Principles
 
+- **The tool is never the bottleneck.** Only the project's own work, such as booting servers or migrating databases, takes noticeable time.
 - **Uncertain work stays.** Cleanup removes only work it can prove was merged.
 - **Guards fail closed.** If a guard cannot run, the action is blocked.
 - **Honest about safety.** Hooks are guardrails for cooperative agents, not a security sandbox. Do not run untrusted agents or prompts on the strength of this tool.
