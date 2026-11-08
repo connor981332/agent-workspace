@@ -220,9 +220,6 @@ func attachment(s *state.Store, stateDir string, p Payload) (lane int, stale boo
 	if rec.Lane == 0 {
 		return 0, true, nil // its lane was recycled or destroyed: whatever is there now is not its own
 	}
-	if rec.State != state.SessionActive {
-		return 0, false, nil
-	}
 	l, err := state.LaneByNumber(s.DB(), rec.Lane)
 	if errors.Is(err, state.ErrNotFound) || (err == nil && l.Generation != rec.LaneGeneration) {
 		return 0, true, nil
@@ -230,7 +227,20 @@ func attachment(s *state.Store, stateDir string, p Payload) (lane int, stale boo
 	if err != nil {
 		return 0, false, err
 	}
-	if !platform.Alive(rec.PID, rec.PIDStart) {
+	// Only a session starting brings a record back: a harness resumed in a new process keeps its
+	// session ID. An ordinary tool call must not, or it would undo a session having ended.
+	if p.Event == SessionStart {
+		if pid := platform.HarnessAncestor(os.Getpid(), p.Harness); pid > 0 {
+			if start, err := platform.ProcessIdentity(pid); err == nil && !rec.Has(pid, start) {
+				_ = state.RecordSessionJoin(stateDir, rec.ID, pid, start) // best effort: retried next start
+				return rec.Lane, false, nil
+			}
+		}
+	}
+	if rec.State != state.SessionActive {
+		return 0, false, nil
+	}
+	if !rec.Alive() {
 		return 0, false, nil
 	}
 	if adopted || rec.PID == 0 {

@@ -1,6 +1,13 @@
-# sessions/join-needs-live-process: to be written (plan §3.5).
+# A process can join a session only if it is really running, and an unknown session has nothing to join.
 # req: R23
 # source: C1 test_join_requires_a_verifiable_process
 # milestone: M3
 
-unwritten
+workspace solo --single --init
+session s-1 claude
+exec aw attach 'add feature flag'
+env AW_SESSION_PID=2147483646
+! exec aw attach 'add feature flag'
+stderr 'AW_SESSION_PID is 2147483646, which is not a running process'
+exec aw sweep --json
+json stdout .lanes[0].reason 'session s-1 (claude) is attached'

@@ -47,7 +47,8 @@ A guard decision runs on every tool call of every agent. It may only:
 4. Parse the command and decide.
 
 It may not run Git, Docker, the devcontainer CLI, a forge CLI or any network request. It writes only
-three things: activity, a session's ID on its first hook call, and the delivery of a notification.
+three things: activity, a session's ID and process (on its first hook call, or when a resumed
+harness starts), and the delivery of a notification.
 None of these writes waits for a lock: a write that cannot be made at once is retried on the next
 call. Notifications are therefore delivered at least once, and each carries an ID, so a repeat is
 recognizable.

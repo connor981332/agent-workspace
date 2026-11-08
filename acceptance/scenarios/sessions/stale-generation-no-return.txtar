@@ -1,6 +1,20 @@
-# sessions/stale-generation-no-return: to be written (plan §3.5).
+# A resumed session does not take back a lane someone else now has: once its lane has moved on, it is allocated like any new session.
 # req: R23
 # source: C1 test_ended_session_does_not_take_a_lane_someone_else_holds
 # milestone: M3
 
-unwritten
+workspace solo --single --init
+session old claude
+exec aw attach 'first thing'
+end-session old
+exec aw sweep --apply
+session new codex
+exec aw attach 'second thing' --json
+json stdout .lane 01
+env AW_SESSION=
+env AW_SESSION_PID=
+session old claude
+exec aw attach 'first thing' --json
+json stdout .lane 02
+json stdout .reused false
+! stdout '"returned": true'

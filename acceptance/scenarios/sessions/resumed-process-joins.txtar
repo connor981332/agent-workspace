@@ -1,6 +1,30 @@
-# sessions/resumed-process-joins: to be written (plan §3.5).
+# A resumed harness keeps its session ID in a new process. It joins the record once, and the lane stays held until the last process has exited, whichever exits first.
 # req: R77
 # source: C1 test_resumed_process_joins_the_record
 # milestone: M3
 
-unwritten
+workspace solo --single --init
+session s-1 claude
+exec aw attach 'add feature flag'
+exec sh $WORK/start.sh
+exec sh $WORK/attach.sh
+stdout 'Registered this process with the session'
+stdout '^Already attached to lane 01 feature-flag'
+exec sh $WORK/attach.sh
+! stdout 'Registered'
+
+# The process that attached exits first: the resumed one still holds the lane.
+exec sh -c 'printf %s "$AW_SESSION" > "$WORK/id"'
+end-session s-1
+exec aw sweep --json
+json stdout .lanes[0].action keep
+json stdout .lanes[0].reason 'session s-1 (claude) is attached'
+exec sh -c 'kill "$(cat "$WORK/resumed.pid")"; sleep 0.2'
+exec aw sweep --json
+json stdout .lanes[0].action recycle
+
+-- start.sh --
+sleep 300 >/dev/null 2>&1 &
+echo $! > "$WORK/resumed.pid"
+-- attach.sh --
+AW_SESSION_PID=$(cat "$WORK/resumed.pid") aw attach 'add feature flag'

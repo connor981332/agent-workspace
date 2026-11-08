@@ -1,6 +1,46 @@
-# sessions/only-start-revives: to be written (plan §3.5).
+# Only a session starting brings an ended record back: an ordinary tool call must not, and a start with no harness process to record brings back nothing.
 # req: R23
 # source: C1 test_only_session_start_revives_an_ended_record
 # milestone: M3
 
-unwritten
+workspace solo --single --init
+exec sh $WORK/make-claude.sh
+session s-1 claude
+exec aw attach 'add feature flag'
+end-session s-1
+exec aw sweep
+exec aw sweep --json
+json stdout .lanes[0].action recycle
+
+# A tool call does not revive it, even from under the harness.
+env PATH=$WORK/bin:$PATH
+exec claude pre $WORK/one
+exec aw sweep --json
+json stdout .lanes[0].action recycle
+
+# A start with no harness process above it finds nothing to record.
+exec awtest-hook -session s-1 session-start -
+exec aw sweep --json
+json stdout .lanes[0].action recycle
+
+# A start from under the harness brings it back, for as long as that process lives.
+exec sh -c 'claude start "$WORK/two" >/dev/null 2>&1 & i=0; while [ ! -e "$WORK/two" ] && [ $i -lt 200 ]; do sleep 0.05; i=$((i + 1)); done; test -e "$WORK/two"'
+exec aw sweep --json
+json stdout .lanes[0].action keep
+json stdout .lanes[0].reason 'session s-1 (claude) is attached'
+exec touch $WORK/stop
+
+-- make-claude.sh --
+mkdir -p "$WORK/bin"
+cat > "$WORK/bin/claude" <<'EOS'
+#!/bin/sh
+if [ "$1" = start ]; then
+	awtest-hook -session s-1 session-start -
+	touch "$2"
+	i=0
+	while [ ! -e "$WORK/stop" ] && [ $i -lt 600 ]; do sleep 0.05; i=$((i + 1)); done
+else
+	awtest-hook -session s-1 bash 'ls'
+fi
+EOS
+chmod +x "$WORK/bin/claude"

@@ -1,6 +1,21 @@
-# whoami/stale-attachment-is-owner: to be written (plan §3.5).
+# aw whoami reports an attachment only while it is current: a stale or ended one is reported as a warning, with no lane inferred, and asking writes nothing.
 # req: R93
 # source: C1 test_identity_resolves_only_current_valid_attachment_without_writes
 # milestone: M3
 
-unwritten
+workspace solo --single --init
+session s-1 claude
+exec aw attach 'add feature flag'
+exec aw whoami --json
+json stdout .attached.name feature-flag
+json stdout .attached.lane 01
+json stdout .location owner
+exec aw discard feature-flag --yes
+exec cksum .git/aw/state.db
+cp stdout $WORK/before
+exec aw whoami --json
+json stdout .location owner
+! stdout '"name": "feature-flag"'
+stdout 'attachment is stale'
+exec cksum .git/aw/state.db
+cmp stdout $WORK/before

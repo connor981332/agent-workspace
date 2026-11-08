@@ -5,7 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"time"
+
+	"github.com/connor981332/agent-workspace/internal/platform"
 )
 
 // Lane states (lifecycle.md, "States").
@@ -56,6 +59,91 @@ type Session struct {
 	LastActivity   string `json:"last_activity"`
 	PID            int    `json:"pid,omitempty"`
 	PIDStart       string `json:"pid_start,omitempty"`
+	// Joined are the processes that joined after it started (session_processes).
+	Joined []Process `json:"joined,omitempty"`
+}
+
+// Process is one process of a session: its PID and start identity.
+type Process struct {
+	PID   int    `json:"pid"`
+	Start string `json:"start"`
+}
+
+// Processes are all the session's known processes.
+func (s Session) Processes() []Process {
+	out := slices.Clone(s.Joined)
+	if s.PID > 0 {
+		out = append(out, Process{s.PID, s.PIDStart})
+	}
+	return out
+}
+
+// Has reports whether this exact process already belongs to the session.
+func (s Session) Has(pid int, start string) bool {
+	return slices.Contains(s.Processes(), Process{pid, start})
+}
+
+// Alive reports whether any of a session's processes is still running. With none recorded, or one
+// that cannot be checked, it counts as alive: unknown means protected.
+func (s Session) Alive() bool {
+	procs := s.Processes()
+	if len(procs) == 0 {
+		return true
+	}
+	return slices.ContainsFunc(procs, func(p Process) bool { return platform.Alive(p.PID, p.Start) })
+}
+
+func loadJoined(q Querier, sessions []*Session) error {
+	if len(sessions) == 0 {
+		return nil
+	}
+	byID := map[int]*Session{}
+	for _, s := range sessions {
+		byID[s.ID] = s
+	}
+	rows, err := q.Query(`SELECT session, pid, pid_start FROM session_processes ORDER BY rowid`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int
+		var p Process
+		if err := rows.Scan(&id, &p.PID, &p.Start); err != nil {
+			return err
+		}
+		if s := byID[id]; s != nil {
+			s.Joined = append(s.Joined, p)
+		}
+	}
+	return rows.Err()
+}
+
+// JoinSession adds a process to a session and makes the session active again.
+func JoinSession(tx *sql.Tx, id, pid int, start string) error {
+	if _, err := tx.Exec(`INSERT OR IGNORE INTO session_processes (session, pid, pid_start) VALUES (?, ?, ?)`, id, pid, start); err != nil {
+		return err
+	}
+	_, err := tx.Exec(`UPDATE sessions SET state = ?, last_activity = ? WHERE id = ?`, SessionActive, now(), id)
+	return err
+}
+
+// RecordSessionJoin is JoinSession for the hook at session start: it never waits for a lock.
+func RecordSessionJoin(dir string, id, pid int, start string) error {
+	db, err := sql.Open("sqlite", "file:"+filepath.Join(dir, File)+"?_pragma=busy_timeout(0)&_txlock=immediate")
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() //nolint:errcheck // after a commit this does nothing
+	if err := JoinSession(tx, id, pid, start); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // Session states.
@@ -192,6 +280,10 @@ func SessionByHarnessID(q Querier, harness, id string) (Session, error) {
 	if errors.Is(err, sql.ErrNoRows) {
 		return s, ErrNotFound
 	}
+	if err != nil {
+		return s, err
+	}
+	err = loadJoined(q, []*Session{&s})
 	return s, err
 }
 
@@ -242,7 +334,15 @@ func Sessions(q Querier) ([]Session, error) {
 		}
 		out = append(out, s)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close() // a transaction has one connection, and loadJoined needs it
+	ptrs := make([]*Session, len(out))
+	for i := range out {
+		ptrs[i] = &out[i]
+	}
+	return out, loadJoined(q, ptrs)
 }
 
 // SaveSession inserts or updates a session by (harness, harness_session), and returns its id.
