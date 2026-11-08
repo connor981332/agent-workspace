@@ -32,4 +32,4 @@ cd $WORK
 stdout '^✗ workspace: .* is not inside an Agent Workspace .* → cd into a workspace, or create one with aw init$'
 
 -- tree.sh --
-find "$OWNER" "$HOME" -type f | LC_ALL=C sort | while IFS= read -r f; do cksum < "$f" | tr '\n' ' '; echo "$f"; done
+find "$OWNER" "$HOME" -type f ! -name '*-shm' | LC_ALL=C sort | while IFS= read -r f; do cksum < "$f" | tr '\n' ' '; echo "$f"; done

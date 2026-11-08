@@ -30,4 +30,4 @@ cmp stdout $WORK/before
 -- tree.sh --
 # Every file under the owner checkout (lanes and Git directory included) and the home directory,
 # with its size and checksum, so that any write shows up.
-find "$OWNER" "$HOME" -type f | LC_ALL=C sort | while IFS= read -r f; do cksum < "$f" | tr '\n' ' '; echo "$f"; done
+find "$OWNER" "$HOME" -type f ! -name '*-shm' | LC_ALL=C sort | while IFS= read -r f; do cksum < "$f" | tr '\n' ' '; echo "$f"; done

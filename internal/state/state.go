@@ -18,7 +18,7 @@ import (
 	"strings"
 	"time"
 
-	_ "modernc.org/sqlite" // pure Go, so the binary stays static
+	"modernc.org/sqlite" // pure Go, so the binary stays static
 )
 
 // File is the database's name in the state directory.
@@ -50,10 +50,11 @@ func (e *ReadOnlyError) Error() string {
 
 // Store is an open state database.
 type Store struct {
-	db       *sql.DB
-	path     string
-	version  int // PRAGMA user_version as found (after migration, for ReadWrite)
-	readOnly *ReadOnlyError
+	db             *sql.DB
+	path           string
+	compactOnClose bool
+	version        int // PRAGMA user_version as found (after migration, for ReadWrite)
+	readOnly       *ReadOnlyError
 }
 
 // Open opens the store in dir.
@@ -142,7 +143,29 @@ func Open(dir string, mode Mode) (*Store, error) {
 			return nil, &UnreadableError{Path: path, Err: err}
 		}
 	}
+	if mode == ReadWrite {
+		_ = keepLog(db) // an optimization only: without it, the log is recreated
+		s.compactOnClose = true
+	}
 	return s, nil
+}
+
+// keepLog tells SQLite not to delete the write-ahead log when the last connection closes. Creating
+// it again for every command costs a filesystem sync on top of the log's own.
+func keepLog(db *sql.DB) error {
+	c, err := db.Conn(context.Background())
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+	return c.Raw(func(raw any) error {
+		fc, ok := raw.(sqlite.FileControl)
+		if !ok {
+			return nil
+		}
+		_, err := fc.FileControlPersistWAL("main", 1)
+		return err
+	})
 }
 
 func dsn(path string, mode Mode) string {
@@ -151,6 +174,10 @@ func dsn(path string, mode Mode) string {
 	q := []string{"_pragma=busy_timeout(5000)", "_txlock=immediate"}
 	if mode == ReadWrite {
 		q = append(q, "_pragma=synchronous(NORMAL)", "_pragma=foreign_keys(1)")
+	} else {
+		// A connection that can write would fold the log into the database as it closes, and the
+		// guard hook would pay for a disk sync.
+		q = append(q, "mode=ro")
 	}
 	return "file:" + path + "?" + strings.Join(q, "&")
 }
@@ -169,7 +196,30 @@ func (e *UnreadableError) Error() string {
 func (e *UnreadableError) Unwrap() error { return e.Err }
 
 // Close closes the store.
-func (s *Store) Close() error { return s.db.Close() }
+func (s *Store) Close() error {
+	if s.compactOnClose {
+		s.compactLog()
+	}
+	return s.db.Close()
+}
+
+// maxLog is how large the kept write-ahead log may grow. Every open has to read it, including the
+// guard hook's, and at this size that costs about a millisecond. A command pays for compacting it
+// about once in 200, so ordinary commands never sync on close.
+const maxLog = 4 << 20
+
+// compactLog folds an oversized log into the database. It never waits: a busy database is left for
+// the next command.
+func (s *Store) compactLog() {
+	info, err := os.Stat(s.path + "-wal")
+	if err != nil || info.Size() < maxLog {
+		return
+	}
+	if _, err := s.db.Exec(`PRAGMA busy_timeout = 0`); err != nil {
+		return
+	}
+	_, _ = s.db.Exec(`PRAGMA wal_checkpoint(TRUNCATE)`)
+}
 
 // Path is the database file.
 func (s *Store) Path() string { return s.path }

@@ -96,9 +96,9 @@ Speed enforcement changed at the M3 exit, by the spec owner (§5.2): CI checks r
 
 (PR #41.) Now (`m4/exit`): port collisions and machine capacity in `aw doctor` (S15), the three M4 benchmarks, and `requirements.toml` moved to `current = "M4"`.
 
-**Blocked on one budget:** on a real disk, `grant-next` measures 53.7 ms p99 against its 50 ms budget, with the machine busy (docs/dev/benchmarks.md). The bench had been running on a RAM disk until this was found.
+The bench had been running on a RAM disk. It now uses the real disk, where every budget holds after writers began keeping SQLite's log between commands (`docs/dev/benchmarks.md`).
 
-**Next step:** settle that budget, then the M4 pre-release, then M5.
+**Next step:** the M4 pre-release (v0.0.5), then M5.
 
 **Pending manual checks:** the hot-path and budget benchmarks on an Apple Silicon laptop (T3, M1, M2;
 docs/dev/benchmarks.md).

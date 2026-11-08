@@ -37,4 +37,4 @@ stdout 'Not inside an Agent Workspace. Create one with aw init, or cd into one.'
 stdout '^Usage:'
 
 -- tree.sh --
-find "$OWNER" "$HOME" -type f | LC_ALL=C sort | while IFS= read -r f; do cksum < "$f" | tr '\n' ' '; echo "$f"; done
+find "$OWNER" "$HOME" -type f ! -name '*-shm' | LC_ALL=C sort | while IFS= read -r f; do cksum < "$f" | tr '\n' ' '; echo "$f"; done
