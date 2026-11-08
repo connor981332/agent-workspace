@@ -1,6 +1,17 @@
-# policy/ref-hook-ignores-no-verify: to be written (plan §3.5).
+# Ref protection runs inside Git, so --no-verify does not skip it, and neither does a command the
+# shell parser could not see through.
 # req: R59
 # source: spec (no candidate source)
 # milestone: M3
 
-unwritten
+workspace solo --single --init
+exec aw setup
+exec git branch keep
+owner-snapshot
+exec aw attach 'add feature flag'
+cd .worktrees/01
+exec git commit -q --no-verify --allow-empty -m 'own branch: fine'
+! exec git push --no-verify . HEAD:refs/heads/keep
+stderr 'a push into this repository cannot be traced to a checkout, so it is refused: refs/heads/keep'
+! exec sh -c 'eval "git branch -f keep HEAD"'
+stderr 'refs/heads/keep'

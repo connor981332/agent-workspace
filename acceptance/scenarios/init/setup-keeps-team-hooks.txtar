@@ -1,0 +1,48 @@
+# aw setup keeps the team's own hooks running: the dispatcher runs them after aw's check, in the
+# owner checkout and in lanes, and a hook that fails still fails the commit. In the owner checkout
+# the dispatcher never starts aw, so plain Git works even with aw gone.
+# req: R59
+# source: spec (owner-checkout.md, "The Git hooks dispatcher")
+# milestone: M3
+
+workspace solo --single --init
+owner-may-change
+mkdir .githooks
+cp $WORK/pre-commit .githooks/pre-commit
+cp $WORK/ref .githooks/reference-transaction
+exec chmod +x .githooks/pre-commit .githooks/reference-transaction
+exec git config core.hooksPath .githooks
+exec aw setup
+exec git config --get aw.teamHooksPath
+stdout '^\.githooks$'
+exec aw setup
+stdout 'already set up'
+exec git config --get aw.teamHooksPath
+stdout '^\.githooks$'
+
+exec git commit -q --allow-empty -m 'owner'
+grep 'team pre-commit' $WORK/ran
+grep 'team reference-transaction prepared' $WORK/ran
+
+# Plain Git in the owner checkout does not need aw.
+exec sh -c 'PATH=/usr/bin:/bin; rm bin/aw; git commit -q --allow-empty -m "without aw" && git checkout -q -- bin/aw'
+
+exec git add .githooks
+exec git commit -q -m 'team hooks'
+exec aw attach 'add feature flag'
+cd .worktrees/01
+exec rm -f $WORK/ran
+exec git commit -q --allow-empty -m 'lane'
+grep 'team pre-commit' $WORK/ran
+grep 'team reference-transaction prepared' $WORK/ran
+exec touch $WORK/fail
+! exec git commit -q --allow-empty -m 'refused by the team'
+
+-- pre-commit --
+#!/bin/sh
+echo 'team pre-commit' >> "$WORK/ran"
+[ ! -e "$WORK/fail" ]
+-- ref --
+#!/bin/sh
+cat > /dev/null
+echo "team reference-transaction $1" >> "$WORK/ran"

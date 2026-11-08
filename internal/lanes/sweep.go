@@ -372,6 +372,9 @@ func (d *Decision) fingerprint() string {
 // recycle resets every worktree to its base, deletes the lane's branches, and returns the lane to
 // the pool under its number. Untracked caches stay: stable paths keep them valid across reuse.
 func (m *Manager) recycle(ctx context.Context, d *Decision) error {
+	if err := m.authorizeRefs(ctx); err != nil {
+		return err
+	}
 	var repos []state.LaneRepo
 	for i, r := range d.stored {
 		ev := d.Repos[i]

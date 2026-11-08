@@ -80,6 +80,9 @@ func (m *Manager) Root(n int) string {
 // the pool, else a new one. Git work happens outside any lock: the lane is reserved in one
 // transaction, built, then recorded in another.
 func (m *Manager) Claim(ctx context.Context, req ClaimRequest) (*Claimed, error) {
+	if err := m.authorizeRefs(ctx); err != nil {
+		return nil, err
+	}
 	purpose := strings.TrimSpace(req.Purpose)
 	if purpose == "" {
 		return nil, errors.New(`a lane needs a purpose → say what the work is, e.g. aw attach "fix checkout tax rounding"`)

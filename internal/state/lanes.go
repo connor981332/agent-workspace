@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"time"
 )
 
 // Lane states (lifecycle.md, "States").
@@ -209,6 +210,20 @@ func RecordSessionIdentity(dir string, id int, harnessSession string, pid int, p
 	}
 	_, err = db.Exec(`UPDATE sessions SET harness_session = ?, pid = coalesce(?, pid), pid_start = coalesce(nullif(?, ''), pid_start)
 		WHERE id = ? AND state = ?`, harnessSession, p, pidStart, id, SessionActive)
+	return err
+}
+
+// RefTokenKey is the meta key of a ref token: aw's authorization for its own ref updates from a
+// lane (S3), which the reference-transaction hook checks.
+func RefTokenKey(token string) string { return "ref-token:" + token }
+
+// IssueRefToken records a token valid until expires, and removes expired ones.
+func IssueRefToken(tx *sql.Tx, token string, expires time.Time) error {
+	at := func(t time.Time) string { return t.UTC().Format("2006-01-02T15:04:05.000000000Z") }
+	if _, err := tx.Exec(`DELETE FROM meta WHERE key LIKE 'ref-token:%' AND value < ?`, at(time.Now())); err != nil {
+		return err
+	}
+	_, err := tx.Exec(`INSERT INTO meta (key, value) VALUES (?, ?)`, RefTokenKey(token), at(expires))
 	return err
 }
 

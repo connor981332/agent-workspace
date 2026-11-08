@@ -7,7 +7,6 @@
 package main
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/connor981332/agent-workspace/internal/cli"
@@ -20,15 +19,8 @@ func main() {
 		case "hook":
 			os.Exit(harness.Hook(os.Args[2:], cli.FrameworkVersion(), os.Stdin, os.Stdout, os.Stderr))
 		case "git-hook":
-			os.Exit(gitHook())
+			os.Exit(harness.GitHook(os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
 		}
 	}
 	os.Exit(cli.Main(os.Args[1:], os.Stdout, os.Stderr))
-}
-
-// gitHook is the stub for the Git hooks dispatcher, which arrives in M3. Nothing installs it
-// before then; if something calls it, it refuses, because a guard that cannot decide must deny.
-func gitHook() int {
-	fmt.Fprintln(os.Stderr, "aw git-hook: not implemented yet, so this ref update is refused")
-	return harness.Deny
 }
