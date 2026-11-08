@@ -1,5 +1,5 @@
 # GoReleaser configuration (plans/release-candidate.md §6). CI runs `goreleaser check` and a
-# snapshot build on every PR; tag releases come with the release workflow (M2).
+# snapshot build on every PR; .github/workflows/release.yml publishes a tag's release.
 version: 2
 
 project_name: aw
@@ -36,5 +36,17 @@ snapshot:
 changelog:
   disable: true
 
+# The release workflow sets AW_CONFIG_SCHEMA and AW_STATE_SCHEMA from the built binary's
+# aw version --json, so the notes state all three versions (§6).
 release:
-  disable: true
+  github:
+    owner: connor981332
+    name: agent-workspace
+  # Until 1.0, every release is a pre-release that marks a milestone exit (§6).
+  prerelease: "true"
+  draft: false
+  header: |
+    aw {{ .Version }}: configuration schema {{ .Env.AW_CONFIG_SCHEMA }}, state schema {{ .Env.AW_STATE_SCHEMA }}.
+
+    The assets are raw binaries for Linux and macOS on amd64 and arm64, and checksums.txt (SHA-256).
+    A workspace pins this version in .aw/version, and bin/aw fetches and verifies the binary.
