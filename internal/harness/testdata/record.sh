@@ -67,20 +67,23 @@ collect)
 	mkdir -p "$dst"
 	python3 - "$box" "$dst" "$HOME" <<'PY'
 import glob, json, os, sys
+from urllib.parse import quote
 box, dst, home = sys.argv[1:]
 files = sorted(glob.glob(f"{box}/.recorded/*.json"))
 if not files:
     sys.exit("no payloads were recorded: check that the harness ran its hooks")
 for f in files:
     event = os.path.basename(f)[4:-5]
-    text = open(f).read().replace(box, "/WORKSPACE").replace(home, "/HOME")
+    # Grok percent-encodes the workspace path inside its transcript path.
+    text = (open(f).read().replace(box, "/WORKSPACE").replace(home, "/HOME")
+            .replace(quote(box, safe=""), "%2FWORKSPACE").replace(quote(home, safe=""), "%2FHOME"))
     data = json.loads(text)
     tool = data.get("tool_name") or data.get("toolName") or ""
     for key in ("session_id", "sessionId", "prompt_id", "turn_id"):
         if isinstance(data.get(key), str):
             text = text.replace(data[key], key.upper())
     data = json.loads(text)
-    for key in ("tool_response", "toolResponse", "tool_output"):
+    for key in ("tool_response", "toolResponse", "tool_output", "toolResult", "tool_result"):
         if key in data:
             data[key] = "(omitted)"
     name = event + ("-" + tool.lower().replace("_", "-") if tool else "")

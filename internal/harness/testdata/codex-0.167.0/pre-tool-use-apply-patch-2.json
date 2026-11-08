@@ -1,0 +1,14 @@
+{
+ "cwd": "/WORKSPACE",
+ "hook_event_name": "PreToolUse",
+ "model": "gpt-6-astra",
+ "permission_mode": "default",
+ "session_id": "SESSION_ID",
+ "tool_input": {
+  "command": "*** Begin Patch\n*** Update File: /WORKSPACE/out.txt\n@@\n-hi\n+hello\n*** End Patch"
+ },
+ "tool_name": "apply_patch",
+ "tool_use_id": "exec-93b8909a-0315-4f50-a4b6-ef5f10f18ebd",
+ "transcript_path": "/HOME/.codex/sessions/2026/11/08/rollout-2026-11-08T10-53-44-SESSION_ID.jsonl",
+ "turn_id": "TURN_ID"
+}

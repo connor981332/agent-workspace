@@ -1,6 +1,40 @@
-# harness/codex-apply-patch-paths: to be written (plan §3.5).
+# Codex edits files with apply_patch: every file its patch adds, updates, deletes or moves to is
+# checked, relative or absolute, and one bad path refuses the whole patch.
 # req: R55
 # source: C1 test_codex_patches_name_their_files
 # milestone: M3
 
-unwritten
+workspace shop --init
+exec aw attach 'add feature flag'
+cd .worktrees/01
+exec awtest-hook -harness codex patch @$WORK/inside.patch
+! exec awtest-hook -harness codex patch @$WORK/escape.patch
+stderr 'aw: ../../README.md is outside lane feature-flag'
+! exec awtest-hook -harness codex patch @$WORK/move.patch
+stderr 'is outside lane feature-flag'
+! exec awtest-hook -harness codex patch @$WORK/empty.patch
+stderr 'aw does not recognize this codex hook payload'
+
+-- inside.patch --
+*** Begin Patch
+*** Add File: web/new.txt
++hi
+*** Update File: api/README.md
+@@
+-a
++b
+*** End Patch
+-- escape.patch --
+*** Begin Patch
+*** Add File: web/new.txt
++hi
+*** Delete File: ../../README.md
+*** End Patch
+-- move.patch --
+*** Begin Patch
+*** Update File: web/README.md
+*** Move to: ../../moved.md
+*** End Patch
+-- empty.patch --
+*** Begin Patch
+*** End Patch

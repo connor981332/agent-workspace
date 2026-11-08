@@ -1,0 +1,10 @@
+{
+ "cwd": "/WORKSPACE",
+ "hook_event_name": "UserPromptSubmit",
+ "model": "gpt-6-astra",
+ "permission_mode": "default",
+ "prompt": "Do exactly these steps with your tools, and nothing else: 1. Read the file notes.txt. 2. Create a file out.txt containing hi. 3. Edit out.txt to replace hi with hello. 4. Run the shell command: ls -la && git status --short. 5. Search the files for hello. 6. List the *.txt files. Then reply done.",
+ "session_id": "SESSION_ID",
+ "transcript_path": "/HOME/.codex/sessions/2026/11/08/rollout-2026-11-08T10-53-44-SESSION_ID.jsonl",
+ "turn_id": "TURN_ID"
+}

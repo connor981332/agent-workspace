@@ -1,0 +1,14 @@
+{
+ "cwd": "/WORKSPACE",
+ "hook_event_name": "PreToolUse",
+ "model": "gpt-6-astra",
+ "permission_mode": "default",
+ "session_id": "SESSION_ID",
+ "tool_input": {
+  "command": "rg -n hello"
+ },
+ "tool_name": "Bash",
+ "tool_use_id": "exec-a149b471-2798-4a32-9a68-f0b9edba54f9",
+ "transcript_path": "/HOME/.codex/sessions/2026/11/08/rollout-2026-11-08T10-53-44-SESSION_ID.jsonl",
+ "turn_id": "TURN_ID"
+}

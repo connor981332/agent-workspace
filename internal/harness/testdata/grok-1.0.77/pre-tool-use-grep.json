@@ -1,0 +1,24 @@
+{
+ "cwd": "/WORKSPACE",
+ "hookEventName": "pre_tool_use",
+ "hook_event_name": "PreToolUse",
+ "permissionMode": "bypassPermissions",
+ "permission_mode": "bypassPermissions",
+ "sessionId": "SESSION_ID",
+ "session_id": "SESSION_ID",
+ "timestamp": "2026-11-08T17:57:51.560557422+00:00",
+ "toolInput": {
+  "pattern": "hello"
+ },
+ "toolInputTruncated": false,
+ "toolName": "grep",
+ "toolUseId": "call-36218612-e74b-4eb1-acb0-ad6102d9584f-4",
+ "tool_input": {
+  "pattern": "hello"
+ },
+ "tool_name": "grep",
+ "tool_use_id": "call-36218612-e74b-4eb1-acb0-ad6102d9584f-4",
+ "transcriptPath": "/HOME/.grok/sessions/%2FWORKSPACE/SESSION_ID/updates.jsonl",
+ "transcript_path": "/HOME/.grok/sessions/%2FWORKSPACE/SESSION_ID/updates.jsonl",
+ "workspaceRoot": "/WORKSPACE"
+}

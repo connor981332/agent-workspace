@@ -1,6 +1,22 @@
-# harness/grok-payloads: to be written (plan §3.5).
+# Grok's payloads, in the shape recorded from Grok 1.0.77, reach the same decisions as any harness's:
+# its own tool names, and a deny in its own reply format. Grok also runs Claude Code's hook
+# configuration, so its payload is recognized whichever hook delivered it.
 # req: R56
 # source: C1 test_grok_payloads_are_normalized
 # milestone: M3
 
-unwritten
+workspace shop --init
+exec aw attach 'add feature flag'
+cd .worktrees/01
+exec awtest-hook -harness grok bash 'ls -la && git status --short'
+exec awtest-hook -harness grok read web/README.md
+exec awtest-hook -harness grok list web
+exec awtest-hook -harness grok edit web/README.md
+
+! exec awtest-hook -harness grok bash 'cat ../../README.md'
+stdout '"decision":"deny"'
+stderr 'is outside lane feature-flag'
+! exec awtest-hook -harness grok read ../../README.md
+! exec awtest-hook -harness grok edit $OWNER/README.md
+! exec awtest-hook -harness grok list $OWNER
+stderr 'is outside lane feature-flag'
