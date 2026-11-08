@@ -1,6 +1,36 @@
-# harness/codex-attach-adopted: to be written (plan §3.5).
+# Codex's sandbox can hide its process from tool commands, so aw attach may record no process. The
+# session's first hook, a child of Codex, adopts it; when that process ends, so does the attachment.
 # req: R56 R77
 # source: C1 test_codex_attach_is_adopted_by_its_hook
 # milestone: M3
 
-unwritten
+workspace solo --single --init
+exec sh $WORK/make-codex.sh
+env CODEX_THREAD_ID=thread-1
+exec aw attach 'add feature flag'
+env CODEX_THREAD_ID=
+exec awtest-sqlite .git/aw/state.db 'UPDATE sessions SET pid = NULL, pid_start = NULL'
+
+# Before adoption the record has no process: unknown means protected.
+exec aw sweep --json
+stdout 'session thread-1 \(codex\) is attached'
+
+# A hook under a process named codex records it. The process then lives until it is told to exit.
+exec sh -c 'PATH="$WORK/codexbin:$PATH" codex >"$WORK/codex.log" 2>&1 & echo $! > "$WORK/codex.pid"; i=0; while [ ! -e "$WORK/hooked" ] && [ $i -lt 200 ]; do sleep 0.05; i=$((i + 1)); done; test -e "$WORK/hooked"'
+exec aw sweep --json
+stdout 'session thread-1 \(codex\) is attached'
+
+exec sh -c 'touch "$WORK/stop"; i=0; while kill -0 "$(cat "$WORK/codex.pid")" 2>/dev/null && [ $i -lt 200 ]; do sleep 0.05; i=$((i + 1)); done'
+exec aw sweep --json
+json stdout .lanes[0].action recycle
+
+-- make-codex.sh --
+mkdir -p "$WORK/codexbin"
+cat > "$WORK/codexbin/codex" <<EOS
+#!/bin/sh
+awtest-hook -harness codex -session thread-1 -cwd "$OWNER/.worktrees/01" bash 'ls'
+touch "$WORK/hooked"
+i=0
+while [ ! -e "$WORK/stop" ] && [ \$i -lt 600 ]; do sleep 0.05; i=\$((i + 1)); done
+EOS
+chmod +x "$WORK/codexbin/codex"

@@ -132,8 +132,17 @@ func Decide(s Scope, c Call) (d Decision) {
 }
 
 func decideFiles(s Scope, c Call, cwd shell.Dir) Decision {
-	if d := s.checkCwd(cwd); d.Verdict != Allow {
-		return d
+	if s.fromOutsideLane(cwd.Physical) {
+		// A harness that keeps running from the owner checkout: a relative path would mean the
+		// owner's file, so paths must be absolute, and a search must say where.
+		if len(c.Paths) == 0 {
+			return deny("boundary", "this session belongs to lane %s, but it runs from the owner checkout → pass an explicit path inside the lane, %s", s.LaneName, quote(s.LaneRoot))
+		}
+		for _, p := range c.Paths {
+			if !filepath.IsAbs(p) && !strings.HasPrefix(p, "~") {
+				return deny("boundary", "this session belongs to lane %s, but it runs from the owner checkout, so %s would mean the owner's file → use an absolute path inside the lane, %s", s.LaneName, quote(p), quote(s.LaneRoot))
+			}
+		}
 	}
 	for _, p := range c.Paths {
 		if p == "" {
@@ -166,9 +175,6 @@ func decideFiles(s Scope, c Call, cwd shell.Dir) Decision {
 }
 
 func decideShell(s Scope, src string, cwd shell.Dir) Decision {
-	if d := s.checkCwd(cwd); d.Verdict != Allow {
-		return d
-	}
 	p, err := shell.Parse(src, cwd, &shell.Env{Home: s.Home})
 	if err != nil {
 		return deny("parse", "%v, so it is refused → write it as plain commands, without the construct", err)
@@ -192,15 +198,10 @@ func decideShell(s Scope, src string, cwd shell.Dir) Decision {
 	return allow()
 }
 
-// checkCwd refuses a lane session that works outside its lane.
-func (s Scope) checkCwd(cwd shell.Dir) Decision {
-	if s.Role != Lane {
-		return allow()
-	}
-	if !s.inLane(cwd.Physical) && within(cwd.Physical, s.Owner) {
-		return deny("boundary", "this session belongs to lane %s, but its working directory %s is outside it → cd %s", s.LaneName, quote(cwd.Logical), quote(s.LaneRoot))
-	}
-	return allow()
+// fromOutsideLane reports whether a lane session is working from elsewhere in the owner's
+// workspace: a harness that keeps its first directory runs from the owner checkout after attaching.
+func (s Scope) fromOutsideLane(p string) bool {
+	return s.Role == Lane && !s.inLane(p) && within(p, s.Owner)
 }
 
 func (s Scope) inLane(p string) bool {

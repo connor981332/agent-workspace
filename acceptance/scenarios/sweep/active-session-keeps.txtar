@@ -4,7 +4,9 @@
 # milestone: M2
 
 workspace solo --single --init
-exec aw attach 'add feature flag' --harness claude --session s-1
+env CLAUDE_CODE_SESSION_ID=s-1
+exec aw attach 'add feature flag'
+env CLAUDE_CODE_SESSION_ID=
 exec aw sweep --apply --json
 json stdout .lanes[0].action keep
 json stdout .lanes[0].reason 'session s-1 (claude) is attached'

@@ -3,36 +3,66 @@ package cli
 import (
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/connor981332/agent-workspace/internal/lanes"
+	"github.com/connor981332/agent-workspace/internal/platform"
 	"github.com/connor981332/agent-workspace/internal/ui"
 )
 
-// sessionIdentity reads who is asking: --harness and --session, else AW_SESSION ("<harness>:<id>",
-// set by aw new). Hooks supply it from M3.
+// harnessEnv names the variable through which each harness tells its tool commands their session.
+var harnessEnv = []struct{ harness, env string }{
+	{"claude", "CLAUDE_CODE_SESSION_ID"}, {"codex", "CODEX_THREAD_ID"}, {"grok", "GROK_SESSION_ID"},
+}
+
+// sessionIdentity reads who is asking, from what the harness (or aw new, through AW_SESSION) put in
+// the environment. --harness chooses among several; --harness and --session are checked against
+// the environment, because an identity the harness did not issue could claim another session's lane.
 func sessionIdentity(harness, session string) (lanes.Identity, error) {
-	if session == "" {
-		if env := os.Getenv("AW_SESSION"); env != "" {
-			h, id, ok := strings.Cut(env, ":")
-			if !ok || h == "" || id == "" {
-				return lanes.Identity{}, fmt.Errorf("AW_SESSION is %q, not <harness>:<session id> → unset it, or start the session with aw new", env)
-			}
-			if harness == "" {
-				harness = h
-			}
-			session = id
-		}
-	}
-	if (harness == "") != (session == "") {
+	if session != "" && harness == "" {
 		return lanes.Identity{}, fmt.Errorf("--harness and --session go together → pass both, or neither")
 	}
-	who := lanes.Identity{Harness: harness, Session: session}
+	type issued struct{ harness, id, source string }
+	var found []issued
+	if env := os.Getenv("AW_SESSION"); env != "" {
+		h, id, ok := strings.Cut(env, ":")
+		if !ok || h == "" || id == "" {
+			return lanes.Identity{}, fmt.Errorf("AW_SESSION is %q, not <harness>:<session id> → unset it, or start the session with aw new", env)
+		}
+		found = append(found, issued{h, id, "AW_SESSION"})
+	} else {
+		for _, e := range harnessEnv {
+			if id := os.Getenv(e.env); id != "" {
+				found = append(found, issued{e.harness, id, e.env})
+			}
+		}
+	}
+	if harness != "" {
+		found = slices.DeleteFunc(found, func(i issued) bool { return i.harness != harness })
+		if len(found) == 0 {
+			return lanes.Identity{}, fmt.Errorf("this is not running inside a %s session that aw can verify, so it is refused → run aw attach from the harness, without --harness or --session", harness)
+		}
+	}
+	switch len(found) {
+	case 0:
+		return lanes.Identity{}, nil // a person at a terminal: no session to record
+	case 1:
+	default:
+		return lanes.Identity{}, fmt.Errorf("several harnesses' session IDs are set (%s, %s) → choose with --harness", found[0].harness, found[1].harness)
+	}
+	if session != "" && session != found[0].id {
+		return lanes.Identity{}, fmt.Errorf("--session %q is not the session %s says this is, so it is refused → run aw attach without --session", session, found[0].source)
+	}
+	who := lanes.Identity{Harness: found[0].harness, Session: found[0].id}
 	if pid, err := strconv.Atoi(os.Getenv("AW_SESSION_PID")); err == nil && pid > 0 {
 		who.PID = pid
+	} else {
+		// A harness's sandbox may hide it; then the session's first hook records it.
+		who.PID = platform.HarnessAncestor(os.Getpid(), who.Harness)
 	}
 	return who, nil
 }

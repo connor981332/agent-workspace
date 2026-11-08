@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
+
+	"github.com/connor981332/agent-workspace/internal/workspace"
 )
 
 // Leading words that say what kind of change it is, not what it is about.
@@ -99,10 +101,5 @@ func Unique(name string, taken func(string) bool) string {
 	}
 }
 
-// Dir is a lane's directory name: 03, or 103 when lanes.max is over 99 (plan §9).
-func Dir(n, max int) string {
-	if max > 99 {
-		return fmt.Sprintf("%03d", n)
-	}
-	return fmt.Sprintf("%02d", n)
-}
+// Dir is a lane's directory name: see workspace.LaneDir.
+func Dir(n, max int) string { return workspace.LaneDir(n, max) }

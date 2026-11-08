@@ -119,3 +119,11 @@ func (w *Workspace) StateDir() (string, error) {
 	}
 	return filepath.Join(common, "aw"), nil
 }
+
+// Dir is a lane's directory name: 03, or 103 when lanes.max is over 99 (plan §9).
+func LaneDir(n, max int) string {
+	if max > 99 {
+		return fmt.Sprintf("%03d", n)
+	}
+	return fmt.Sprintf("%02d", n)
+}

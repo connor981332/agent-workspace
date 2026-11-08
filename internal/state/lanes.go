@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"path/filepath"
 )
 
 // Lane states (lifecycle.md, "States").
@@ -191,6 +192,24 @@ func SessionByHarnessID(q Querier, harness, id string) (Session, error) {
 		return s, ErrNotFound
 	}
 	return s, err
+}
+
+// RecordSessionIdentity is the hook's write (speed.md, "The hot path"): a session's own ID on its
+// first hook call, and its process when that was not known. It never waits for a lock: if the
+// database is busy it returns an error, and the next call tries again.
+func RecordSessionIdentity(dir string, id int, harnessSession string, pid int, pidStart string) error {
+	db, err := sql.Open("sqlite", "file:"+filepath.Join(dir, File)+"?_pragma=busy_timeout(0)")
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	var p any
+	if pid > 0 {
+		p = pid
+	}
+	_, err = db.Exec(`UPDATE sessions SET harness_session = ?, pid = coalesce(?, pid), pid_start = coalesce(nullif(?, ''), pid_start)
+		WHERE id = ? AND state = ?`, harnessSession, p, pidStart, id, SessionActive)
+	return err
 }
 
 // Sessions returns every session, newest first.

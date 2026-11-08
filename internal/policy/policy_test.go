@@ -135,6 +135,31 @@ func TestBoundary(t *testing.T) {
 		{"if true; then cd /tmp; fi; rm x", Deny, "boundary"},
 		{"echo 'unterminated", Deny, "parse"},
 	})
+	run(t, s, f.lane, []tcase{{"{owner}/bin/aw whoami", Allow, ""}, {"{owner}/bin/aw discard x", Deny, "owner-only"}})
+	// Running from the owner checkout: every command starts with cd into the lane.
+	run(t, s, f.owner, []tcase{
+		{"bin/aw attach x", Allow, ""},
+		{"bin/aw whoami --json", Allow, ""},
+		{"bin/aw attach x && rm -rf y", Deny, "boundary"},
+		{"bin/aw run web npm test", Deny, "boundary"},
+		{"git status", Deny, "boundary"},
+		{"cd {lane} && git status", Allow, ""},
+		{"cd {lane} && cat ../../AGENTS.md", Deny, "boundary"},
+		{"cd {owner} && git status", Deny, "boundary"},
+	})
+	for _, tc := range []struct {
+		paths []string
+		want  Verdict
+	}{
+		{[]string{filepath.Join(f.lane, "x")}, Allow},
+		{[]string{"x"}, Deny},
+		{nil, Deny},
+		{[]string{filepath.Join(f.owner, "x")}, Deny},
+	} {
+		if d := Decide(s, Call{Tool: Read, Cwd: f.owner, Paths: tc.paths}); d.Verdict != tc.want {
+			t.Errorf("from the owner checkout, reading %v: %v", tc.paths, d)
+		}
+	}
 	// The working directory itself.
 	if d := Decide(s, Call{Tool: Shell, Cwd: f.owner, Command: "ls"}); d.Verdict != Deny || d.Rule != "boundary" {
 		t.Errorf("a lane session in the owner checkout: %v", d)

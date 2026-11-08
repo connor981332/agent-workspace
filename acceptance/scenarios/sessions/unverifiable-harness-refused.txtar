@@ -1,6 +1,22 @@
-# sessions/unverifiable-harness-refused: to be written (plan §3.5).
+# Naming a harness that did not start this command is refused: there is nothing to verify the
+# session against. With several harnesses' IDs set, the caller chooses; a person at a terminal, with
+# none, attaches with no session.
 # req: R23 R58
 # source: C1 test_attach_is_protected_and_idempotent
 # milestone: M3
 
-unwritten
+workspace shop --init
+! exec aw attach 'x' --harness codex
+stderr 'not running inside a codex session that aw can verify'
+! exec aw attach 'x' --harness codex --session anything
+stderr 'not running inside a codex session'
+env CLAUDE_CODE_SESSION_ID=c1
+env CODEX_THREAD_ID=t1
+! exec aw attach 'x'
+stderr 'several harnesses'' session IDs are set'
+exec aw attach 'x' --harness codex --json
+json stdout .lane 01
+env CLAUDE_CODE_SESSION_ID=
+env CODEX_THREAD_ID=
+exec aw attach 'by hand' --json
+json stdout .lane 02

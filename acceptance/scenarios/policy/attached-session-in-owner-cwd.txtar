@@ -1,6 +1,49 @@
-# policy/attached-session-in-owner-cwd: to be written (plan §3.5).
+# A session attached to a lane may keep running from the owner checkout, as harnesses do. Its record,
+# not its directory, says where it works: each command must start with cd into the lane, and file
+# tools need absolute paths inside it. An unattached session there may only read, and is told how
+# to attach; once the attached session's process is gone, the mapping goes with it.
 # req: R58
 # source: C1 test_mapped_session_hooks
 # milestone: M3
+# changed: an unattached session in the owner checkout is refused writes with the aw attach and aw
+# pair instructions (lazy claiming), where C1 allowed them.
 
-unwritten
+workspace shop --init
+session s-1 claude
+exec aw attach 'add feature flag'
+env LANE=$OWNER/.worktrees/01
+
+exec awtest-hook -session s-1 bash 'bin/aw attach "add feature flag"'
+exec awtest-hook -session s-1 bash 'bin/aw whoami --json'
+! exec awtest-hook -session s-1 bash 'bin/aw attach x && rm -rf y'
+stderr 'start it with cd '
+! exec awtest-hook -session s-1 bash 'git status'
+stderr 'this session belongs to lane feature-flag'
+! exec awtest-hook -session s-1 bash 'cat AGENTS.md'
+exec sh $WORK/in-lane.sh
+exec awtest-hook -session s-1 -cwd $LANE bash 'git status'
+exec awtest-hook -session s-1 write $LANE/web/x.txt
+! exec awtest-hook -session s-1 write $OWNER/x.txt
+stderr 'is outside lane feature-flag'
+! exec awtest-hook -session s-1 write x.txt
+stderr 'would mean the owner''s file'
+! exec awtest-hook -session s-1 read AGENTS.md
+
+# Another, unattached session here may read, and is told how to attach before writing.
+env AW_SESSION=
+env AW_SESSION_PID=
+exec awtest-hook -session other bash 'git status'
+! exec awtest-hook -session other write x.txt
+stderr 'bin/aw attach'
+stderr 'aw pair'
+
+# The attached session's process ends: the record no longer maps it to the lane.
+end-session s-1
+exec awtest-hook -session s-1 bash 'git status'
+
+-- in-lane.sh --
+set -e
+awtest-hook -session s-1 bash "cd \"$LANE\" && git status"
+if awtest-hook -session s-1 bash "cd \"$LANE\" && cat ../../AGENTS.md" 2>/dev/null; then exit 1; fi
+if awtest-hook -session s-1 bash "cd \"$LANE\" && pkill node" 2>/dev/null; then exit 1; fi
+if awtest-hook -session s-1 bash "cd \"$OWNER\" && git status" 2>/dev/null; then exit 1; fi
