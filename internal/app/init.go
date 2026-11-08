@@ -148,6 +148,15 @@ func Init(opts InitOptions) (*InitResult, error) {
 	if added {
 		res.Files = append(res.Files, ".gitignore")
 	}
+
+	// Compile the configuration cache, which hooks read instead of the TOML files.
+	if c, err := config.Load(dir); err == nil {
+		if common, err := workspace.GitCommonDir(dir); err == nil {
+			if err := config.WriteCache(filepath.Join(common, "aw", "config.cache"), opts.Version, c); err != nil {
+				return nil, fmt.Errorf("writing the configuration cache: %w", err)
+			}
+		}
+	}
 	return res, nil
 }
 

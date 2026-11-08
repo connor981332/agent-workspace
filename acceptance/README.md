@@ -79,6 +79,14 @@ forward and `in_progress` to the next milestone.
 The custom commands still to come (`session`, `hook`, `decision`, `lane-commit`, `git-merge`, …)
 are listed in plan §3.3 and are added with the milestones that need them.
 
+## Test tools
+
+`tools/` holds small programs the runner builds and puts on every scenario's `PATH`:
+
+| Tool | Does |
+|---|---|
+| `awtest-sqlite <file> <sql>…` | Runs SQL against a SQLite file, for state aw would not write itself, such as a database from a newer release. It knows nothing of aw's tables. |
+
 ## Stubs
 
 `stubs/` holds POSIX `sh` test doubles, ported from

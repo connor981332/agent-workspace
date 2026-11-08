@@ -22,8 +22,9 @@ milestone named in its row.
 [PR #10](https://github.com/connor981332/agent-workspace/pull/10) (spike results),
 [PR #11](https://github.com/connor981332/agent-workspace/pull/11) (the 8 ms budget),
 [PR #12](https://github.com/connor981332/agent-workspace/pull/12) (M1 configuration),
-[PR #13](https://github.com/connor981332/agent-workspace/pull/13) (M1 state store), all merged.
-`m1/launcher` (M1 launcher and `aw init`, open). `spike/hot-path` (T3 and the ref-hook spike, never merged).
+[PR #13](https://github.com/connor981332/agent-workspace/pull/13) (M1 state store),
+[PR #14](https://github.com/connor981332/agent-workspace/pull/14) (M1 launcher and `aw init`), all merged.
+`m1/commands` (M1 `aw whoami`, `aw doctor`, hook stub, open). `spike/hot-path` (T3 and the ref-hook spike, never merged).
 
 **Done:** Read the spec and both candidates and wrote this plan. Settled the spec's five open
 questions (§8). The spec owner accepted every proposed answer in [Spec issues](#spec-issues) (S1 to
@@ -42,11 +43,14 @@ configuration reference generated from the schema (docs/reference/config.md), ex
 seven `config/` scenarios. The acceptance runner gained `in_progress` (requirements.toml), so the
 milestone's written scenarios run in CI from the PR that adds them. The state store (PR #13): SQLite in WAL mode, `PRAGMA user_version`, numbered migrations with a backup before
 each, read-only mode for a newer schema, and protection when the database is unreadable. Rule 3 of
-§4.3 gained a reviewed allowlist for the SQLite driver's own dependencies. Now: the `bin/aw`
-launcher and `aw init` (`m1/launcher`), with the `init/` and `launcher/` scenarios.
+§4.3 gained a reviewed allowlist for the SQLite driver's own dependencies. The `bin/aw` launcher
+and `aw init` (PR #14); for hooks the launcher runs the binary as a child, so that a binary that
+cannot start still refuses (exit 2). Now (`m1/commands`): `aw whoami`, `aw doctor` (with
+`--timings`), the hook stub, `AW_DEBUG=1` phase timings, NO_COLOR and control-character stripping,
+and every remaining M1 scenario.
 
-**Next step:** `aw whoami`, `aw doctor`, the
-hook stub, timings and the `bench` job.
+**Next step:** the `bench` job and its budgets (§5), then move the acceptance suite's `current` to
+M1, which closes M1.
 
 **Pending manual checks:** hot-path benchmark on an Apple Silicon laptop (T3).
 

@@ -1,6 +1,31 @@
-# NO_COLOR is honored, and control characters from names and paths are stripped from output.
+# NO_COLOR is honored, nothing is colored off a terminal, and control characters from names and
+# values are stripped from output, so configuration cannot move the cursor or hide text.
 # req: R93
 # source: C1 test_tooling.py::test_terminal_controls_and_no_color
 # milestone: M1
 
-unwritten
+workspace shop
+exec aw init
+exec aw version
+exec cp $WORK/escapes.toml workspace.toml
+owner-snapshot
+
+exec sh -c 'aw whoami; aw config get workspace.name; aw doctor; NO_COLOR=1 aw doctor; aw config explain workspace.name' 
+cp stdout $WORK/out.txt
+exec sh -c 'grep -c "$(printf "\033")" "$WORK/out.txt" || true'
+stdout '^0$'
+exec sh -c 'grep -c "$(printf "\007")" "$WORK/out.txt" || true'
+stdout '^0$'
+grep '^workspace  Shop\[31mRED\[0m \(namespace shop\)$' $WORK/out.txt
+grep '^Shop\[31mRED\[0m$' $WORK/out.txt
+# explain shows the value escaped, as TOML would write it.
+grep 'workspace\.name = "Shop\\x1b\[31mRED\\a\\x1b\[0m"' $WORK/out.txt
+
+-- escapes.toml --
+[workspace]
+name = "Shop\u001b[31mRED\u0007\u001b[0m"
+namespace = "shop"
+schema = 1
+
+[projects.web]
+[projects.api]

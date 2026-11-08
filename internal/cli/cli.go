@@ -27,7 +27,11 @@ func Main(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 	if code == ExitUsage {
-		fmt.Fprintf(stderr, "Run '%s --help' for usage.\n", root.CommandPath())
+		where := root
+		if cmd != nil {
+			where = cmd
+		}
+		fmt.Fprintf(stderr, "Run '%s --help' for usage.\n", where.CommandPath())
 	}
 	return code
 }
@@ -61,7 +65,7 @@ func newRoot(stdout, stderr io.Writer) *cobra.Command {
 	root.SetErr(stderr)
 	root.CompletionOptions.HiddenDefaultCmd = true
 
-	root.AddCommand(newVersionCmd(), newConfigCmd(), newInitCmd())
+	root.AddCommand(newVersionCmd(), newConfigCmd(), newInitCmd(), newDoctorCmd(), newWhoamiCmd())
 	return root
 }
 

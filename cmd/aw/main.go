@@ -11,22 +11,24 @@ import (
 	"os"
 
 	"github.com/connor981332/agent-workspace/internal/cli"
+	"github.com/connor981332/agent-workspace/internal/harness"
 )
 
 func main() {
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
-		case "hook", "git-hook":
-			os.Exit(hotPath(os.Args[1]))
+		case "hook":
+			os.Exit(harness.Hook(os.Args[2:], cli.FrameworkVersion(), os.Stdin, os.Stdout, os.Stderr))
+		case "git-hook":
+			os.Exit(gitHook())
 		}
 	}
 	os.Exit(cli.Main(os.Args[1:], os.Stdout, os.Stderr))
 }
 
-// hotPath is the stub for the guard and Git hook entry points. The hook stub that returns allow
-// arrives in M1 and the real rules in M3. Until then it refuses, because a guard that cannot
-// decide must deny.
-func hotPath(name string) int {
-	fmt.Fprintf(os.Stderr, "aw %s: not implemented yet\n", name)
-	return cli.ExitError
+// gitHook is the stub for the Git hooks dispatcher, which arrives in M3. Nothing installs it
+// before then; if something calls it, it refuses, because a guard that cannot decide must deny.
+func gitHook() int {
+	fmt.Fprintln(os.Stderr, "aw git-hook: not implemented yet, so this ref update is refused")
+	return harness.Deny
 }

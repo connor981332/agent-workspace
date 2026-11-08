@@ -66,18 +66,24 @@ func TestBinary(t *testing.T) {
 	})
 
 	// The hot-path commands are dispatched before the command tree exists, so cobra's flag parsing
-	// and help never see them. Until M1 the stub refuses (fail closed).
+	// and help never see them. Outside a workspace both refuse (fail closed) with exit 2.
 	for _, name := range []string{"hook", "git-hook"} {
 		t.Run(name+" bypasses the command tree", func(t *testing.T) {
-			code, out, errOut := runAW(t, bin, name, "claude", "pre-tool-use", "--help")
-			if code != 1 {
-				t.Fatalf("exit %d, want 1", code)
+			cmd := exec.Command(bin, name, "claude", "pre-tool-use", "--help")
+			cmd.Dir = t.TempDir()
+			cmd.Stdin = strings.NewReader("")
+			var out, errOut strings.Builder
+			cmd.Stdout, cmd.Stderr = &out, &errOut
+			err := cmd.Run()
+			var exitErr *exec.ExitError
+			if !errors.As(err, &exitErr) || exitErr.ExitCode() != 2 {
+				t.Fatalf("%v, want exit 2", err)
 			}
-			if out != "" || strings.Contains(errOut, "Usage:") || strings.Contains(errOut, "unknown") {
-				t.Fatalf("the command tree handled %q: stdout %q, stderr %q", name, out, errOut)
+			if out.String() != "" || strings.Contains(errOut.String(), "Usage:") {
+				t.Fatalf("the command tree handled %q: stdout %q, stderr %q", name, out.String(), errOut.String())
 			}
-			if !strings.Contains(errOut, "not implemented") {
-				t.Fatalf("stderr %q", errOut)
+			if !strings.Contains(errOut.String(), "refused") {
+				t.Fatalf("stderr %q", errOut.String())
 			}
 		})
 	}

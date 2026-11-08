@@ -27,6 +27,9 @@ func currentVersion() versionInfo {
 	return versionInfo{Version: frameworkVersion(), ConfigSchema: config.SchemaVersion, StateSchema: state.SchemaVersion}
 }
 
+// FrameworkVersion is this binary's version, for the hot path, which does not use the command tree.
+func FrameworkVersion() string { return frameworkVersion() }
+
 // frameworkVersion is the version set at link time, else the module version recorded by
 // go install, else "dev". It has no leading "v": 1.4.2, as .aw/version pins it.
 func frameworkVersion() string {

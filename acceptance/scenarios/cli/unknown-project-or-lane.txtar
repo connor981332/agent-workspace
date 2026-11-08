@@ -1,6 +1,19 @@
-# An unknown project or lane name is an error that lists the known names.
+# An unknown project, resource or command name is an error that lists the known names.
 # req: R93
 # source: C2 tests::t_ws_rejects_unknown
 # milestone: M1
 
-unwritten
+workspace shop
+exec aw init
+owner-snapshot
+
+! exec aw config get projects.mobile.runner
+stderr 'there is no project named "mobile" → known: api, web'
+! exec aw config explain projects.mobile
+stderr 'there is no project named "mobile" → known: api, web'
+! exec aw config get resources.rails
+stderr 'there is no resource named "rails" → none are configured'
+exec sh -c 'aw config get projects.mobile --json; echo "status=$?"'
+stdout 'status=1'
+stdout '"message": "there is no project named \\"mobile\\""'
+stdout '"fix": "known: api, web"'

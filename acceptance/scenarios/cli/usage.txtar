@@ -1,6 +1,31 @@
-# Usage text for each command, and exit code 2 for a usage error.
+# Each command has usage text, aw alone shows it, and a usage error exits 2 naming the problem.
 # req: R93
 # source: C2 tests::t_lane_usage, t_kit_usage
 # milestone: M1
 
-unwritten
+exec aw
+stdout '^Usage:'
+stdout '^  config +Read and check the workspace configuration$'
+stdout '^  doctor +Check the workspace and this machine'
+stdout '^  init +Make the current Git repository a workspace'
+stdout '^  version +'
+stdout '^  whoami +Show where this command runs'
+
+exec aw config --help
+stdout '^  explain +'
+stdout '^  get +'
+stdout '^  validate +'
+exec aw config get --help
+stdout 'aw config get <key> \[flags\]'
+exec aw doctor --help
+stdout '--timings'
+
+exec sh -c 'aw config get; echo "status=$?"'
+stdout '^status=2$'
+stderr 'accepts 1 arg\(s\), received 0'
+stderr 'aw config get --help'
+exec sh -c 'aw whoami extra; echo "status=$?"'
+stdout '^status=2$'
+exec sh -c 'aw doctor --bogus; echo "status=$?"'
+stdout '^status=2$'
+stderr 'unknown flag: --bogus'

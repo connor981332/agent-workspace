@@ -158,6 +158,9 @@ func (s *Store) Path() string { return s.path }
 // Version is the schema version of the database.
 func (s *Store) Version() int { return s.version }
 
+// Newer reports whether the database has a newer schema than this binary knows.
+func (s *Store) Newer() bool { return s.version > SchemaVersion }
+
 // ReadOnly returns why the store is read-only, or nil.
 func (s *Store) ReadOnly() *ReadOnlyError { return s.readOnly }
 

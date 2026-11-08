@@ -1,6 +1,35 @@
-# aw doctor works before setup and writes nothing.
+# aw doctor works before setup and writes nothing; outside a workspace it says how to get into one.
 # req: R14
 # source: C1 test_tooling.py::test_observers_tolerate_a_never_created_gate
 # milestone: M1
 
-unwritten
+workspace shop
+exec aw init
+exec aw version
+owner-snapshot
+exec sh $WORK/tree.sh
+cp stdout $WORK/before
+
+exec aw doctor
+stdout '^✓ workspace: '
+stdout '^✓ configuration: valid \(2 projects, schema 1\)$'
+stdout '^✓ pin: aw '$AW_VERSION', and this is that version$'
+stdout '^✓ launcher: bin/aw is as aw wrote it$'
+stdout '^· state: no state yet: bin/aw setup creates it$'
+stdout '^✓ gitignore: '
+stdout '^✓ git: git version '
+! stdout '^✗'
+exec aw doctor --timings
+stdout '^  timing  load configuration +[0-9.]+ ms$'
+exec aw doctor --json
+json stdout .ok true
+
+exec sh $WORK/tree.sh
+cmp stdout $WORK/before
+
+cd $WORK
+! exec aw doctor
+stdout '^✗ workspace: .* is not inside an Agent Workspace .* → cd into a workspace, or create one with aw init$'
+
+-- tree.sh --
+find "$OWNER" "$HOME" -type f | LC_ALL=C sort | while IFS= read -r f; do cksum < "$f" | tr '\n' ' '; echo "$f"; done
