@@ -74,6 +74,7 @@ func Setup(cfg Config) func(*testscript.Env) error {
 			"STUB_LOG="+filepath.Join(work, ".stub", "log"),
 			"STUB_STATE="+filepath.Join(work, ".stub", "state"),
 			"AW_BIN="+cfg.AWBin,
+			"AW_ANCESTRY_STOP="+strconv.Itoa(os.Getpid()), // a harness above the test run is not a session's
 			"AW_REPO="+cfg.Repo,
 			"AW_VERSION="+cfg.Version,
 			"AW_MIRROR="+cfg.Mirror,

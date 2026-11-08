@@ -31,6 +31,9 @@ func ProcessIdentity(pid int) (string, error) {
 	if len(fields) < 20 {
 		return "", ErrUnknown
 	}
+	if fields[0] == "Z" {
+		return "", ErrGone // finished, only waiting for its parent to collect it
+	}
 	boot, err := os.ReadFile("/proc/sys/kernel/random/boot_id")
 	if err != nil {
 		return "", ErrUnknown

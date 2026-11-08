@@ -53,6 +53,8 @@ type Claimed struct {
 	Root     string           `json:"root"`
 	Repos    []state.LaneRepo `json:"repos"`
 	Reused   bool             `json:"reused"`    // the session already had this lane
+	Returned bool             `json:"returned"`  // its processes had all ended, and it came back
+	Joined   bool             `json:"joined"`    // this process joined the session (a resumed harness)
 	FromPool bool             `json:"from_pool"` // a warm lane was claimed
 }
 
@@ -189,7 +191,23 @@ func (m *Manager) existing(ctx context.Context, who Identity) (*Claimed, error) 
 	if err != nil || l.Generation != s.LaneGeneration {
 		return nil, nil // the lane has moved on: a new claim
 	}
-	return m.waitBuilt(ctx, l.Number, true)
+	c, err := m.waitBuilt(ctx, l.Number, true)
+	if err != nil {
+		return nil, err
+	}
+	c.Returned = s.State == state.SessionInterrupted
+	if who.PID <= 0 {
+		return c, nil
+	}
+	start, err := platform.ProcessIdentity(who.PID)
+	if err != nil {
+		return c, nil
+	}
+	c.Joined = !s.Has(who.PID, start)
+	if c.Joined || c.Returned {
+		err = m.Store.Write(ctx, func(tx *sql.Tx) error { return state.JoinSession(tx, s.ID, who.PID, start) })
+	}
+	return c, err
 }
 
 // waitBuilt waits until another call has finished building lane n, then describes it.

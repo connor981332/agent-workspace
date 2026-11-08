@@ -1,6 +1,15 @@
-# whoami/ambiguous-is-none: to be written (plan §3.5).
+# If the environment names two sessions that are both attached, aw whoami says it cannot tell, and names neither.
 # req: R93
 # source: C1 test_identity_resolves_only_current_valid_attachment_without_writes
 # milestone: M3
 
-unwritten
+workspace shop --init
+env CLAUDE_CODE_SESSION_ID=c1
+exec aw attach 'first thing'
+env CLAUDE_CODE_SESSION_ID=
+env CODEX_THREAD_ID=t1
+exec aw attach 'second thing'
+env CLAUDE_CODE_SESSION_ID=c1
+exec aw whoami --json
+json stdout .attached null
+stdout 'several harnesses'' sessions are attached here'

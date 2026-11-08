@@ -4,14 +4,13 @@ import (
 	"context"
 	"database/sql"
 
-	"github.com/connor981332/agent-workspace/internal/platform"
 	"github.com/connor981332/agent-workspace/internal/state"
 )
 
 // Live reports whether a session's process is still running. A session with no recorded process,
 // or whose process cannot be checked, counts as live: unknown means protected.
 func Live(s state.Session) bool {
-	return platform.Alive(s.PID, s.PIDStart)
+	return s.Alive()
 }
 
 // Recover marks active sessions whose process has gone (a crash, a closed terminal, a reboot) as

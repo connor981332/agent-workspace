@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"slices"
@@ -19,6 +20,27 @@ var harnessEnv = []struct{ harness, env string }{
 	{"claude", "CLAUDE_CODE_SESSION_ID"}, {"codex", "CODEX_THREAD_ID"}, {"grok", "GROK_SESSION_ID"},
 }
 
+type issued struct{ harness, id, source string }
+
+// issuedIdentities are the sessions the environment says this is: AW_SESSION if aw new set it, else
+// whichever harnesses have set their variable.
+func issuedIdentities() ([]issued, error) {
+	if env := os.Getenv("AW_SESSION"); env != "" {
+		h, id, ok := strings.Cut(env, ":")
+		if !ok || h == "" || id == "" {
+			return nil, fmt.Errorf("AW_SESSION is %q, not <harness>:<session id> → unset it, or start the session with aw new", env)
+		}
+		return []issued{{h, id, "AW_SESSION"}}, nil
+	}
+	var found []issued
+	for _, e := range harnessEnv {
+		if id := os.Getenv(e.env); id != "" {
+			found = append(found, issued{e.harness, id, e.env})
+		}
+	}
+	return found, nil
+}
+
 // sessionIdentity reads who is asking, from what the harness (or aw new, through AW_SESSION) put in
 // the environment. --harness chooses among several; --harness and --session are checked against
 // the environment, because an identity the harness did not issue could claim another session's lane.
@@ -26,20 +48,9 @@ func sessionIdentity(harness, session string) (lanes.Identity, error) {
 	if session != "" && harness == "" {
 		return lanes.Identity{}, fmt.Errorf("--harness and --session go together → pass both, or neither")
 	}
-	type issued struct{ harness, id, source string }
-	var found []issued
-	if env := os.Getenv("AW_SESSION"); env != "" {
-		h, id, ok := strings.Cut(env, ":")
-		if !ok || h == "" || id == "" {
-			return lanes.Identity{}, fmt.Errorf("AW_SESSION is %q, not <harness>:<session id> → unset it, or start the session with aw new", env)
-		}
-		found = append(found, issued{h, id, "AW_SESSION"})
-	} else {
-		for _, e := range harnessEnv {
-			if id := os.Getenv(e.env); id != "" {
-				found = append(found, issued{e.harness, id, e.env})
-			}
-		}
+	found, err := issuedIdentities()
+	if err != nil {
+		return lanes.Identity{}, err
 	}
 	if harness != "" {
 		found = slices.DeleteFunc(found, func(i issued) bool { return i.harness != harness })
@@ -59,6 +70,9 @@ func sessionIdentity(harness, session string) (lanes.Identity, error) {
 	}
 	who := lanes.Identity{Harness: found[0].harness, Session: found[0].id}
 	if pid, err := strconv.Atoi(os.Getenv("AW_SESSION_PID")); err == nil && pid > 0 {
+		if _, err := platform.ProcessIdentity(pid); errors.Is(err, platform.ErrGone) {
+			return lanes.Identity{}, fmt.Errorf("AW_SESSION_PID is %d, which is not a running process, so this session cannot be verified → start the session again", pid)
+		}
 		who.PID = pid
 	} else {
 		// A harness's sandbox may hide it; then the session's first hook records it.
@@ -98,12 +112,18 @@ The same session attaching again gets the same lane. Work in the lane root aw pr
 			if asJSON {
 				return writeJSON(out, map[string]any{
 					"number": c.Lane.Number, "lane": c.Dir, "name": c.Lane.Name, "purpose": c.Lane.Purpose,
-					"state": c.Lane.State, "root": c.Root, "repos": c.Repos, "reused": c.Reused, "from_pool": c.FromPool,
+					"state": c.Lane.State, "root": c.Root, "repos": c.Repos, "reused": c.Reused, "returned": c.Returned, "joined": c.Joined, "from_pool": c.FromPool,
 				})
 			}
 			verb := "Claimed"
-			if c.Reused {
+			switch {
+			case c.Returned:
+				verb = "Returned to"
+			case c.Reused:
 				verb = "Already attached to"
+			}
+			if c.Joined && !c.Returned {
+				fmt.Fprintln(out, "Registered this process with the session (a resumed harness).")
 			}
 			fmt.Fprintf(out, "%s lane %s %s for %q.\n", verb, c.Dir, ui.Clean(c.Lane.Name), ui.Clean(c.Lane.Purpose))
 			fmt.Fprintf(out, "Work in the lane root: cd %s\n", shellQuote(c.Root))

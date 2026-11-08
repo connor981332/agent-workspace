@@ -2,7 +2,11 @@
 // time, so a reused PID is never mistaken for the process it replaced) and the boot.
 package platform
 
-import "errors"
+import (
+	"errors"
+	"os"
+	"strconv"
+)
 
 // ErrUnknown means a process's identity cannot be read (for example, permission). Callers treat
 // such a process as alive: unknown means protected.
@@ -29,10 +33,14 @@ func Alive(pid int, identity string) bool {
 
 // HarnessAncestor returns the nearest ancestor of pid that goes by name, or 0. A hook or a tool
 // command is a descendant of its harness, so its ancestry names the live harness process.
+//
+// AW_ANCESTRY_STOP=<pid> ends the search at that process, so a test run started from inside a harness
+// does not find the harness above the test runner.
 func HarnessAncestor(pid int, name string) int {
+	stop, _ := strconv.Atoi(os.Getenv("AW_ANCESTRY_STOP"))
 	for range 32 {
 		parent, err := Parent(pid)
-		if err != nil || parent <= 1 {
+		if err != nil || parent <= 1 || parent == stop {
 			return 0
 		}
 		for _, n := range Names(parent) {

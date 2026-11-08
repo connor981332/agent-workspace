@@ -75,6 +75,15 @@ var migrations = []string{
 		heads      TEXT NOT NULL
 	) STRICT;
 	CREATE INDEX handoffs_lane ON handoffs (lane, generation)`,
+
+	// 4: the processes that joined a session after it started (a resumed harness keeps its session
+	// ID in a new process). The lane is held until the last of them exits.
+	`CREATE TABLE session_processes (
+		session   INTEGER NOT NULL REFERENCES sessions (id) ON DELETE CASCADE,
+		pid       INTEGER NOT NULL,
+		pid_start TEXT NOT NULL,
+		PRIMARY KEY (session, pid, pid_start)
+	) STRICT`,
 }
 
 // BackupPath is where the database is copied before migrating from schema version v.

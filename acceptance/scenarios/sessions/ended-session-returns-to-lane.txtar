@@ -1,6 +1,16 @@
-# sessions/ended-session-returns-to-lane: to be written (plan §3.5).
+# When every process of a session has exited and the conversation is resumed later, it gets its lane back, if the lane has not moved on.
 # req: R23
 # source: C1 test_ended_session_gets_its_lane_back
 # milestone: M3
 
-unwritten
+workspace solo --single --init
+session s-1 claude
+exec aw attach 'add feature flag' --json
+json stdout .lane 01
+end-session s-1
+exec aw sweep
+session s-1 claude
+exec aw attach 'add feature flag'
+stdout '^Returned to lane 01 feature-flag'
+exec aw sweep --json
+json stdout .lanes[0].reason 'session s-1 (claude) is attached'
