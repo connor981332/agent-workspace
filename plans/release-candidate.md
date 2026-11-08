@@ -60,13 +60,15 @@ the published assets passes.
 
 **In progress:** M3. The M3 rows of §3.5 and its spec-only scenarios are pending scenario files
 (53), plus four the coverage check needed: R54 team guards, R63 self-modification and R72
-publication had no scenario, and R94 (the safety model) is a document, to be checked as such. Now
-(`m3/policy`): `internal/shell` (the syntax tree, words, cd tracking, wrappers, nested shells) and
-`internal/policy` (boundary, lazy claiming, owner-only commands, destructive Git, containers,
-processes, servers, secrets, publication), unit-tested; not yet wired into the hook.
+publication had no scenario, and R94 (the safety model) is a document, to be checked as such. `internal/shell` and `internal/policy`
+(PR #24). Now (`m3/harness`): the adapters (Claude Code from payloads recorded from 2.1.319; Codex
+and Grok from C1 and Grok's documentation, until recorded; a Grok payload is recognized whatever
+hook delivers it), and the hook wired to the policy, with the role taken from the working directory
+until the session record is consulted. Ten policy and harness scenarios pass through the real hook.
 
-**Next step:** the harness adapters (Claude Code and Codex first) and the hook wired to the policy,
-with the policy scenarios.
+**Next step:** sessions in the hook (resolution with the generation check, a session attached
+from the owner checkout, the first hook call recording a session), then Codex and Grok fixtures
+recorded by the maintainer with internal/harness/testdata/record.sh.
 
 **Pending manual checks:** the hot-path and budget benchmarks on an Apple Silicon laptop (T3, M1, M2;
 docs/dev/benchmarks.md).

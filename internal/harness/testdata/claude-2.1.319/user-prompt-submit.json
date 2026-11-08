@@ -1,0 +1,9 @@
+{
+ "cwd": "/WORKSPACE",
+ "hook_event_name": "UserPromptSubmit",
+ "permission_mode": "default",
+ "prompt": "Do exactly these steps, using the tools named, and nothing else: 1. Use the Read tool on notes.txt. 2. Use the Write tool to create out.txt containing the word hi. 3. Use the Edit tool to change hi to hello in out.txt. 4. Use the Bash tool to run: ls -la && git status --short. 5. Use the Grep tool to search for hello. 6. Use the Glob tool with the pattern *.txt. Then reply done.",
+ "prompt_id": "PROMPT",
+ "session_id": "SESSION",
+ "transcript_path": "/HOME/.claude/projects/WORKSPACE/SESSION.jsonl"
+}

@@ -1,0 +1,19 @@
+{
+ "cwd": "/WORKSPACE",
+ "effort": {
+  "level": "medium"
+ },
+ "hook_event_name": "PreToolUse",
+ "permission_mode": "default",
+ "prompt_id": "PROMPT",
+ "session_id": "SESSION",
+ "tool_input": {
+  "file_path": "/WORKSPACE/out.txt",
+  "new_string": "hello",
+  "old_string": "hi",
+  "replace_all": false
+ },
+ "tool_name": "Edit",
+ "tool_use_id": "toolu_01TpGBFYLUNmPqmUApmmUqsk",
+ "transcript_path": "/HOME/.claude/projects/WORKSPACE/SESSION.jsonl"
+}

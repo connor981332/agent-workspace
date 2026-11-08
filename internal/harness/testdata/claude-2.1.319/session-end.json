@@ -1,0 +1,8 @@
+{
+ "cwd": "/WORKSPACE",
+ "hook_event_name": "SessionEnd",
+ "prompt_id": "PROMPT",
+ "reason": "other",
+ "session_id": "SESSION",
+ "transcript_path": "/HOME/.claude/projects/WORKSPACE/SESSION.jsonl"
+}

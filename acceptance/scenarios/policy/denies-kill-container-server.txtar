@@ -1,6 +1,33 @@
-# policy/denies-kill-container-server: to be written (plan §3.5).
+# Lane agents cannot stop processes, take down shared containers, or start a configured server
+# directly: each refusal names what to do instead.
 # req: R49 R55 R58
 # source: C1 test_real_hook_and_routing
 # milestone: M3
 
-unwritten
+workspace shop --init
+exec aw attach 'add feature flag'
+cd .worktrees/01
+! exec awtest-hook bash 'pkill -f rails'
+stderr 'pkill stops processes, which agents do not do'
+stderr 'aw stop <resource>'
+! exec awtest-hook bash 'lsof -ti :3000 | xargs kill -9'
+stderr 'kill stops processes'
+! exec awtest-hook bash 'docker compose down'
+stderr 'docker compose down changes shared containers'
+! exec awtest-hook bash 'cd web && npm run dev -- --port 3001'
+stderr 'starts the dev server of web directly'
+stderr 'bin/aw serve'
+exec awtest-hook bash 'cd web && npm run build'
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[projects.web]
+[projects.web.servers.dev]
+command = "npm run dev -- --port {port}"
+port = 3000
+
+[projects.api]

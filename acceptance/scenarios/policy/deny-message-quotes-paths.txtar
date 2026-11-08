@@ -1,6 +1,13 @@
-# policy/deny-message-quotes-paths: to be written (plan §3.5).
+# A refusal quotes the paths it names, so the fix it suggests can be pasted into a shell even when
+# a path has spaces or quotes; it never repeats the refused command back.
 # req: R55
 # source: C1 test_recovery_guidance_quotes_paths_and_never_replays_shell
 # milestone: M3
 
-unwritten
+workspace shop --init
+exec aw attach 'add feature flag'
+cd .worktrees/01
+! exec awtest-hook bash 'cat ../../README.md; rm -rf ~'
+stderr 'aw: ../../README.md is outside lane feature-flag \(it resolves to ''.*/it''\\''''s a workspace/shop/README.md'''
+stderr 'work inside the lane, under ''.*/it''\\''''s a workspace/shop/.worktrees/01'''
+! stderr 'rm -rf'

@@ -1,6 +1,46 @@
-# policy/boundary-table: to be written (plan §3.5).
+# A lane agent is confined to its lane, through the real hook: file tools and literal paths in shell
+# commands that reach the owner checkout, another lane or another lane's state are refused, and
+# paths outside the workspace are not the boundary's concern.
 # req: R55 R58
 # source: C1 test_boundary
 # milestone: M3
+# changed: in this layout a lane's projects are links to their worktrees, so a file argument such as
+# ../AGENTS.md from inside a project resolves physically, into the owner checkout, and is refused;
+# cd .. still returns to the lane root.
 
-unwritten
+workspace shop --init
+exec aw attach 'first thing'
+exec aw attach 'second thing'
+exec sh -c 'ln -s "$OWNER" .worktrees/01/escape'
+cd .worktrees/01
+
+exec awtest-hook bash 'cat AGENTS.md web/README.md'
+exec awtest-hook bash 'cd web && cat README.md && cd .. && cat AGENTS.md'
+exec awtest-hook bash 'cat /tmp/scratch/out.txt ~/.claude/notes.md'
+exec awtest-hook bash 'echo $(pwd)/x 2>/dev/null'
+exec awtest-hook bash 'bin/aw run web npm test -- test/unit/example.ts'
+
+! exec awtest-hook bash 'cat ../../AGENTS.md'
+stderr 'aw: ../../AGENTS.md is outside lane first-thing'
+stderr '→ work inside the lane'
+! exec awtest-hook bash 'cat escape/AGENTS.md'
+stderr 'is outside lane first-thing'
+! exec awtest-hook bash 'cat ../02/AGENTS.md'
+! exec awtest-hook bash 'cd web && cat ../AGENTS.md'
+! exec awtest-hook bash 'cat ../../.git/aw/lanes/02/server.log'
+exec awtest-hook bash 'cat ../../.git/aw/lanes/01/server.log'
+! exec awtest-hook bash 'cat "$(git rev-parse --show-toplevel)/AGENTS.md"'
+stderr 'depends on a value aw cannot determine'
+! exec awtest-hook bash 'cd "$X" && rm -rf build'
+stderr 'aw cannot determine'
+! exec awtest-hook bash 'cd "$(mktemp -d)"; rm -rf build'
+
+# File tools.
+exec awtest-hook read web/README.md
+! exec awtest-hook read ../../AGENTS.md
+! exec awtest-hook write $OWNER/web/README.md
+exec awtest-hook write /tmp/tool-output.txt
+
+# Every refusal exits 2, which the harness reads as a deny.
+exec sh -c 'awtest-hook bash "cat ../../AGENTS.md"; echo "status=$?"'
+stdout '^status=2$'

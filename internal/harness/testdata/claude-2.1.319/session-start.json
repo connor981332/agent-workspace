@@ -1,0 +1,7 @@
+{
+ "cwd": "/WORKSPACE",
+ "hook_event_name": "SessionStart",
+ "session_id": "SESSION",
+ "source": "startup",
+ "transcript_path": "/HOME/.claude/projects/WORKSPACE/SESSION.jsonl"
+}

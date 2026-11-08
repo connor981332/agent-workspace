@@ -1,0 +1,18 @@
+{
+ "cwd": "/WORKSPACE",
+ "duration_ms": 5,
+ "effort": {
+  "level": "medium"
+ },
+ "hook_event_name": "PostToolUse",
+ "permission_mode": "default",
+ "prompt_id": "PROMPT",
+ "session_id": "SESSION",
+ "tool_input": {
+  "file_path": "/WORKSPACE/notes.txt"
+ },
+ "tool_name": "Read",
+ "tool_response": "(omitted)",
+ "tool_use_id": "toolu_01GAy6Zy9isVafx4MrCKKz3U",
+ "transcript_path": "/HOME/.claude/projects/WORKSPACE/SESSION.jsonl"
+}

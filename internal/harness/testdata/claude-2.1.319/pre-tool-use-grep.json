@@ -1,0 +1,19 @@
+{
+ "cwd": "/WORKSPACE",
+ "effort": {
+  "level": "medium"
+ },
+ "hook_event_name": "PreToolUse",
+ "permission_mode": "default",
+ "prompt_id": "PROMPT",
+ "session_id": "SESSION",
+ "tool_input": {
+  "-n": true,
+  "output_mode": "content",
+  "path": "/WORKSPACE",
+  "pattern": "hello"
+ },
+ "tool_name": "Grep",
+ "tool_use_id": "toolu_01Hj3ucbRNhV7n3VJSpqs31Z",
+ "transcript_path": "/HOME/.claude/projects/WORKSPACE/SESSION.jsonl"
+}
