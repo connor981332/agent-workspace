@@ -17,7 +17,7 @@ import (
 
 // harnessEnv names the variable through which each harness tells its tool commands their session.
 var harnessEnv = []struct{ harness, env string }{
-	{"claude", "CLAUDE_CODE_SESSION_ID"}, {"codex", "CODEX_THREAD_ID"}, {"grok", "GROK_SESSION_ID"},
+	{"claude", "CLAUDE_CODE_SESSION_ID"}, {"codex", "CODEX_THREAD_ID"}, {"grok", "GROK_SESSION_ID"}, {"opencode", "OPENCODE_SESSION_ID"},
 }
 
 type issued struct{ harness, id, source string }

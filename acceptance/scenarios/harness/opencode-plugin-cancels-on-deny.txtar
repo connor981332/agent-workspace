@@ -1,6 +1,58 @@
-# harness/opencode-plugin-cancels-on-deny: to be written (plan §3.5).
+# OpenCode runs plugins, not hook commands. aw setup installs one that sends each tool call to the
+# guard and throws when it refuses, or when the guard cannot run. (OpenCode 2.2.6 cancelling a call
+# on such a throw was measured by hand: internal/harness/testdata/record.sh.)
 # req: R56
 # source: spec (no candidate source)
 # milestone: M3
 
-unwritten
+[!exec:node] skip 'node runs the plugin here'
+workspace shop --init
+owner-may-change
+exec aw setup --json
+stdout '.opencode/plugins/aw.js'
+exists .opencode/plugins/aw.js
+
+exec node $WORK/fire.mjs read path workspace.toml
+stdout '^allowed$'
+exec node $WORK/fire.mjs write path web/x.ts
+stdout '^refused: aw: .*not attached to a lane'
+stdout 'aw pair --session opencode:ses_1'
+exec node $WORK/fire.mjs shell command 'git push --force'
+stdout '^refused: aw: '
+exec node $WORK/fire.mjs execute code 'x'
+stdout '^refused: aw: .*execute tool'
+
+# An agent's command carries OpenCode's session variable, so attaching binds this session.
+env OPENCODE_SESSION_ID=ses_1
+exec aw attach 'add feature flag'
+env OPENCODE_SESSION_ID=
+exec node $WORK/fire.mjs write path $OWNER/.worktrees/01/x.ts
+stdout '^allowed$'
+exec node $WORK/fire.mjs write path $OWNER/web/x.ts
+stdout '^refused: aw: .*outside lane'
+
+# The shell tool's own working directory is the one decided on.
+exec node $WORK/fire.mjs shell command 'echo x > y' workdir $OWNER/.worktrees/01
+stdout '^allowed$'
+exec node $WORK/fire.mjs shell command 'echo x > y' workdir $OWNER/web
+stdout '^refused: aw: '
+
+# A guard that cannot run refuses.
+mv bin/aw bin/aw.gone
+exec node $WORK/fire.mjs read path workspace.toml
+stdout '^refused: aw: this call is refused'
+
+-- fire.mjs --
+import { pathToFileURL } from "node:url"
+const { default: plugin } = await import(pathToFileURL(process.env.OWNER + "/.opencode/plugins/aw.js").href)
+let before
+await plugin.setup({ tool: { hook: (name, fn) => { if (name === "execute.before") before = fn } } })
+const [tool, ...pairs] = process.argv.slice(2)
+const input = {}
+for (let i = 0; i < pairs.length; i += 2) input[pairs[i]] = pairs[i + 1]
+try {
+  await before({ tool, sessionID: "ses_1", agent: "build", messageID: "m", id: "c", input })
+  console.log("allowed")
+} catch (e) {
+  console.log("refused: " + e.message)
+}

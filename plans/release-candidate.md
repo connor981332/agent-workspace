@@ -69,15 +69,14 @@ where it is when it starts (PR #30). The policy, parity and confinement scenario
 returning to its lane, the session-start revival rule, and `aw whoami` reporting attachments (PR #32).
 Now (`m3/pair`): `aw pair`, granting a running session with `--session`, state schema 5, owner-only
 commands refusing in agent context (S10, recorded in owner-checkout.md), and pair sessions' shell
-commands checked for self-modification.
+commands checked for self-modification (PR #33). Now (`m3/opencode`): OpenCode's adapter and managed
+plugin, from payloads the maintainer recorded with 2.2.6, in which a plugin's throw cancelled the call.
+Known limit: OpenCode's background server does not inherit `AW_SESSION`, so `aw new` and `aw pair` with
+OpenCode are not tied to the session they launch. A lane is still confined by its directory, and a
+pair session is granted with the `--session` command its first refusal prints.
 
 **Next step:** purpose capture from the first prompt, `aw doctor`'s hooks-path check,
 `compose`, team guards, terminal multiplexers, `aw resume` and `aw open`, `docs/safety.md`.
-
-**Open question for the spec owner:** architecture.md names OpenCode's `tool.execute.before` plugin
-hook, which cancels a call on a deny. OpenCode 2.x documents a new plugin interface (`ctx.tool`,
-`execute.before`) and no way for it to cancel a call. OpenCode's adapter denies every call until
-this is settled and its payloads are recorded.
 
 **Open question for the spec owner:** C1's `policy/before-setup-diagnosis-only` allows only a few
 diagnostic commands in a workspace that has not been set up. The spec does not define that state, and

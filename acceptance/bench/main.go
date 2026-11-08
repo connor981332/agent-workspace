@@ -393,7 +393,7 @@ func newFixture(tmp, awBin string) (*fixture, error) {
 	// Not this process's harness identity: run from inside a harness, every aw attach would be one
 	// session, and would get the same lane.
 	inherited := slices.DeleteFunc(os.Environ(), func(e string) bool {
-		for _, p := range []string{"AW_SESSION", "CLAUDE_CODE_SESSION_ID=", "CODEX_THREAD_ID=", "GROK_SESSION_ID="} {
+		for _, p := range []string{"AW_SESSION", "CLAUDE_CODE_SESSION_ID=", "CODEX_THREAD_ID=", "GROK_SESSION_ID=", "OPENCODE_SESSION_ID="} {
 			if strings.HasPrefix(e, p) {
 				return true
 			}

@@ -1,0 +1,17 @@
+{
+ "hook_event_name": "pre-tool-use",
+ "input": {
+  "content": "hi",
+  "path": "out.txt"
+ },
+ "keys": [
+  "tool",
+  "sessionID",
+  "agent",
+  "messageID",
+  "id",
+  "input"
+ ],
+ "sessionID": "SESSIONID",
+ "tool": "write"
+}

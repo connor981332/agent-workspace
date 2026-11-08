@@ -207,8 +207,11 @@ Payload formats are not stable interfaces, so each adapter is covered by recorde
 and an unrecognized payload is denied.
 
 Built-in adapters, written in Go, cover Claude Code, Codex, Grok and OpenCode. OpenCode has no hook
-command; its adapter installs a small managed plugin whose `tool.execute.before` handler runs
-`bin/aw hook opencode` and cancels the tool call on a deny. A **declarative adapter**, a mapping
+command; its adapter installs a small managed plugin whose `ctx.tool.hook("execute.before", …)`
+handler runs `bin/aw hook opencode` and throws on a deny, which cancels the tool call (measured with
+OpenCode 2.2.6; its documentation does not state this, so the recording script re-tests it). It also
+throws if the guard cannot run. OpenCode's `execute` tool runs a program whose effects `aw` cannot
+read, so it is refused. A **declarative adapter**, a mapping
 from a harness's payload fields and tool names to the common form, compiled into the configuration
 cache, lets a team or module add another hooked harness without a new release. Harnesses whose
 payloads need real parsing, such as Codex's patches, keep a built-in adapter.

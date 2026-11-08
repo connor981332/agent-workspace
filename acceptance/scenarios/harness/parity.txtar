@@ -15,7 +15,7 @@ n=0
 check() {
 	want=$1 tool=$2 arg=$3
 	n=$((n + 1))
-	for h in claude codex grok; do
+	for h in claude codex grok opencode; do
 		awtest-hook -harness "$h" "$tool" "$arg" >/dev/null 2>&1
 		got=$?
 		[ "$got" = "$want" ] || echo "DIFFERS: $h $tool $arg: exit $got, want $want"
