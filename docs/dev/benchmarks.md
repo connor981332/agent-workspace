@@ -73,3 +73,26 @@ The same machine as M1, on power. aw built from the m3/mux branch, with every M3
 ### Apple Silicon laptop
 
 Not yet measured: pending, for a maintainer with a Mac.
+
+## M4
+
+### Linux laptop, 2026-11-08
+
+The same machine as M1, on power. aw built from the m4/exit branch.
+
+| Operation | n | p50 ms | p95 ms | p99 ms | max ms | limit ms | result |
+|---|---|---|---|---|---|---|---|
+| hook | 1000 | 4.80 | 5.85 | 6.41 | 7.11 | 8.00 | pass |
+| whoami | 500 | 3.91 | 4.71 | 5.00 | 5.27 | 10.00 | pass |
+| config-get | 500 | 3.95 | 4.87 | 5.37 | 6.19 | 10.00 | pass |
+| attach-from-pool | 100 | 35.74 | 39.85 | 47.20 | 48.56 | 100.00 | pass |
+| new-until-harness | 100 | 37.73 | 40.50 | 43.36 | 44.23 | 150.00 | pass |
+| dashboard | 200 | 46.42 | 49.45 | 50.41 | 52.14 | 100.00 | pass |
+| ref-hook | 1000 | 4.40 | 5.21 | 5.66 | 6.45 | 8.00 | pass |
+| serve-free-seat | 100 | 7.51 | 8.40 | 9.07 | 9.24 | 50.00 | pass |
+| grant-next | 100 | 5.20 | 6.19 | 6.44 | 6.45 | 50.00 | pass |
+| preempt | 100 | 6.76 | 7.56 | 7.88 | 8.74 | 50.00 | pass |
+
+### Apple Silicon laptop
+
+Not yet measured: pending, for a maintainer with a Mac.

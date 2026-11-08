@@ -34,6 +34,9 @@ harness's project configuration, keeping other settings. Safe to rerun.`,
 			if err != nil {
 				return err
 			}
+			if err := app.RegisterWorkspace(ws.Owner); err != nil {
+				return err
+			}
 			instructions, err := compose.Apply(cmd.Context(), ws.Owner, c.Workspace.Name, c.Workspace.Namespace)
 			if err != nil {
 				return err

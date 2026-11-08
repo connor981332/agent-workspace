@@ -558,6 +558,99 @@ const (
 	poolSize  = 2
 )
 
+// addResourceOps adds the operations of the resource queue (M4). A lane is claimed once for each
+// role, the first time it is needed.
+func (fx *fixture) addResourceOps(env []string, launcher string, signals *os.File) {
+	lane := func(purpose string) func() string {
+		root := ""
+		return func() string {
+			if root != "" {
+				return root
+			}
+			out, err := fx.output(env, "attach", purpose, "--json")
+			if err != nil {
+				fatalf("%v", err)
+			}
+			var claimed struct{ Root string }
+			if err := json.Unmarshal(out, &claimed); err != nil || claimed.Root == "" {
+				fatalf("aw attach --json: no root in %s", out)
+			}
+			root = claimed.Root
+			return root
+		}
+	}
+	in := func(dir string, args ...string) error {
+		c := exec.Command(launcher, args...)
+		c.Dir, c.Env = dir, env
+		out, err := c.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("aw %s in %s: %v\n%s", strings.Join(args, " "), dir, err, out)
+		}
+		return nil
+	}
+	must := func(dir string, args ...string) {
+		if err := in(dir, args...); err != nil {
+			fatalf("%v", err)
+		}
+	}
+	// untilSignal times a command up to the byte its server writes to the FIFO.
+	untilSignal := func(dir string, args ...string) time.Duration {
+		c := exec.Command(launcher, args...)
+		c.Dir, c.Env = dir, env
+		var errOut bytes.Buffer
+		c.Stderr = &errOut
+		start := time.Now()
+		if err := c.Start(); err != nil {
+			fatalf("aw %v: %v", args, err)
+		}
+		got := make(chan time.Duration, 1)
+		go func() {
+			var b [1]byte
+			if _, err := io.ReadFull(signals, b[:]); err != nil {
+				fatalf("reading the server's signal: %v", err)
+			}
+			got <- time.Since(start)
+		}()
+		var d time.Duration
+		select {
+		case d = <-got:
+		case <-time.After(20 * time.Second):
+			fatalf("aw %v: no signal from the server\n%s", args, errOut.String())
+		}
+		if err := c.Wait(); err != nil {
+			fatalf("aw %v: %v\n%s", args, err, errOut.String())
+		}
+		return d
+	}
+	serving := lane("bench serve")
+	fx.ops["serve-free-seat"] = &benchOp{run: func() time.Duration {
+		return untilSignal(serving(), "serve", "bench-serve")
+	}, reset: func() { must(serving(), "stop", "bench-serve") }}
+
+	holder, next := lane("bench holder"), lane("bench next")
+	fx.ops["grant-next"] = &benchOp{prepare: func() { must(holder(), "serve", "bench-token") }, run: func() time.Duration {
+		_ = in(next(), "serve", "bench-token") // exits 3: it joins the queue
+		c := exec.Command(launcher, "stop", "bench-token")
+		c.Dir, c.Env = holder(), env
+		start := time.Now()
+		if out, err := c.CombinedOutput(); err != nil {
+			fatalf("aw stop: %v\n%s", err, out)
+		}
+		return time.Since(start)
+	}, reset: func() {
+		must(next(), "stop", "bench-token")
+		must(holder(), "serve", "bench-token")
+	}}
+
+	victim := lane("bench victim")
+	fx.ops["preempt"] = &benchOp{prepare: func() { must(victim(), "serve", "bench-evict") }, run: func() time.Duration {
+		return untilSignal(fx.owner, "serve", "bench-evict")
+	}, reset: func() {
+		must(fx.owner, "stop", "bench-evict")
+		must(victim(), "serve", "bench-evict")
+	}}
+}
+
 // slowSample is how long a lane operation may take before the bench says where the time went, so a
 // CI failure can be told apart from a slow runner.
 const slowSample = 100 * time.Millisecond
@@ -584,7 +677,39 @@ func (fx *fixture) addLaneOps(tmp, launcher string) error {
 	if err != nil {
 		return err
 	}
-	settings := fmt.Sprintf("\n[lanes]\nmax = %d\npool = %d\n", laneCount+poolSize+2, poolSize)
+	// The servers signal a FIFO when they start, or when a lane's copy receives SIGTERM.
+	fifo := filepath.Join(tmp, "harness.fifo")
+	settings := fmt.Sprintf(`
+[lanes]
+max = %d
+pool = %d
+
+[projects.web.servers.benchserve]
+command = "printf x > \"$AW_BENCH_FIFO\"; exec sleep 300"
+port = 43000
+
+[projects.web.servers.benchvictim]
+command = "trap '[ -n \"$AW_LANE\" ] && printf x > \"$AW_BENCH_FIFO\"; exit 0' TERM; sleep 300 & wait $!"
+port = 43500
+
+[resources.bench-serve]
+kind = "process"
+capacity = 1
+servers = ["web.benchserve"]
+
+[resources.bench-evict]
+kind = "process"
+capacity = 1
+servers = ["web.benchvictim"]
+owner_counts = true
+owner_preempts = true
+evict_grace = "1s"
+
+[resources.bench-token]
+kind = "token"
+tokens = ["t"]
+`, laneCount+poolSize+8, poolSize)
+	fx.laneEnv = append([]string{"AW_BENCH_FIFO=" + fifo}, fx.laneEnv...)
 	if strings.Contains(string(data), "\n[lanes]\n") {
 		return fmt.Errorf("aw init wrote a [lanes] table; the bench must merge into it")
 	}
@@ -621,7 +746,6 @@ func (fx *fixture) addLaneOps(tmp, launcher string) error {
 
 	// aw new execs the harness. The stub harness writes one byte to a FIFO, so the time is taken
 	// when the harness starts, not when it exits.
-	fifo := filepath.Join(tmp, "harness.fifo")
 	if err := mkfifo(fifo); err != nil {
 		return err
 	}
@@ -706,6 +830,9 @@ func (fx *fixture) addLaneOps(tmp, launcher string) error {
 			}
 			return time.Since(start)
 		}}
+	}
+	if fx.try(env, nil, "queue", "--json") == nil {
+		fx.addResourceOps(env, launcher, signals)
 	}
 	fx.ops["attach-from-pool"] = &benchOp{run: func() time.Duration {
 		n++

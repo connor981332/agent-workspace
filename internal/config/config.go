@@ -253,6 +253,16 @@ func IndividualFile(namespace string) string {
 	return filepath.Join(base, "agent-workspace", namespace+".toml")
 }
 
+// RegistryFile lists the workspaces on this machine, one owner checkout per line (S15).
+func RegistryFile() string {
+	base := os.Getenv("XDG_STATE_HOME")
+	if base == "" {
+		home, _ := os.UserHomeDir()
+		base = filepath.Join(home, ".local", "state")
+	}
+	return filepath.Join(base, "agent-workspace", "workspaces")
+}
+
 // PersonalInstructions returns the individual layer's instructions file for a namespace, next to
 // its configuration.
 func PersonalInstructions(namespace string) string {
