@@ -124,7 +124,11 @@ expected but can follow.
   runner and lane, with the right resources held.
 - **R52.** Agent instructions are composed from all three layers into one canonical `AGENTS.md`
   block. Each harness's own file imports it. Hand edits to generated blocks are detected.
-- **R53.** Composed personal content never dirties the team repository.
+  The block committed in `AGENTS.md` holds the framework and team layers. The personal layer goes to
+  a file Git ignores, under R53.
+- **R53.** Composed personal content never dirties the team repository. Each adapter declares a
+  gitignored personal file its harness reads (`CLAUDE.local.md`), which `aw` composes and adds to
+  `.git/info/exclude`. A harness without one gets it in its session-start context.
 - **R54.** Teams can add guards and hooks that declare their requirements.
 - **R55.** Shell commands are parsed into a syntax tree for guard decisions. A command whose effect
   the guard cannot determine (for example a computed path into another lane) is refused.

@@ -1,6 +1,76 @@
-# compose/agents-block-only: to be written (plan §3.5).
+# aw setup composes the framework and team layers into one block in AGENTS.md, changing nothing
+# around it. A change to the team's text updates it; a hand edit is detected and left alone.
 # req: R52
 # source: C1 ScaffoldTests.test_instructions_replace_only_their_block
 # milestone: M3
 
-unwritten
+workspace solo --single --init
+owner-may-change
+cp $WORK/mine AGENTS.md
+cp $WORK/claude CLAUDE.md
+exec aw setup
+stdout 'AGENTS.md: wrote the instructions'
+grep '^# Mine$' AGENTS.md
+grep 'bin/aw attach' AGENTS.md
+grep '^@AGENTS.md$' CLAUDE.md
+grep '^# Claude notes$' CLAUDE.md
+
+exec sh -c 'echo After. >> AGENTS.md'
+cp AGENTS.md $WORK/once
+exec aw setup --json
+json stdout .instructions[0].changed false
+cmp AGENTS.md $WORK/once
+exec grep -c 'aw:begin' AGENTS.md
+stdout '^1$'
+exec grep -c '^@AGENTS.md$' CLAUDE.md
+stdout '^1$'
+exec aw doctor --json
+stdout 'generated block in AGENTS.md is current'
+
+# The team's layer.
+mkdir .aw
+cp $WORK/team .aw/instructions.md
+exec aw doctor --json
+stdout 'out of date'
+exec aw setup
+grep 'Use tabs here' AGENTS.md
+grep '^# Mine$' AGENTS.md
+grep '^After.$' AGENTS.md
+
+# A hand edit is not overwritten.
+exec sed -i.bak 's/Use tabs here/Use spaces here/' AGENTS.md
+rm AGENTS.md.bak
+cp AGENTS.md $WORK/edited
+cp $WORK/team2 .aw/instructions.md
+exec aw setup
+stderr 'edited by hand'
+cmp AGENTS.md $WORK/edited
+exec aw doctor --json
+stdout 'edited by hand'
+
+# Deleting the block takes the new version.
+exec sh $WORK/delete-block.sh
+exec aw setup
+grep 'Use two spaces' AGENTS.md
+! grep 'Use spaces here' AGENTS.md
+grep '^# Mine$' AGENTS.md
+
+# A damaged block is left alone.
+exec sh -c 'grep -v "aw:end" AGENTS.md > x && mv x AGENTS.md'
+cp AGENTS.md $WORK/damaged
+! exec aw setup
+stderr 'damaged generated block'
+cmp AGENTS.md $WORK/damaged
+
+-- claude --
+# Claude notes
+-- mine --
+# Mine
+
+Keep this.
+-- team --
+Use tabs here.
+-- team2 --
+Use two spaces.
+-- delete-block.sh --
+sed '/aw:begin/,/aw:end/d' AGENTS.md > x && mv x AGENTS.md

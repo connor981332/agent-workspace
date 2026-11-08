@@ -80,7 +80,7 @@ func hook(args []string, version string, stdin io.Reader, stdout, stderr io.Writ
 		return Allow // not in a workspace: nothing here is aw's to protect
 	}
 	if p.Event == SessionStart {
-		fmt.Fprintln(stdout, startContext(*scope))
+		fmt.Fprintln(stdout, startContext(*scope)+personalContext(p.Harness, scope.Namespace))
 		return Allow
 	}
 	scope.AskSupported = a.ask
@@ -124,7 +124,7 @@ func resolveScope(p Payload, version string, t *timing.Recorder) (*policy.Scope,
 		t.Mark("config-cache")
 	}
 
-	scope := &policy.Scope{Role: policy.Unattached, Owner: ws.Owner}
+	scope := &policy.Scope{Role: policy.Unattached, Owner: ws.Owner, Namespace: cfg.Workspace.Namespace}
 	if p.Session != "" {
 		scope.Session = p.Harness + ":" + p.Session
 	}
@@ -269,6 +269,26 @@ func attachment(s *state.Store, stateDir string, p Payload) (attached, error) {
 		}
 	}
 	return current, nil
+}
+
+// maxPersonal is how much of the personal layer a session-start context carries.
+const maxPersonal = 16 << 10
+
+// personalContext is the personal layer for a harness with no personal file of its own (S13). Claude
+// Code reads CLAUDE.local.md. An unreadable file adds nothing: it is advice, not a guard.
+func personalContext(harness, namespace string) string {
+	if harness == "claude" || namespace == "" {
+		return ""
+	}
+	data, err := os.ReadFile(config.PersonalInstructions(namespace))
+	if err != nil {
+		return ""
+	}
+	text := strings.TrimSpace(string(data[:min(len(data), maxPersonal)]))
+	if text == "" {
+		return ""
+	}
+	return "\n\nThe human's personal instructions:\n" + text
 }
 
 // startContext tells a new session where it is and how to work there. It changes nothing.

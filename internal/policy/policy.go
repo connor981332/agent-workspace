@@ -52,6 +52,8 @@ type Scope struct {
 	Owner string // the owner checkout, absolute
 	// Session is the session as <harness>:<id>, so a refusal can tell the human how to grant it.
 	Session string
+	// Namespace is the workspace's, which names the individual layer's files.
+	Namespace string
 	// For a lane: its root, the physical directories it may use (the root, its project worktrees,
 	// its private state directory), and its name, for messages.
 	LaneRoot string

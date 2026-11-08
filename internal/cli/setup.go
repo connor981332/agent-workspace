@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/connor981332/agent-workspace/internal/app"
+	"github.com/connor981332/agent-workspace/internal/compose"
 	"github.com/connor981332/agent-workspace/internal/ui"
 )
 
@@ -33,8 +34,12 @@ harness's project configuration, keeping other settings. Safe to rerun.`,
 			if err != nil {
 				return err
 			}
+			instructions, err := compose.Apply(cmd.Context(), ws.Owner, c.Workspace.Name, c.Workspace.Namespace)
+			if err != nil {
+				return err
+			}
 			if asJSON {
-				return writeJSON(cmd.OutOrStdout(), map[string]any{"repos": results, "harness_config": configs})
+				return writeJSON(cmd.OutOrStdout(), map[string]any{"repos": results, "harness_config": configs, "instructions": instructions})
 			}
 			out := cmd.OutOrStdout()
 			for _, r := range results {
@@ -52,6 +57,17 @@ harness's project configuration, keeping other settings. Safe to rerun.`,
 				if c.Changed {
 					changed = true
 					fmt.Fprintf(out, "%s: wrote aw's hooks\n", ui.Clean(c.Path))
+				}
+			}
+			for _, r := range instructions {
+				switch {
+				case r.Edited:
+					fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", r.Note)
+				case r.Changed && r.Path != compose.PersonalPath:
+					changed = true
+					fmt.Fprintf(out, "%s: wrote the instructions\n", r.Path)
+				case r.Changed:
+					fmt.Fprintf(out, "%s: wrote your personal instructions (Git ignores this file)\n", r.Path)
 				}
 			}
 			if changed {
