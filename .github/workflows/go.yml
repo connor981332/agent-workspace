@@ -1,0 +1,76 @@
+# CI for the Go release candidate (plans/release-candidate.md §7). It runs alongside candidates.yml,
+# which is left unchanged until the candidates are archived.
+name: Go
+
+on:
+  push:
+    branches: [master]
+    paths-ignore:
+      - 'workspace-candidate-*/**'
+  pull_request:
+    # "edited" reruns the checks when the description changes, for the hot-path check.
+    types: [opened, synchronize, reopened, edited]
+    paths-ignore:
+      - 'workspace-candidate-*/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: go-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  STATICCHECK_VERSION: v0.8.2 # staticcheck 2026.2.2
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l $(git ls-files '*.go' ':!:workspace-candidate-*'))
+          if [ -n "$unformatted" ]; then
+            echo "::error::Not gofmt-formatted:"; echo "$unformatted"; exit 1
+          fi
+      - name: go mod tidy
+        run: go mod tidy -diff
+      - name: go vet
+        run: go vet ./...
+      - name: staticcheck
+        run: go run "honnef.co/go/tools/cmd/staticcheck@${STATICCHECK_VERSION}" ./...
+      - name: Dependency direction (§4.3)
+        run: go test -count=1 ./internal/archtest
+      - name: Hot path section (§5.4)
+        if: github.event_name == 'pull_request'
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: sh .github/scripts/check-hot-path.sh "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}"
+
+  unit:
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-24.04 # linux/amd64
+          - ubuntu-24.04-arm # linux/arm64
+          - macos-15 # darwin/arm64
+          - macos-15-intel # darwin/amd64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Platform
+        run: go version && go env GOOS GOARCH
+      - name: go test -race
+        run: go test -race ./...
