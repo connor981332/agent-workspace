@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/connor981332/agent-workspace/internal/evidence"
+	"github.com/connor981332/agent-workspace/internal/forge"
 	"github.com/connor981332/agent-workspace/internal/gitx/run"
 	"github.com/connor981332/agent-workspace/internal/state"
 )
@@ -82,6 +83,7 @@ func (m *Manager) Sweep(ctx context.Context, o SweepOptions) (*SweepReport, erro
 		failedLanes[e.Lane] = e
 	}
 
+	m.forges, m.forgeDeadline = map[string]*forge.Client{}, o.Now.Add(30*time.Second)
 	pooled := 0
 	for _, l := range lanes {
 		d := &Decision{Number: l.Number, Dir: Dir(l.Number, m.Cfg.Lanes.Max), Name: l.Name, State: l.State, lane: l}
@@ -193,6 +195,9 @@ func (m *Manager) decide(ctx context.Context, d *Decision, sessions []state.Sess
 			return
 		}
 		ev := evidence.Check(ctx, r.Path, r.BaseRef, m.evidenceOptions(r))
+		if !ev.Unknown && ev.Clean && ev.Proof == "" {
+			m.forgeProof(ctx, owner, r, &ev)
+		}
 		d.Repos = append(d.Repos, ev)
 		switch {
 		case ev.Unknown:
@@ -213,6 +218,42 @@ func (m *Manager) decide(ctx context.Context, d *Decision, sessions []state.Sess
 		return
 	}
 	d.Action, d.Reason = ActionRecycle, "every repository is clean and proven merged"
+}
+
+// forgeProof asks the repository's forge whether exactly this head was merged (lifecycle.md, merge
+// proof 3). It never proves anything on an error.
+func (m *Manager) forgeProof(ctx context.Context, owner string, r state.LaneRepo, ev *evidence.Repo) {
+	remote, target := "origin", strings.TrimPrefix(r.BaseRef, "refs/heads/")
+	if rest, ok := strings.CutPrefix(r.BaseRef, "refs/remotes/"); ok {
+		remote, target, _ = strings.Cut(rest, "/")
+	}
+	raw, err := run.In(owner).Line(ctx, "config", "--get", "remote."+remote+".url")
+	if err != nil {
+		return
+	}
+	host, project, ok := forge.ParseRemote(raw)
+	if !ok {
+		return
+	}
+	c, seen := m.forges[host]
+	if !seen {
+		c = forge.For(m.Cfg.Workspace.Forge, host, m.forgeDeadline)
+		m.forges[host] = c
+	}
+	if c == nil {
+		return
+	}
+	ch := c.Find(ctx, forge.Identity{Host: host, Project: project, Target: target}, r.Branch, ev.Head)
+	ev.Forge = &ch
+	if ch.Merged() {
+		ev.Proof, ev.Reason = evidence.Forge, ""
+		return
+	}
+	what := ch.Availability
+	if ch.Availability == forge.Verified {
+		what = fmt.Sprintf("change !%d is %s", ch.IID, ch.State)
+	}
+	ev.Reason += fmt.Sprintf(" (%s: %s)", c.Kind(), what)
 }
 
 func repoLabel(r state.LaneRepo) string {

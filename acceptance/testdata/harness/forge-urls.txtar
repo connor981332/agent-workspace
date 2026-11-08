@@ -1,0 +1,22 @@
+# --forge github gives each origin a GitHub URL that still reaches the local bare repository.
+workspace shop --forge github
+exec git -C web config --get remote.origin.url
+stdout '^https://github\.com/acceptance/web\.git$'
+exec git config --get remote.origin.url
+stdout '^https://github\.com/acceptance/shop\.git$'
+exec sh -c 'cd web && git commit -q --allow-empty -m x && git push -q && git ls-remote origin main'
+stdout 'refs/heads/main'
+owner-may-change
+
+# The gh stub answers from forge-reply rules, and logs every call.
+stubs gh
+forge-reply gh 'pulls\?state=all' $WORK/pulls.json
+exec gh api --hostname github.com 'repos/acceptance/web/pulls?state=all&page=1'
+stdout '"number": 7'
+! exec gh api --hostname github.com 'repos/acceptance/web/other'
+stderr 'HTTP 404'
+exec cat $STUB_LOG
+stdout '^gh api --hostname github.com repos/acceptance/web/pulls'
+
+-- pulls.json --
+[{"number": 7}]

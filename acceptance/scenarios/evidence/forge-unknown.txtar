@@ -1,6 +1,37 @@
-# evidence/forge-unknown: to be written (plan §3.5).
+# A forge that cannot be read, or that has more results than aw pages through, leaves the lane
+# unproven: unknown means keep.
 # req: R25
-# source: C1 ForgeTests.test_unavailable_api_and_pagination_limit_stay_unknown
+# source: C1 test_generic.py::ForgeTests::test_unavailable_api_and_pagination_limit_stay_unknown
 # milestone: M2
 
-unwritten
+workspace solo --single --init --forge github
+exec aw attach 'add feature flag'
+lane-commit 01 a.txt 'first'
+lane-commit 01 b.txt 'second'
+git-squash . aw/feature-flag
+stubs gh
+
+exec aw sweep --apply --json
+json stdout .lanes[0].action keep
+stdout '\(github: unknown \(GitHub unavailable\)\)'
+
+exec sh $WORK/many.sh
+forge-reply gh '^repos/acceptance/solo/pulls\?' $WORK/many.json
+exec aw sweep --apply --json
+json stdout .lanes[0].action keep
+stdout '\(github: unknown \(pagination limit\)\)'
+exec sh -c 'grep -c "pulls?" "$STUB_LOG"'
+stdout '^6$'
+
+-- many.sh --
+# 100 unrelated pull requests on every page.
+{
+	printf '['
+	i=1
+	while [ $i -le 100 ]; do
+		[ $i -gt 1 ] && printf ','
+		printf '{"number": %d, "state": "open", "head": {"ref": "other-%d", "sha": "x"}, "base": {"ref": "main"}}' $i $i
+		i=$((i + 1))
+	done
+	printf ']'
+} > "$WORK/many.json"

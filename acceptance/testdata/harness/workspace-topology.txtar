@@ -16,7 +16,7 @@ stdout '^origin/main$'
 exec git -C web status --porcelain
 ! stdout .
 exec sh -c 'echo "$AW_TEST_FORGE"'
-stdout '^github$'
+stdout '^none$'
 
 -- workspace.toml --
 [workspace]

@@ -32,6 +32,8 @@ type Repo struct {
 	Proof   string `json:"proof"`   // Ancestor, Patch, Forge, or ""
 	Reason  string `json:"reason"`  // why there is no proof
 	Unknown bool   `json:"unknown"` // something could not be read: protect
+	// Forge is what the forge said, when it was asked.
+	Forge any `json:"forge,omitempty"`
 }
 
 // Options are what the caller knows about the lane.

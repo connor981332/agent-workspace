@@ -116,6 +116,7 @@ func Commands() map[string]func(ts *testscript.TestScript, neg bool, args []stri
 		"git-merge":        mergeCmd("merge"),
 		"git-squash":       mergeCmd("squash"),
 		"git-cherry-pick":  mergeCmd("cherry-pick"),
+		"forge-reply":      cmdForgeReply,
 		FinalCheck:         cmdOwnerCheckFinal,
 	}
 }
@@ -176,7 +177,7 @@ func cmdWorkspace(ts *testscript.TestScript, neg bool, args []string) {
 	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
 		ts.Fatalf("usage: workspace <name> [--single] [--init] [--repos a,b] [--forge github|gitlab|none]")
 	}
-	name, single, repos, forge, initialize := args[0], false, []string{"web", "api"}, "github", false
+	name, single, repos, forge, initialize := args[0], false, []string{"web", "api"}, "none", false
 	for i := 1; i < len(args); i++ {
 		switch args[i] {
 		case "--single":
@@ -264,6 +265,25 @@ func cmdWorkspace(ts *testscript.TestScript, neg bool, args []string) {
 		repos = append([]string{"."}, repos...)
 	}
 
+	// --forge github|gitlab: each origin looks like a forge URL, which the scenario's global Git
+	// configuration rewrites (url.<remotes>.insteadOf) to the local bare repository.
+	if forge != "none" {
+		host := map[string]string{"github": "github.com", "gitlab": "gitlab.example.com"}[forge]
+		prefix := "https://" + host + "/acceptance/"
+		f, err := os.OpenFile(ts.Getenv("GIT_CONFIG_GLOBAL"), os.O_APPEND|os.O_WRONLY, 0)
+		ts.Check(err)
+		_, err = fmt.Fprintf(f, "[url %q]\n\tinsteadOf = %s\n", remotes+"/", prefix)
+		ts.Check(err)
+		ts.Check(f.Close())
+		for _, r := range repos {
+			remoteName := r
+			if r == "." {
+				remoteName = name
+			}
+			git(ts, filepath.Join(owner, r), "remote", "set-url", "origin", prefix+remoteName+".git")
+		}
+	}
+
 	st.owner, st.repos = owner, repos
 	ts.Setenv("OWNER", owner)
 	ts.Setenv("AW_TEST_FORGE", forge)
@@ -340,4 +360,21 @@ func shQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) 
 // left unwritten when its milestone is reached.
 func cmdUnwritten(ts *testscript.TestScript, neg bool, args []string) {
 	ts.Fatalf("this scenario is not written yet: replace 'unwritten' with its script")
+}
+
+// forge-reply <gh|glab> <path-regexp> <file>
+//
+// Makes the gh or glab stub answer an API path that matches the extended regexp with the file's
+// contents. Rules are tried in the order they were added.
+func cmdForgeReply(ts *testscript.TestScript, neg bool, args []string) {
+	if neg || len(args) != 3 || (args[0] != "gh" && args[0] != "glab") {
+		ts.Fatalf("usage: forge-reply <gh|glab> <path-regexp> <file>")
+	}
+	dir := filepath.Join(ts.Getenv("STUB_STATE"), args[0])
+	ts.Check(os.MkdirAll(dir, 0o755))
+	f, err := os.OpenFile(filepath.Join(dir, "rules"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	ts.Check(err)
+	_, err = fmt.Fprintf(f, "%s\t%s\n", args[1], ts.MkAbs(args[2]))
+	ts.Check(err)
+	ts.Check(f.Close())
 }

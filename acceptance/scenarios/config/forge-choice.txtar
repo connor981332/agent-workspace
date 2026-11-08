@@ -1,6 +1,40 @@
-# config/forge-choice: to be written (plan §3.5).
+# [workspace] forge chooses the adapter: auto recognizes github and gitlab hosts and nothing else,
+# none never asks, and a named forge is used whatever the host.
 # req: R71
-# source: C1 ForgeTests.test_adapter_choice
+# source: C1 test_generic.py::ForgeTests::test_adapter_choice
 # milestone: M2
 
-unwritten
+workspace solo --single --init --forge github
+exec aw attach 'add feature flag'
+lane-commit 01 a.txt 'first'
+lane-commit 01 b.txt 'second'
+git-squash . aw/feature-flag
+stubs gh glab
+owner-may-change
+
+exec aw sweep
+exec sh -c 'cut -d" " -f1 "$STUB_LOG" | sort -u'
+stdout '^gh$'
+! stdout 'glab'
+
+exec sh $WORK/forge.sh none
+exec aw sweep
+exec sh -c 'test ! -s "$STUB_LOG"'
+
+exec sh $WORK/forge.sh gitlab
+exec aw sweep
+exec sh -c 'cut -d" " -f1 "$STUB_LOG" | sort -u'
+stdout '^glab$'
+
+# A host that names neither forge has no adapter under auto.
+exec sh -c ': > "$STUB_LOG"'
+exec sh $WORK/forge.sh auto
+exec git config remote.origin.url https://code.example.com/acceptance/solo.git
+exec aw sweep
+exec sh -c 'test ! -s "$STUB_LOG"'
+
+-- forge.sh --
+# Set [workspace] forge in workspace.toml.
+sed -i.bak '/^forge = /d' workspace.toml && rm -f workspace.toml.bak
+awk -v f="$1" '{print} /^schema = /{print "forge = \"" f "\""}' workspace.toml > workspace.toml.new && mv workspace.toml.new workspace.toml
+: > "$STUB_LOG"

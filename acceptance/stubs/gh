@@ -1,0 +1,25 @@
+#!/bin/sh
+# Test double for gh and glab (the same script under both names). It logs its argv to $STUB_LOG.
+# "<tool> api [--hostname H] <path>" answers from $STUB_STATE/<tool>/rules, written by the suite's
+# forge-reply command: lines "<extended regexp><TAB><file>". The first rule whose regexp matches
+# the path wins, and the file's contents are printed. With no match it fails like an API that
+# cannot be reached.
+set -eu
+tool=${0##*/}
+echo "$tool $*" >> "$STUB_LOG"
+[ "${1:-}" = api ] || { echo "$tool stub: only '$tool api' is supported" >&2; exit 1; }
+shift
+if [ "${1:-}" = --hostname ]; then shift 2; fi
+path=${1:-}
+rules=$STUB_STATE/$tool/rules
+if [ -f "$rules" ]; then
+	tab=$(printf '\t')
+	while IFS=$tab read -r re file; do
+		if printf '%s\n' "$path" | grep -Eq -- "$re"; then
+			cat "$file"
+			exit 0
+		fi
+	done < "$rules"
+fi
+echo "$tool: HTTP 404: Not Found ($path)" >&2
+exit 1
