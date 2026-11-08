@@ -210,7 +210,7 @@ func parallel[T any](items []T, f func(T)) {
 // repoStatus reads one worktree with one git status call: branch, head, upstream, ahead and dirty.
 func (m *Manager) repoStatus(ctx context.Context, r state.LaneRepo) RepoStatus {
 	rs := RepoStatus{Project: repoKey(r), Push: "unknown"}
-	out, err := run.In(r.Path).Run(ctx, "status", "--porcelain=v2", "--branch", "-unormal")
+	out, err := run.In(r.Path).Run(ctx, "--no-optional-locks", "status", "--porcelain=v2", "--branch", "-unormal")
 	if err != nil {
 		rs.Error = "cannot be read"
 		return rs

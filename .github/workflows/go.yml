@@ -200,9 +200,9 @@ jobs:
         env:
           AW_BENCH_HOST: ${{ matrix.os }}
         run: |
-          args=(-mode "${{ matrix.mode }}" -out "$RUNNER_TEMP/bench.json")
+          args=(-on ci -mode "${{ matrix.mode }}" -out "$RUNNER_TEMP/bench.json")
           if [ -x "$RUNNER_TEMP/aw-baseline" ]; then args+=(-baseline-aw "$RUNNER_TEMP/aw-baseline");
-          elif [ "${{ matrix.mode }}" = relative ]; then args=(-mode absolute -out "$RUNNER_TEMP/bench.json"); echo "No baseline: reporting only"; fi
+          elif [ "${{ matrix.mode }}" = relative ]; then args=(-on ci -mode absolute -out "$RUNNER_TEMP/bench.json"); echo "No baseline: reporting only"; fi
           set +e
           go run ./bench "${args[@]}" | tee -a "$GITHUB_STEP_SUMMARY"
           status=${PIPESTATUS[0]}

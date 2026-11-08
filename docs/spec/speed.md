@@ -77,6 +77,10 @@ recognizable.
   The macOS reference runner, `macos-15` (arm64), is a virtual machine whose process start alone
   takes several milliseconds, so there CI fails on a regression against the main branch instead of
   on the budget itself: the main branch's binary is measured in the same run, interleaved.
+- One budget has a separate ceiling on `ubuntu-24.04`: the dashboard and `aw recap` fail CI above
+  200 ms p99. They run one `git status` per worktree (50 for 10 lanes across 4 repositories plus
+  the workspace repository), and on the runner's four cores that takes 86 to 130 ms where a laptop
+  takes 45. The 100 ms budget stands and is checked on the laptops. (Decided at the M2 exit.)
 - A maintainer measures every budget twice per milestone on a Linux laptop and on an Apple Silicon
   laptop. Those measurements are the budgets' real test, since the budgets are defined on a
   developer laptop.

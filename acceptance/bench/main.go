@@ -38,6 +38,7 @@ type op struct {
 	Name       string `toml:"name"`
 	Spec       string `toml:"spec"`
 	BudgetMS   int    `toml:"budget_ms"`
+	CIBudgetMS int    `toml:"ci_budget_ms"` // the ceiling on the CI runner, where it differs (speed.md)
 	Iterations int    `toml:"iterations"`
 	From       string `toml:"from"`
 	About      string `toml:"about"`
@@ -90,6 +91,7 @@ func main() {
 	baselineAW := flag.String("baseline-aw", "", "a baseline aw binary (master's), measured interleaved with -aw on this machine")
 	out := flag.String("out", "", "write the JSON report here")
 	scale := flag.Float64("scale", 1, "multiply every operation's iterations, e.g. 0.1 for a quick run")
+	on := flag.String("on", "laptop", "laptop (the budgets as speed.md defines them) or ci (ci_budget_ms where an operation has one)")
 	flag.Parse()
 
 	ops, err := loadBudgets("bench/budgets.toml")
@@ -131,6 +133,11 @@ func main() {
 		}
 		n := max(10, int(float64(o.Iterations)**scale))
 		r, b := measure(o, n, run, baseRun)
+		if *on == "ci" && o.CIBudgetMS > 0 {
+			o.BudgetMS = o.CIBudgetMS
+		} else if *on != "ci" && *on != "laptop" {
+			fatalf("-on must be laptop or ci")
+		}
 		judge(o, r, b, *mode)
 		if !r.Pass {
 			// One noisy run on a shared runner cannot fail CI on its own (§5.2).
