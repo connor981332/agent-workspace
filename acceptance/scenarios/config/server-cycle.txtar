@@ -1,0 +1,6 @@
+# A dependency cycle between servers is refused, naming the cycle.
+# req: R9
+# source: C1 test_generic.py::ManifestTests::test_dependency_cycles_are_refused
+# milestone: M1
+
+unwritten

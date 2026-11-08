@@ -1,0 +1,4 @@
+# A change to a file in the owner checkout fails the scenario at the end.
+# want-failure: changed: .: file README.md
+workspace w
+exec sh -c 'echo edit >> README.md'

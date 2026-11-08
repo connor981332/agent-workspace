@@ -1,0 +1,6 @@
+# An unknown table or key is an error, never ignored.
+# req: R9
+# source: C1 test_tooling.py::test_unknown_config_and_symlinks_refused
+# milestone: M1
+
+unwritten

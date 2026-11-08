@@ -1,0 +1,6 @@
+# Changed: the pin is an exact version plus a checksum in .aw/lock; a range, a branch or a missing checksum is refused.
+# req: R15
+# source: C1 test_generic.py::LauncherTests::test_mutable_refs_are_refused
+# milestone: M1
+
+unwritten

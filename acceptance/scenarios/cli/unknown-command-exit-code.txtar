@@ -1,0 +1,18 @@
+# A command line aw cannot parse exits 2, writes nothing to stdout and names the way to help.
+# req: R93
+# milestone: M0
+
+! exec aw no-such-command
+stderr 'unknown command "no-such-command"'
+stderr 'aw --help'
+! stdout .
+exec sh -c 'aw no-such-command; echo "exit=$?"'
+stdout '^exit=2$'
+
+! exec aw version --no-such-flag
+stderr 'unknown flag: --no-such-flag'
+exec sh -c 'aw version --no-such-flag; echo "exit=$?"'
+stdout '^exit=2$'
+
+exec sh -c 'aw version extra; echo "exit=$?"'
+stdout '^exit=2$'

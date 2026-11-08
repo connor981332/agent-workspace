@@ -1,0 +1,4 @@
+# Staging a file in a project repository changes its index.
+# want-failure: changed: web: index
+workspace w
+exec sh -c 'echo x > web/new.txt && cd web && git add new.txt && rm new.txt'

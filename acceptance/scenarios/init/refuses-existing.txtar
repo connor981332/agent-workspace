@@ -1,0 +1,5 @@
+# aw init refuses a directory that is already a workspace, and changes nothing.
+# source: C2 tests::t_init_refuses_existing_workspace
+# milestone: M1
+
+unwritten

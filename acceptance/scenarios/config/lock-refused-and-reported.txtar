@@ -1,0 +1,6 @@
+# An individual-layer override of a team-locked key is refused, and the refusal is reported.
+# req: R7
+# source: spec (no candidate source)
+# milestone: M1
+
+unwritten

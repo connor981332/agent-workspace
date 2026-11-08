@@ -1,0 +1,7 @@
+# git-fail makes matching Git invocations fail and passes the rest to the real Git.
+workspace w --single
+git-fail '^worktree add'
+! exec git worktree add -q .worktrees/01
+stderr 'git-fail: injected failure for: git worktree add'
+exec git log --oneline
+stdout 'Initial commit'

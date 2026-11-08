@@ -1,0 +1,8 @@
+# Stubs record their argv in $STUB_LOG and answer from $STUB_STATE.
+stubs docker devcontainer
+exec devcontainer up --workspace-folder /x/web
+exec docker ps -q --filter label=com.docker.compose.project=web_devcontainer --filter label=com.docker.compose.service=web
+stdout '^c-web$'
+exec cat $STUB_LOG
+stdout '^devcontainer up --workspace-folder /x/web$'
+stdout '^docker ps'

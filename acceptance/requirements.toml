@@ -1,0 +1,294 @@
+# Requirements R1 to R94 with the milestone from which each must be covered, copied from
+# plans/release-candidate.md §2. A test (coverage/plan_test.go) fails if the two disagree.
+# The coverage check (§3.6) uses this file. See acceptance/README.md.
+
+# The latest milestone whose scenarios must pass. Scenarios of later milestones are pending.
+current = "M0"
+
+[req.R1] # Guard decision < 5 ms p99
+milestone = "M1"
+covered_by = "bench"
+
+[req.R2] # No network, engine or forge in hooks and read-only commands
+milestone = "M1"
+
+[req.R3] # Command budgets
+milestone = "M1"
+covered_by = "bench"
+
+[req.R4] # CI benchmarks fail on budgets
+milestone = "M0"
+covered_by = "ci"
+
+[req.R5] # Slow work in the background, with progress
+milestone = "M2"
+
+[req.R6] # Three configuration layers
+milestone = "M1"
+
+[req.R7] # Team locks
+milestone = "M1"
+
+[req.R8] # `aw config explain`
+milestone = "M1"
+
+[req.R9] # Strict configuration
+milestone = "M1"
+
+[req.R10] # Config schema version and migration
+milestone = "M1"
+
+[req.R11] # `bin/aw setup` with minimal prerequisites
+milestone = "M7"
+
+[req.R12] # `setup` idempotent
+milestone = "M7"
+
+[req.R13] # Adding a project
+milestone = "M11"
+
+[req.R14] # Read-only `aw doctor` before setup
+milestone = "M1"
+
+[req.R15] # Exact pin with a checksum per platform
+milestone = "M1"
+
+[req.R16] # Different versions in two workspaces
+milestone = "M1"
+
+[req.R17] # Lanes run the owner checkout's pin
+milestone = "M1"
+
+[req.R18] # `aw upgrade`, managed files
+milestone = "M8"
+
+[req.R19] # State schema version, migration, read-only on newer
+milestone = "M1"
+
+[req.R20] # Upgrades never strand lanes
+milestone = "M8"
+
+[req.R21] # Worktree per project per lane, plus data
+milestone = "M2"
+
+[req.R22] # Names from purpose, no GUIDs
+milestone = "M2"
+
+[req.R23] # Lanes belong to work
+milestone = "M2"
+
+[req.R24] # Near-instant claim from the pool
+milestone = "M2"
+
+[req.R25] # Cleanup only when clean and proven merged
+milestone = "M2"
+
+[req.R26] # Warm pool and retention
+milestone = "M2"
+
+[req.R27] # Explicit discard, archived refs
+milestone = "M2"
+
+[req.R28] # Lane guards against old branches
+milestone = "M2"
+
+[req.R29] # Lifecycle hooks
+milestone = "M5"
+
+[req.R30] # Environment contract, rerunnable, timeouts, needs
+milestone = "M5"
+
+[req.R31] # Journaled steps, incomplete, resumable teardown
+milestone = "M2"
+
+[req.R32] # Parallel setup
+milestone = "M5"
+
+[req.R33] # Providers, built-in Postgres and Redis
+milestone = "M5"
+
+[req.R34] # Drop by exact name, never the template
+milestone = "M5"
+
+[req.R35] # Named snapshots
+milestone = "M5"
+
+[req.R36] # Process and token resources
+milestone = "M4"
+
+[req.R37] # FIFO queue with positions
+milestone = "M4"
+
+[req.R38] # Owner's servers count, detected by port
+milestone = "M4"
+
+[req.R39] # Owner preemption
+milestone = "M4"
+
+[req.R40] # Eviction stops processes only, head of queue
+milestone = "M4"
+
+[req.R41] # Maximum hold, idle expiry
+milestone = "M4"
+
+[req.R42] # Dead holders recovered without a daemon
+milestone = "M4"
+
+[req.R43] # Notifications through the next tool call
+milestone = "M4"
+
+[req.R44] # Commands declare their resources
+milestone = "M4"
+
+[req.R45] # Atomic multi-resource grants
+milestone = "M4"
+
+[req.R46] # Lane and server limits, idle servers expire
+milestone = "M2"
+
+[req.R47] # Host and devcontainer runners, same paths
+milestone = "M2"
+
+[req.R48] # One container per project, claim step
+milestone = "M6"
+
+[req.R49] # Never start or stop a container unexpectedly
+milestone = "M3"
+
+[req.R50] # Ports published at creation
+milestone = "M6"
+
+[req.R51] # Named team commands
+milestone = "M4"
+
+[req.R52] # Composed `AGENTS.md`, edit detection
+milestone = "M3"
+
+[req.R53] # Personal content never dirties the team repository
+milestone = "M3"
+
+[req.R54] # Team guards and hooks with requirements
+milestone = "M3"
+
+[req.R55] # Syntax-tree guard decisions, fail closed
+milestone = "M3"
+
+[req.R56] # Harness parity suite
+milestone = "M3"
+
+[req.R57] # Harnesses without hooks
+milestone = "M12"
+
+[req.R58] # Lane agents cannot disturb the owner checkout
+milestone = "M3"
+
+[req.R59] # `reference-transaction` hook
+milestone = "M3"
+
+[req.R60] # Pair sessions, granted only by the human
+milestone = "M3"
+
+[req.R61] # Pair session limits
+milestone = "M3"
+
+[req.R62] # `move-to-lane`, `try`
+milestone = "M9"
+
+[req.R63] # Human approval for workspace self-modification
+milestone = "M3"
+
+[req.R64] # Delegation
+milestone = "M9"
+
+[req.R65] # Roles
+milestone = "M9"
+
+[req.R66] # Personal plans, notes and skills stay private
+milestone = "M10"
+
+[req.R67] # Gitignored secrets, read-only links
+milestone = "M2"
+
+[req.R68] # Guards stop reading or echoing secrets
+milestone = "M3"
+
+[req.R69] # Change sets
+milestone = "M9"
+
+[req.R70] # Generated contracts never hand-edited
+milestone = "M9"
+
+[req.R71] # `gh` and `glab`, exact-head proof
+milestone = "M2"
+
+[req.R72] # Publication policy
+milestone = "M3"
+
+[req.R73] # Shared services as modules, cannot be taken down
+milestone = "M10"
+
+[req.R74] # Per-lane ports, URLs and hostname
+milestone = "M4"
+
+[req.R75] # Stand-in modules
+milestone = "M10"
+
+[req.R76] # Team MCP servers, isolated browser per session
+milestone = "M10"
+
+[req.R77] # Session records, resume without IDs
+milestone = "M2"
+
+[req.R78] # `aw finish`
+milestone = "M2"
+
+[req.R79] # Park and unpark
+milestone = "M2"
+
+[req.R80] # Crash and reboot recovery
+milestone = "M2"
+
+[req.R81] # Status view
+milestone = "M2"
+
+[req.R82] # Plan mechanism
+milestone = "M10"
+
+[req.R83] # Plans default to individual, promotion
+milestone = "M10"
+
+[req.R84] # Opting out of plans
+milestone = "M10"
+
+[req.R85] # Workspace-design skill
+milestone = "M11"
+
+[req.R86] # Readiness-audit skill
+milestone = "M11"
+
+[req.R87] # `aw rehearse`
+milestone = "M11"
+
+[req.R88] # Skill output only through human review
+milestone = "M11"
+
+[req.R89] # `aw doctor --projects`
+milestone = "M11"
+
+[req.R90] # Linux and macOS, amd64 and arm64, real tests
+milestone = "M0"
+covered_by = "ci"
+
+[req.R91] # Tests without Docker; separate Docker end-to-end suite
+milestone = "M0"
+covered_by = "ci"
+
+[req.R92] # Black-box acceptance suite
+milestone = "M0"
+covered_by = "ci"
+
+[req.R93] # `--json` and stable exit codes
+milestone = "M1"
+
+[req.R94] # Safety model stated plainly
+milestone = "M3"

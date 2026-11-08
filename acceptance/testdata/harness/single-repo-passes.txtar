@@ -1,0 +1,6 @@
+# --single makes the owner checkout itself the only repository.
+workspace solo --single --forge none
+! exists web
+exec git rev-parse --show-toplevel
+exec git status --porcelain
+! stdout .

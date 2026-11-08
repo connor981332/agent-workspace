@@ -10,28 +10,33 @@ milestone named in its row.
 
 ## Status
 
-**State:** PLANNED
+**State:** PARTIALLY IMPLEMENTED
 
 **Updated:** 2026-11-07
 
 **Branches / MRs:** [PR #5](https://github.com/connor981332/agent-workspace/pull/5) (this plan, merged),
-[PR #6](https://github.com/connor981332/agent-workspace/pull/6) (`plan/open-questions`: the
-settled questions, in the spec and here, merged). `m0/skeleton` (T1, open).
+[PR #6](https://github.com/connor981332/agent-workspace/pull/6) (the settled questions, merged),
+[PR #7](https://github.com/connor981332/agent-workspace/pull/7) (T1, `m0/skeleton`, merged).
+`m0/acceptance` (T2, open).
 
 **Done:** Read the spec and both candidates. Wrote this plan: milestones M0 to M12, v0.1 defined at
 the end of M7, R1 to R94 assigned, the acceptance suite design and its inventory, the module layout,
 benchmarks, the release pipeline, CI, risks, spec issues and the first tasks. Settled all five of
 the spec's open questions with the spec owner (§8); the spec records the answers under "Settled
-questions" in its README.
+questions" in its README. The spec owner accepted every proposed answer in
+[Spec issues](#spec-issues) (S1 to S19) on 2026-11-07; each is recorded in the spec by the PR of the
+milestone that needs it. T1: the Go module, `aw version`, the exit codes, the `lint` and `unit` CI
+jobs on all four runners, and the PR template. T1 reworded §4.3 rule 3, because `cmd/aw` links the
+command tree (cobra's flag library imports `net`) and so cannot meet the transitive rule.
 
-**In progress:** [T1](#t1-go-module-skeleton-and-ci-matrix) on `m0/skeleton`: the Go module
-skeleton, `aw version`, the exit codes, the `lint` and `unit` jobs on the four runners, and the PR
-template. T1 also reworded §4.3 rule 3, because `cmd/aw` links the command tree (cobra's flag
-library imports `net`) and so cannot meet the transitive rule.
+**In progress:** [T2](#t2-acceptance-harness-skeleton) on `m0/acceptance`: the acceptance module,
+runner, owner check, stubs, the M0 scenarios, the M1 scenarios as pending files, the coverage check
+and the `acceptance` CI job.
 
-**Next step:** Once T1 merges, start [T2](#t2-acceptance-harness-skeleton) and
-[T3](#t3-hot-path-latency-spike), as separate PRs. Before M1 starts, the spec owner must answer the
-spec issues needed by M1 (S5 and S6 in [Spec issues](#spec-issues)).
+**Next step:** [T3](#t3-hot-path-latency-spike), then the ref-hook spike, GoReleaser and the
+remaining M0 items.
+
+**Pending manual checks:** none yet.
 
 ## How to use this plan
 

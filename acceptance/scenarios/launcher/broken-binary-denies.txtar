@@ -1,0 +1,6 @@
+# A cached binary that cannot run makes a hook call deny (fail closed), with the fix.
+# req: R55
+# source: C1 test_generic.py::LauncherTests::test_broken_tool_blocks_with_exit_2; C1 test_tooling.py::test_inactive_hook_wrapper_end_to_end_and_broken_import_exits_2
+# milestone: M1
+
+unwritten

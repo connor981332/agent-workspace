@@ -1,0 +1,6 @@
+# Defaults fill every key a minimal workspace.toml leaves out, and aw config get shows them.
+# req: R6 R9
+# source: C1 test_generic.py::ManifestTests::test_defaults_and_fixture
+# milestone: M1
+
+unwritten

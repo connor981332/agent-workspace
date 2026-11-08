@@ -41,11 +41,16 @@ jobs:
             echo "::error::Not gofmt-formatted:"; echo "$unformatted"; exit 1
           fi
       - name: go mod tidy
-        run: go mod tidy -diff
+        run: go mod tidy -diff && (cd acceptance && go mod tidy -diff)
       - name: go vet
-        run: go vet ./...
+        run: go vet ./... && (cd acceptance && go vet ./...)
       - name: staticcheck
-        run: go run "honnef.co/go/tools/cmd/staticcheck@${STATICCHECK_VERSION}" ./...
+        run: |
+          go run "honnef.co/go/tools/cmd/staticcheck@${STATICCHECK_VERSION}" ./...
+          cd acceptance && go run "honnef.co/go/tools/cmd/staticcheck@${STATICCHECK_VERSION}" ./...
+      - name: Acceptance suite imports nothing from the main module (§3.2)
+        working-directory: acceptance
+        run: go test -count=1 -run TestNoImportsFromTheMainModule .
       - name: Dependency direction (§4.3)
         run: go test -count=1 ./internal/archtest
       - name: Hot path section (§5.4)
@@ -74,3 +79,42 @@ jobs:
         run: go version && go env GOOS GOARCH
       - name: go test -race
         run: go test -race ./...
+
+  acceptance:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm, macos-15, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            acceptance/go.sum
+      - name: Git
+        run: git --version
+      - name: Acceptance suite and coverage check (§3)
+        working-directory: acceptance
+        run: go test -count=1 -v ./... 2>&1 | tee "$RUNNER_TEMP/acceptance.log"; exit "${PIPESTATUS[0]}"
+        shell: bash
+      - name: Summary
+        if: always()
+        shell: bash
+        run: |
+          log="$RUNNER_TEMP/acceptance.log"
+          [ -f "$log" ] || exit 0
+          {
+            echo "### Acceptance on ${{ matrix.os }}"
+            echo
+            echo "| Result | Count |"
+            echo "|---|---|"
+            for r in PASS FAIL SKIP; do
+              echo "| $r | $(grep -cE "^ *--- $r: TestScenarios/[^/]+/" "$log" || true) |"
+            done
+            echo
+            echo "Skipped scenarios are pending: their milestone is later than \`current\` in acceptance/requirements.toml."
+          } >> "$GITHUB_STEP_SUMMARY"

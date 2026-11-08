@@ -1,0 +1,6 @@
+# The launcher fetches the pinned binary from the local mirror, refuses a wrong checksum, and does not fetch a second time.
+# req: R15 R16
+# source: C1 test_generic.py::LauncherTests::test_pin_fetches_that_commit_and_runs_it
+# milestone: M1
+
+unwritten
