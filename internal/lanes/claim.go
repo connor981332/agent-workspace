@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/connor981332/agent-workspace/internal/config"
+	"github.com/connor981332/agent-workspace/internal/forge"
 	"github.com/connor981332/agent-workspace/internal/gitx/run"
 	"github.com/connor981332/agent-workspace/internal/state"
 	"github.com/connor981332/agent-workspace/internal/workspace"
@@ -23,6 +24,9 @@ type Manager struct {
 	WS    *workspace.Workspace
 	Cfg   *config.Config
 	Store *state.Store
+
+	forges        map[string]*forge.Client // by host, for one sweep
+	forgeDeadline time.Time
 }
 
 // Identity is the session asking, when it is known.

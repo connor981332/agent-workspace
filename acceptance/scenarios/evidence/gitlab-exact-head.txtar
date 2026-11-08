@@ -1,6 +1,46 @@
-# evidence/gitlab-exact-head: to be written (plan §3.5).
+# GitLab proves a merge only for a merge request from this project into the base at exactly the
+# lane's head: a different head, target or source project proves nothing, and an API that cannot
+# be read is unknown.
 # req: R71
-# source: C1 test_exact_mr_evidence
+# source: C1 test_lanes.py::test_exact_mr_evidence
 # milestone: M2
 
-unwritten
+workspace solo --single --init --forge gitlab
+exec aw attach 'add feature flag'
+lane-commit 01 a.txt 'first'
+lane-commit 01 b.txt 'second'
+git-squash . aw/feature-flag
+stubs glab
+
+exec aw sweep --json
+stdout '\(gitlab: unknown \(GitLab unavailable\)\)'
+
+forge-reply glab '^projects/acceptance%2Fsolo/merge_requests\?' $WORK/mrs.json
+forge-reply glab '^projects/acceptance%2Fsolo/merge_requests/3$' $WORK/mr3.json
+forge-reply glab '^projects/acceptance%2Fsolo$' $WORK/project.json
+exec sh $WORK/mr.sh exact
+exec aw sweep --json
+json stdout .lanes[0].action recycle
+json stdout .lanes[0].repos[0].proof forge
+exec sh $WORK/mr.sh head
+exec aw sweep --json
+stdout '\(gitlab: source head mismatch\)'
+exec sh $WORK/mr.sh target
+exec aw sweep --json
+stdout '\(gitlab: confirmed absent\)'
+exec sh $WORK/mr.sh source
+exec aw sweep --json
+stdout '\(gitlab: source head mismatch\)'
+
+-- project.json --
+{"id": 10, "path_with_namespace": "acceptance/solo"}
+-- mr.sh --
+head=$(git -C "$OWNER/.worktrees/01" rev-parse HEAD)
+target=main source=10 sha=$head
+case $1 in
+head) sha=0000000000000000000000000000000000000000 ;;
+target) target=develop ;;
+source) source=99 ;;
+esac
+printf '[{"iid": 3, "source_branch": "aw/feature-flag", "target_branch": "%s", "source_project_id": %s, "target_project_id": 10}]' "$target" "$source" > "$WORK/mrs.json"
+printf '{"iid": 3, "state": "merged", "web_url": "https://gitlab.example.com/acceptance/solo/-/merge_requests/3", "diff_refs": {"head_sha": "%s"}}' "$sha" > "$WORK/mr3.json"

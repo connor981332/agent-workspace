@@ -1,6 +1,41 @@
-# evidence/glab-stub: to be written (plan §3.5).
+# GitLab states other than merged keep the lane (a draft, open or closed merge request), two exact
+# matches are ambiguous, invalid JSON is unknown, and each API path is asked once per sweep.
 # req: R71
-# source: C1 test_fake_glab_structured_responses_and_dedup
+# source: C1 test_lanes.py::test_fake_glab_structured_responses_and_dedup
 # milestone: M2
 
-unwritten
+workspace solo --single --init --forge gitlab
+exec aw attach 'add feature flag'
+lane-commit 01 a.txt 'first'
+lane-commit 01 b.txt 'second'
+git-squash . aw/feature-flag
+stubs glab
+forge-reply glab '^projects/acceptance%2Fsolo/merge_requests\?' $WORK/mrs.json
+forge-reply glab '^projects/acceptance%2Fsolo/merge_requests/[0-9]+$' $WORK/mr.json
+forge-reply glab '^projects/acceptance%2Fsolo$' $WORK/project.json
+
+exec sh $WORK/mr.sh opened true 1
+exec aw sweep --json
+stdout '\(gitlab: change !3 is opened\)'
+json stdout .lanes[0].repos[0].forge.draft true
+exec sh $WORK/mr.sh closed false 1
+exec aw sweep --json
+stdout '\(gitlab: change !3 is closed\)'
+exec sh $WORK/mr.sh merged false 2
+exec sh -c ': > "$STUB_LOG"'
+exec aw sweep --json
+stdout '\(gitlab: ambiguous\)'
+exec sh -c 'grep -c "glab api --hostname gitlab.example.com projects/acceptance%2Fsolo$" "$STUB_LOG"'
+stdout '^1$'
+exec sh -c 'echo "not json" > "$WORK/mrs.json"'
+exec aw sweep --json
+stdout '\(gitlab: unknown \(GitLab unavailable\)\)'
+
+-- project.json --
+{"id": 10}
+-- mr.sh --
+# mr.sh <state> <draft> <how many matching merge requests>
+head=$(git -C "$OWNER/.worktrees/01" rev-parse HEAD)
+one='{"iid": 3, "source_branch": "aw/feature-flag", "target_branch": "main", "source_project_id": 10, "target_project_id": 10}'
+if [ "$3" = 2 ]; then printf '[%s, %s]' "$one" "$one" > "$WORK/mrs.json"; else printf '[%s]' "$one" > "$WORK/mrs.json"; fi
+printf '{"iid": 3, "state": "%s", "draft": %s, "diff_refs": {"head_sha": "%s"}}' "$1" "$2" "$head" > "$WORK/mr.json"

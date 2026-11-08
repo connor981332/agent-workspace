@@ -1,6 +1,50 @@
-# evidence/github-not-exact: to be written (plan §3.5).
+# Anything short of exactly one merged pull request from the same repository at exactly the lane's
+# head proves nothing: a moved head, a fork, a deleted repository, another base, none, two matches.
 # req: R25 R71
-# source: C1 ForgeTests.test_everything_short_of_one_exact_match_is_not_merged
+# source: C1 test_generic.py::ForgeTests::test_everything_short_of_one_exact_match_is_not_merged
 # milestone: M2
 
-unwritten
+workspace solo --single --init --forge github
+exec aw attach 'add feature flag'
+lane-commit 01 a.txt 'first'
+lane-commit 01 b.txt 'second'
+git-squash . aw/feature-flag
+stubs gh
+forge-reply gh '^repos/acceptance/solo/pulls\?' $WORK/pulls.json
+
+exec sh $WORK/pulls.sh moved
+exec aw sweep --json
+stdout '\(github: source head mismatch\)'
+exec sh $WORK/pulls.sh fork
+exec aw sweep --json
+stdout '\(github: source head mismatch\)'
+exec sh $WORK/pulls.sh deleted
+exec aw sweep --json
+stdout '\(github: source head mismatch\)'
+exec sh $WORK/pulls.sh otherbase
+exec aw sweep --json
+stdout '\(github: confirmed absent\)'
+exec sh $WORK/pulls.sh none
+exec aw sweep --json
+stdout '\(github: confirmed absent\)'
+exec sh $WORK/pulls.sh two
+exec aw sweep --json
+stdout '\(github: ambiguous\)'
+exec aw sweep --apply --json
+json stdout .lanes[0].action keep
+exists .worktrees/01/a.txt
+
+-- pulls.sh --
+head=$(git -C "$OWNER/.worktrees/01" rev-parse HEAD)
+pr() { # number sha head-repo base-ref
+	printf '{"number": %s, "state": "closed", "merged_at": "2026-11-08T00:00:00Z", "head": {"ref": "aw/feature-flag", "sha": "%s", "repo": %s}, "base": {"ref": "%s", "repo": {"full_name": "acceptance/solo"}}}' "$1" "$2" "$3" "$4"
+}
+same='{"full_name": "acceptance/solo"}'
+case $1 in
+moved) echo "[$(pr 7 0000000000000000000000000000000000000000 "$same" main)]" ;;
+fork) echo "[$(pr 7 "$head" '{"full_name": "attacker/solo"}' main)]" ;;
+deleted) echo "[$(pr 7 "$head" null main)]" ;;
+otherbase) echo "[$(pr 7 "$head" "$same" develop)]" ;;
+none) echo "[]" ;;
+two) echo "[$(pr 7 "$head" "$same" main), $(pr 8 "$head" "$same" main)]" ;;
+esac > "$WORK/pulls.json"

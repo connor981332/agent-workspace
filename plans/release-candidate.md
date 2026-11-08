@@ -16,8 +16,7 @@ milestone named in its row.
 
 **Branches / MRs:** PRs [#5](https://github.com/connor981332/agent-workspace/pull/5) to
 [#15](https://github.com/connor981332/agent-workspace/pull/15), merged: the plan and settled
-questions (#5, #6), M0 (#7 to #11), M1 (#12 to #16), M2 lanes (#17). `m2/sweep` (M2 merge proof,
-sweep, discard, park, finish; open).
+questions (#5, #6), M0 (#7 to #11), M1 (#12 to #16), M2 lanes (#17) and sweep (#18). `m2/forge` (M2 forge proof, open).
 `spike/hot-path` (T3 and the ref-hook spike, never merged).
 
 **Done:** Read the spec and both candidates and wrote this plan. Settled the spec's five open
@@ -43,12 +42,13 @@ are recorded).
 **In progress:** M2. The M2 rows of §3.5 are pending scenario files, with seven rows that need
 hooks, seats or `aw open` moved to M3 and M4. S4 and S17 are recorded in the spec. Done: state
 schema 2, lane names from purpose, `aw attach` with worktrees, links, the owner pointer, secret
-links, lane guards, the lane limit, `--branch` and the pool (PR #17). Now (`m2/sweep`): local merge
-proof (ancestry, patch equivalence), `aw sweep [--apply] [--retry]` with the warm pool, retention
-and a journal, `aw discard` with archived refs, `aw park`/`unpark`, and `aw finish` with handoffs
-(state schema 3). 45 of the 73 M2 scenarios are written.
+links, lane guards, the lane limit, `--branch` and the pool (PR #17). Local merge proof (ancestry,
+patch equivalence), `aw sweep [--apply] [--retry]` with the warm pool, retention and a journal,
+`aw discard` with archived refs, `aw park`/`unpark`, and `aw finish` with handoffs (PR #18). Now
+(`m2/forge`): forge exact-head proof through `gh` and `glab`. 51 of the 73 M2 scenarios are
+written.
 
-**Next step:** forge proof (`gh`, `glab`), sessions (liveness, interruption, handoff reading),
+**Next step:** sessions (liveness, interruption, handoff reading),
 `aw new`, `aw run`, the dashboard and `aw recap`, the M2 budgets, then the first pre-release.
 
 **Pending manual checks:** the hot-path and budget benchmarks on an Apple Silicon laptop (T3, M1;
