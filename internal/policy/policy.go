@@ -65,6 +65,8 @@ type Scope struct {
 	Secrets []string
 	// Servers are the configured server commands, which only aw serve may start.
 	Servers []ServerCommand
+	// Guards are the team's own guards, in name order.
+	Guards []TeamGuard
 	// AskSupported is whether the harness can ask the human; if not, an ask is a deny.
 	AskSupported bool
 }
@@ -173,6 +175,9 @@ func decideFiles(s Scope, c Call, cwd shell.Dir) Decision {
 			if d := s.selfModification(abs, p); d.Verdict != Allow {
 				return d
 			}
+			if d := s.guardsOnPath(abs); d.Verdict != Allow {
+				return d
+			}
 		}
 	}
 	return allow()
@@ -186,7 +191,7 @@ func decideShell(s Scope, src string, cwd shell.Dir) Decision {
 	var asks []Decision
 	for _, c := range p.Commands {
 		for _, rule := range []func(Scope, shell.Command) Decision{
-			pathsRule, ownerOnlyRule, gitRule, containerRule, killRule, serverRule, secretRule, selfModRule, unattachedRule, publicationRule,
+			pathsRule, ownerOnlyRule, gitRule, containerRule, killRule, serverRule, secretRule, selfModRule, unattachedRule, publicationRule, teamGuardRule,
 		} {
 			switch d := rule(s, c); d.Verdict {
 			case Deny:

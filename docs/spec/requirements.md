@@ -129,7 +129,11 @@ expected but can follow.
 - **R53.** Composed personal content never dirties the team repository. Each adapter declares a
   gitignored personal file its harness reads (`CLAUDE.local.md`), which `aw` composes and adds to
   `.git/info/exclude`. A harness without one gets it in its session-start context.
-- **R54.** Teams can add guards and hooks that declare their requirements.
+- **R54.** Teams can add guards and hooks that declare their requirements. A guard is declarative:
+  command patterns over the parsed command and file patterns, decided in-process (`[guards.<name>]`,
+  in the [configuration reference](../reference/config.md)). A guard's `requires` names files that
+  must exist; while one is missing, everything the guard matches is refused. Executable guards are
+  not part of the first release, because a process per tool call cannot fit the guard budget.
 - **R55.** Shell commands are parsed into a syntax tree for guard decisions. A command whose effect
   the guard cannot determine (for example a computed path into another lane) is refused.
 - **R56.** Guard behavior is identical across supported harnesses. A harness parity suite verifies it

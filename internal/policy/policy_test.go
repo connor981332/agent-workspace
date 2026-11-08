@@ -397,3 +397,40 @@ func TestPairShellSelfModification(t *testing.T) {
 		}
 	}
 }
+
+func TestTeamGuards(t *testing.T) {
+	f := newFixture(t)
+	guards := []TeamGuard{
+		{Name: "apply", Commands: [][]string{{"terraform", "apply"}, {"git", "push", "--tags"}}, Message: "no"},
+		{Name: "schema", Paths: []string{"web/db/schema.rb", "**/*.lock"}, Message: "generated"},
+		{Name: "gone", Commands: [][]string{{"deploy"}}, Ask: true, Message: "ask", Requires: []string{"missing/file"}},
+	}
+	pair := Scope{Role: Pair, Owner: f.owner, Home: f.home, AskSupported: true, Guards: guards}
+	for cmd, want := range map[string]Verdict{
+		"terraform plan":                 Allow,
+		"terraform apply":                Deny,
+		"/usr/bin/terraform apply -lock": Deny,
+		"terraform -chdir=x apply":       Deny,
+		"git push origin":                Ask, // the publication policy, not the guard
+		"git push --tags":                Deny,
+		"deploy now":                     Deny, // requirement unmet: an ask guard refuses
+		"echo x > web/db/schema.rb":      Deny,
+		"echo x > web/db/other.rb":       Allow,
+		"echo x > a/b/pnpm.lock":         Deny,
+		"rm web/db/schema.rb":            Deny,
+		"cat web/db/schema.rb":           Allow,
+		"echo x > \"$OUT\"":              Deny, // it could be the guarded file
+	} {
+		if d := Decide(pair, Call{Tool: Shell, Cwd: f.owner, Command: cmd}); d.Verdict != want {
+			t.Errorf("%s: got %v (%s), want %v", cmd, d.Verdict, d.Message, want)
+		}
+	}
+	lane := Scope{Role: Lane, Owner: f.owner, Home: f.home, LaneRoot: f.lane, LaneName: "x", Guards: guards,
+		LaneDirs: []string{f.lane, f.state, filepath.Join(f.owner, "web", ".worktrees", "01"), filepath.Join(f.owner, "api", ".worktrees", "01")}}
+	if d := Decide(lane, Call{Tool: Write, Cwd: f.lane, Paths: []string{"web/db/schema.rb"}}); d.Rule != "team-guard" {
+		t.Errorf("a lane's copy through its link: %+v", d)
+	}
+	if d := Decide(lane, Call{Tool: Read, Cwd: f.lane, Paths: []string{"web/db/schema.rb"}}); d.Verdict != Allow {
+		t.Errorf("reading a guarded file: %+v", d)
+	}
+}

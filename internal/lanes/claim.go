@@ -18,6 +18,7 @@ import (
 	"github.com/connor981332/agent-workspace/internal/gitx/run"
 	"github.com/connor981332/agent-workspace/internal/platform"
 	"github.com/connor981332/agent-workspace/internal/state"
+	"github.com/connor981332/agent-workspace/internal/timing"
 	"github.com/connor981332/agent-workspace/internal/workspace"
 )
 
@@ -83,9 +84,14 @@ func (m *Manager) Root(n int) string {
 // the pool, else a new one. Git work happens outside any lock: the lane is reserved in one
 // transaction, built, then recorded in another.
 func (m *Manager) Claim(ctx context.Context, req ClaimRequest) (*Claimed, error) {
+	t := timing.Start()
+	if timing.Debug() {
+		defer t.Report(os.Stderr, "claim")
+	}
 	if err := m.authorizeRefs(ctx); err != nil {
 		return nil, err
 	}
+	t.Mark("authorize")
 	purpose := strings.TrimSpace(req.Purpose)
 	if purpose == "" {
 		return nil, errors.New(`a lane needs a purpose → say what the work is, e.g. aw attach "fix checkout tax rounding"`)
@@ -100,6 +106,7 @@ func (m *Manager) Claim(ctx context.Context, req ClaimRequest) (*Claimed, error)
 	if err != nil {
 		return nil, err
 	}
+	t.Mark("plan")
 
 	var lane state.Lane
 	var fromPool, reused bool
@@ -158,7 +165,9 @@ func (m *Manager) Claim(ctx context.Context, req ClaimRequest) (*Claimed, error)
 		return m.waitBuilt(ctx, lane.Number, true)
 	}
 
+	t.Mark("reserve")
 	repos, buildErr := m.build(ctx, lane, plans, fromPool)
+	t.Mark("build")
 	if buildErr != nil {
 		if rbErr := m.rollback(ctx, lane, repos, fromPool, req.Who); rbErr != nil {
 			return nil, fmt.Errorf("%w; undoing it also failed (%v), so lane %s is left incomplete and protected → fix the cause, then run aw discard %s",
@@ -176,6 +185,7 @@ func (m *Manager) Claim(ctx context.Context, req ClaimRequest) (*Claimed, error)
 	if err != nil {
 		return nil, err
 	}
+	t.Mark("record")
 	compose.CopyPersonal(m.WS.Owner, m.Root(lane.Number))
 	return &Claimed{Lane: lane, Dir: Dir(lane.Number, m.Cfg.Lanes.Max), Root: m.Root(lane.Number), Repos: repos, FromPool: fromPool}, nil
 }

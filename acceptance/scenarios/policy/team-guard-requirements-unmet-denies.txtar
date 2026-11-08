@@ -1,6 +1,24 @@
-# policy/team-guard-requirements-unmet-denies: to be written (plan §3.5).
+# A guard declares what it needs. While that is missing it cannot do its job, so everything it would
+# match is refused, even if the guard only asks. Calls it does not match are not affected.
 # req: R54
 # source: spec (no candidate source)
 # milestone: M3
 
-unwritten
+workspace solo --single --init
+owner-may-change
+exec sh -c 'printf "\n[guards.deploy]\ncommands = [\"./deploy\"]\naction = \"ask\"\nmessage = \"Check first\"\nrequires = [\"bin/deploy-check\"]\n" >> workspace.toml'
+exec aw attach 'add feature flag'
+cd .worktrees/01
+
+! exec awtest-hook bash './deploy now'
+stderr 'team guard deploy needs bin/deploy-check, which is missing'
+exec awtest-hook bash 'ls'
+! stdout .
+
+mkdir $OWNER/bin
+cp $WORK/check $OWNER/bin/deploy-check
+exec awtest-hook bash './deploy now'
+stdout '"permissionDecision":"ask"'
+
+-- check --
+#!/bin/sh

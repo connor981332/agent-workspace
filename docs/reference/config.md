@@ -156,6 +156,20 @@ Named team commands, run with aw <name>.
 | `needs` | array of strings | — | Resources it holds while it runs. |
 | `after` | array of strings | — | Lifecycle steps to wait for besides the defaults (prepare, install, setup or reset). |
 
+## `[guards.<name>]`
+
+The team's own guards (R54), decided in-process on every tool call. The key names the guard. To stop people overriding them, lock guards.*.
+
+`<name>`: lowercase letters, digits and hyphens, starting with a letter.
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `commands` | array of strings | — | Command patterns, such as "terraform apply". * matches any one word. Options may come between the words, and a word whose value cannot be determined counts as a match. |
+| `paths` | array of strings | — | Files agents may not write, from the workspace root. ** matches any number of directories. A lane's copy of a file counts as that file. |
+| `action` | one of `"deny"`, `"ask"` | `"deny"` | What happens to a matching call. |
+| `message` | string | — | Why it is refused, and what to do instead. |
+| `requires` | array of strings | — | Files that must exist, from the workspace root. While one is missing, everything the guard matches is refused. |
+
 ## `[locks]`
 
 Keys the individual layer may not override. Team layer only.
