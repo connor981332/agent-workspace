@@ -1,6 +1,21 @@
-# recap/json-compact: to be written (plan §3.5).
+# aw recap --json is one compact line, and a handoff shows a plan only when aw finish was given one:
+# a plan is never guessed from file names in the lane.
 # req: R81 R93
 # source: C1 test_no_guessing_plan_association_and_json_is_compact
 # milestone: M2
 
-unwritten
+workspace solo --single --init
+exec aw attach 'add feature flag'
+lane-commit 01 plans/add-feature-flag.md '# Plan'
+lane-commit 01 PLAN.md '# Plan'
+exec aw finish feature-flag --summary 'Ready.'
+exec sh -c 'aw recap --json | wc -l'
+stdout '^ *1$'
+exec aw recap --json
+! stdout '": '
+json stdout .lanes[0].handoff.summary Ready.
+! stdout '"plan"'
+
+exec aw finish feature-flag --summary 'Ready.' --plan plans/add-feature-flag.md
+exec aw recap --json
+json stdout .lanes[0].handoff.plan plans/add-feature-flag.md

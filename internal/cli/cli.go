@@ -64,17 +64,21 @@ func newRoot(stdout, stderr io.Writer) *cobra.Command {
 		Short:         "Agent Workspace: parallel lanes for coding agents",
 		SilenceUsage:  true,
 		SilenceErrors: true,
-		// The dashboard comes in M2. Until then, aw alone shows help. The root must be runnable for
-		// cobra to apply Args, which is what turns an unknown command into a usage error.
+		// aw alone is the dashboard. The root must be runnable for cobra to apply Args, which is what
+		// turns an unknown command into a usage error.
 		Args: cobra.NoArgs,
-		RunE: run(func(cmd *cobra.Command, _ []string) error { return cmd.Help() }),
+		RunE: run(func(cmd *cobra.Command, _ []string) error {
+			asJSON, _ := cmd.Flags().GetBool("json")
+			return dashboard(cmd, asJSON)
+		}),
 	}
+	root.Flags().Bool("json", false, "print the dashboard as JSON")
 	root.SetOut(stdout)
 	root.SetErr(stderr)
 	root.CompletionOptions.HiddenDefaultCmd = true
 
 	root.AddCommand(newVersionCmd(), newConfigCmd(), newInitCmd(), newDoctorCmd(), newWhoamiCmd(), newAttachCmd(),
-		newSweepCmd(), newDiscardCmd(), newParkCmd(false), newParkCmd(true), newFinishCmd(), newRunCmd(), newNewCmd())
+		newSweepCmd(), newDiscardCmd(), newParkCmd(false), newParkCmd(true), newFinishCmd(), newRunCmd(), newNewCmd(), newRecapCmd())
 	return root
 }
 

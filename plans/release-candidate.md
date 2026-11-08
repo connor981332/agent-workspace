@@ -46,12 +46,12 @@ schema 2, lane names from purpose, `aw attach` with worktrees, links, the owner 
 links, lane guards, the lane limit, `--branch` and the pool (PR #17). Local merge proof (ancestry,
 patch equivalence), `aw sweep [--apply] [--retry]` with the warm pool, retention and a journal,
 `aw discard` with archived refs, `aw park`/`unpark`, and `aw finish` with handoffs (PR #18). Forge
-exact-head proof through `gh` and `glab` (PR #19). Now (`m2/sessions`): process identity (PID and
-start time), session recovery, `aw new`, `aw run` on the host runner. 61 of the 73 M2 scenarios
-are written.
+exact-head proof through `gh` and `glab` (PR #19). Process identity (PID and start time), session
+recovery, `aw new`, `aw run` on the host runner (PR #20). Now (`m2/recap`): the `aw` dashboard and
+`aw recap [--remote] [--all]`, and the M2 budgets in the bench (dashboard 46 ms, attach 36 ms, new
+39 ms p99 on the Linux laptop). All 73 M2 scenarios are written.
 
-**Next step:** the dashboard and `aw recap`, the M2 budgets, then the release workflow and the first
-pre-release, v0.0.2.
+**Next step:** the release workflow and the first pre-release, v0.0.2, which completes M2.
 
 **Pending manual checks:** the hot-path and budget benchmarks on an Apple Silicon laptop (T3, M1;
 docs/dev/benchmarks.md).

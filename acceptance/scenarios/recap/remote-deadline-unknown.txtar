@@ -1,6 +1,22 @@
-# recap/remote-deadline-unknown: to be written (plan §3.5).
+# aw recap --remote asks the forge within a deadline. A forge that does not answer in time shows as
+# unknown (deadline) instead of holding the recap, which still returns promptly; without --remote
+# the forge is not asked at all.
 # req: R5 R81
 # source: C1 test_deduplication_owner_action_and_remote_budget
 # milestone: M2
 
-unwritten
+workspace shop --init --forge github
+exec aw attach 'add feature flag'
+lane-commit 01 web/a.txt 'work'
+lane-commit 01 api/b.txt 'work'
+stubs gh
+
+exec aw recap
+! exists $STUB_LOG
+
+env STUB_DELAY=30
+exec sh -c 'start=$(date +%s); aw recap --remote --json > "$WORK/remote.json"; echo "took=$(( $(date +%s) - start ))"'
+stdout '^took=[5-8]$'
+exec cat $WORK/remote.json
+json stdout .lanes[0].repos[0].remote.availability 'unknown (deadline)'
+json stdout .lanes[0].repos[1].remote.availability 'unknown (deadline)'

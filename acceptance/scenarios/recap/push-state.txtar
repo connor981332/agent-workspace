@@ -1,6 +1,33 @@
-# recap/push-state: to be written (plan §3.5).
+# aw recap shows each repository's push state: not pushed, pushed, or how far ahead of what was
+# pushed. A push without an upstream still counts, through origin's remote-tracking branch. It
+# reads only local refs: no network.
 # req: R81
 # source: C1 test_push_states_and_remote_mapping
 # milestone: M2
 
-unwritten
+workspace solo --single --init
+exec aw attach 'add feature flag'
+lane-commit 01 a.txt 'first'
+exec aw recap --json
+json stdout .lanes[0].repos[0].push 'not pushed'
+
+exec git -C .worktrees/01 push -q origin HEAD
+exec aw recap --json
+json stdout .lanes[0].repos[0].push pushed
+lane-commit 01 b.txt 'second'
+exec aw recap --json
+json stdout .lanes[0].repos[0].push '1 ahead of origin/aw/feature-flag'
+
+exec git -C .worktrees/01 push -q -u origin HEAD
+exec aw recap
+stdout 'solo [0-9a-f]{7}: pushed'
+lane-commit 01 c.txt 'third'
+lane-commit 01 d.txt 'fourth'
+exec aw recap
+stdout 'solo [0-9a-f]{7}: 2 ahead of origin/aw/feature-flag'
+
+# The remote-tracking branch is gone (pruned, say): not pushed, as far as aw can tell offline.
+exec git -C .worktrees/01 branch -q --unset-upstream
+exec git -C .worktrees/01 update-ref -d refs/remotes/origin/aw/feature-flag
+exec aw recap --json
+json stdout .lanes[0].repos[0].push 'not pushed'

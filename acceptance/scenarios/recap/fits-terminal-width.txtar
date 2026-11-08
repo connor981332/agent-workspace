@@ -1,6 +1,19 @@
-# recap/fits-terminal-width: to be written (plan §3.5).
+# aw recap fits the terminal: no line is wider than it, long purposes and handoffs are cut with
+# "…" (counted as one character), and a long handoff is shortened at a clause boundary. Without a known width nothing is cut.
 # req: R81 R93
 # source: C1 test_no_guessing_plan_association_and_json_is_compact
 # milestone: M2
 
-unwritten
+workspace shop --init
+exec aw attach 'make the checkout page handle every currency that the payment provider supports today'
+lane-commit 01 web/x.txt 'work'
+exec aw finish --summary 'Handles every currency, including the zero-decimal ones. Verify JPY and KRW by hand in the sandbox, then check the receipts. Rounding follows the provider.' 01
+
+env COLUMNS=60
+exec aw recap
+stdout '…'
+stdout 'handoff: "Handles every currency …"$'
+exec sh -c 'aw recap | sed "s/…/./g" | awk "{ if (length(\$0) > 60) { print \"too wide: \" \$0; bad = 1 } } END { exit bad }"'
+env COLUMNS=
+exec aw recap
+stdout 'Verify JPY and KRW by hand in the sandbox, then check the receipts. Rounding follows the provider."'

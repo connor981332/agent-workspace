@@ -1,6 +1,30 @@
-# recap/after-reboot-interrupted: to be written (plan §3.5).
+# After a reboot the sessions' processes are gone: aw recap shows them as interrupted, needing you,
+# without recording anything, and the next state-changing command records them as interrupted.
 # req: R80
 # source: spec (no candidate source)
 # milestone: M2
 
-unwritten
+workspace solo --single --init
+session s-1 claude
+exec aw attach 'fix checkout tax rounding'
+lane-commit 01 tax.txt 'round'
+exec sh -c 'echo wip > .worktrees/01/wip.txt'
+exec aw recap
+stdout '(?s)^NEEDS YOU\n  \(none\)\nRUNNING\n  checkout-tax +session running'
+
+# The reboot: every process is gone.
+end-session s-1
+exec sh -c 'cksum .git/aw/state.db*'
+cp stdout $WORK/before
+exec aw recap
+stdout '(?s)^NEEDS YOU\n  checkout-tax +interrupted +solo: 1 dirty, 1 ahead  last \d\d:\d\d +"fix checkout tax rounding"\n.*RUNNING\n  \(none\)'
+exec aw recap --json
+json stdout .lanes[0].sessions[0].state interrupted
+exec sh -c 'cksum .git/aw/state.db*'
+cmp stdout $WORK/before
+
+# The first state-changing command records it; it is still shown the same way.
+exec aw attach 'another thing'
+exec aw recap --json
+json stdout .lanes[0].sessions[0].state interrupted
+json stdout .lanes[0].section 'needs you'

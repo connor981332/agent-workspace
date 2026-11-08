@@ -1,6 +1,32 @@
-# recap/lane-scope: to be written (plan §3.5).
+# In a lane, aw recap shows that lane only; --all shows every lane. In the owner checkout it shows
+# every lane.
 # req: R81
 # source: C1 test_scope_missing_plan_stale_handoff_and_untracked_work
 # milestone: M2
 
-unwritten
+workspace shop --init
+exec aw attach 'first thing'
+lane-commit 01 web/y.txt 'work'
+exec aw attach 'second thing'
+exec sh -c 'echo new > web/.worktrees/02/untracked.txt'
+
+exec aw recap
+stdout 'first-thing'
+stdout 'second-thing +no session attached +web: 1 dirty'
+
+cd .worktrees/02
+exec aw recap
+stdout 'second-thing'
+! stdout 'first-thing'
+exec aw recap --json
+json stdout .lanes[0].name second-thing
+json stdout .lanes[0].repos[2].project web
+json stdout .lanes[0].repos[2].dirty 1
+exec aw recap --all
+stdout 'first-thing'
+stdout 'second-thing'
+
+cd $OWNER/api/.worktrees/01
+exec aw recap
+stdout 'first-thing'
+! stdout 'second-thing'

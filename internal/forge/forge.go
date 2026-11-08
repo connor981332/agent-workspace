@@ -111,7 +111,9 @@ func (c *Client) call(ctx context.Context, args []string) any {
 	c.calls++
 	ctx, cancel := context.WithTimeout(ctx, min(5*time.Second, left))
 	defer cancel()
-	out, err := exec.CommandContext(ctx, args[0], args[1:]...).Output()
+	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
+	cmd.WaitDelay = 500 * time.Millisecond // a child the CLI left behind must not hold its output open
+	out, err := cmd.Output()
 	var v any
 	if err == nil && json.Unmarshal(out, &v) != nil {
 		v = nil

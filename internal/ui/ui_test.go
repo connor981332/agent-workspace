@@ -18,3 +18,35 @@ func TestClean(t *testing.T) {
 		}
 	}
 }
+
+func TestBrief(t *testing.T) {
+	cases := []struct {
+		in   string
+		max  int
+		want string
+	}{
+		{"Short note.", 40, "Short note."},
+		{"Simulator tests pass. Verify Apple sign-in by hand before merging.", 40, "Simulator tests pass. …"},
+		{"Adds rounding for JPY; the EUR path is unchanged and tested", 40, "Adds rounding for JPY …"},
+		{"one two three four five six seven eight nine ten", 20, "one two three four…"},
+		{"averyveryverylongwordwithoutanyspaces", 10, "averyvery…"},
+		{"  spread\n over\tlines  ", 40, "spread over lines"},
+	}
+	for _, c := range cases {
+		if got := Brief(c.in, c.max); got != c.want {
+			t.Errorf("Brief(%q, %d) = %q, want %q", c.in, c.max, got, c.want)
+		}
+	}
+}
+
+func TestFit(t *testing.T) {
+	if got := Fit("abcdef", 4); got != "abc…" {
+		t.Errorf("Fit = %q", got)
+	}
+	if got := Fit("ünï", 3); got != "ünï" {
+		t.Errorf("Fit = %q", got)
+	}
+	if got := Fit("abc", 0); got != "abc" {
+		t.Errorf("Fit = %q", got)
+	}
+}

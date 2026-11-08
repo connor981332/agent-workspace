@@ -25,11 +25,17 @@ func TestFind(t *testing.T) {
 	write(t, filepath.Join(lane, ".aw", "owner"), owner+"\n")
 	write(t, filepath.Join(lane, "workspace.toml"), "") // the lane's own copy is not the owner's
 	write(t, filepath.Join(owner, "web", "src", "x"), "")
+	webLane := filepath.Join(owner, "web", ".worktrees", "03", "src")
+	write(t, filepath.Join(webLane, "x"), "")
+	stray := filepath.Join(owner, "web", ".worktrees", "07")
+	write(t, filepath.Join(stray, "x"), "") // no lane root 07: the owner checkout
 
 	cases := map[string]Workspace{
 		owner:                              {Owner: owner},
 		filepath.Join(owner, "web", "src"): {Owner: owner},
 		lane:                               {Owner: owner, LaneRoot: lane},
+		webLane:                            {Owner: owner, LaneRoot: lane}, // a project worktree by its real path
+		stray:                              {Owner: owner},
 	}
 	for dir, want := range cases {
 		got, err := Find(dir)
