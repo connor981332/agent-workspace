@@ -59,6 +59,39 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
         run: sh .github/scripts/check-hot-path.sh "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}"
 
+  release-snapshot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: v2.20.0
+          args: check
+      - uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: v2.20.0
+          args: release --snapshot --clean
+      - name: Check the assets
+        run: sh .github/scripts/check-release-assets.sh dist
+      - name: Keep the first build's checksums
+        run: cp dist/checksums.txt "$RUNNER_TEMP/first.txt"
+      - name: Build again
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: v2.20.0
+          args: release --snapshot --clean
+      - name: Reproducible
+        run: diff "$RUNNER_TEMP/first.txt" dist/checksums.txt && echo "Two builds gave identical binaries."
+
   unit:
     strategy:
       fail-fast: false
