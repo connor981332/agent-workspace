@@ -3,4 +3,54 @@
 # source: spec (no candidate source)
 # milestone: M1
 
-unwritten
+workspace shop
+
+# The unlocked key is overridden; the locked one keeps the team's value.
+exec aw config get lanes.max
+stdout '^4$'
+exec aw config get resources.rails.owner_preempts
+stdout '^true$'
+
+# validate reports the refusal as a warning, with the file, the line and the lock.
+exec aw config validate
+stdout 'workspace.toml: valid'
+stdout '^warning: .*/agent-workspace/shop.toml:5:1: resources.rails.owner_preempts is locked by the team \(lock "resources.\*.owner_preempts"\), so this setting is ignored → remove it'
+exec aw config validate --json
+json stdout .results[0].refused[0].key resources.rails.owner_preempts
+json stdout .results[0].refused[0].lock resources.*.owner_preempts
+
+# explain shows it as refused.
+exec aw config explain resources.rails.owner_preempts
+stdout 'individual +false .*shop.toml:5:1 +\(refused: the team locks "resources.\*.owner_preempts"\)'
+stdout 'team +true .*workspace.toml:12:1 +\(effective\)'
+
+# Team-only keys cannot be set by an individual at all.
+cp $WORK/team-only.toml $WORK/.home/.config/agent-workspace/shop.toml
+! exec aw config validate
+stdout 'shop.toml:2:1: workspace.namespace: can only be set in the team layer \(workspace.toml\) → remove it from this file'
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[projects.web]
+
+[resources.rails]
+kind = "process"
+capacity = 1
+
+owner_preempts = true
+
+[locks]
+keys = ["resources.*.owner_preempts"]
+-- .home/.config/agent-workspace/shop.toml --
+[lanes]
+max = 4
+
+[resources.rails]
+owner_preempts = false
+-- team-only.toml --
+[workspace]
+namespace = "elsewhere"

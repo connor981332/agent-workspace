@@ -24,8 +24,11 @@ type Requirement struct {
 type Requirements struct {
 	// Current is the latest milestone whose scenarios must pass. Scenarios from later milestones
 	// are pending. It moves forward when a milestone's scenarios are all written and passing.
-	Current string                 `toml:"current"`
-	Req     map[string]Requirement `toml:"req"`
+	Current string `toml:"current"`
+	// InProgress is the milestone being built. Its written scenarios run and must pass; those still
+	// holding only the placeholder unwritten stay pending. It is empty or the milestone after Current.
+	InProgress string                 `toml:"in_progress"`
+	Req        map[string]Requirement `toml:"req"`
 }
 
 // LoadRequirements reads and checks requirements.toml strictly.
@@ -41,6 +44,13 @@ func LoadRequirements(path string) (*Requirements, error) {
 	}
 	if _, err := ParseMilestone(r.Current); err != nil {
 		return nil, fmt.Errorf("%s: current: %v", path, err)
+	}
+	if r.InProgress != "" {
+		cur, _ := ParseMilestone(r.Current)
+		next, err := ParseMilestone(r.InProgress)
+		if err != nil || next != cur+1 {
+			return nil, fmt.Errorf("%s: in_progress must be empty or the milestone after current (%s)", path, r.Current)
+		}
 	}
 	for key, req := range r.Req {
 		if !reqRE.MatchString(key) {
@@ -71,4 +81,13 @@ func (r *Requirements) CurrentMilestone() (Milestone, error) {
 func Number(key string) int {
 	n, _ := strconv.Atoi(strings.TrimPrefix(key, "R"))
 	return n
+}
+
+// InProgressMilestone returns the milestone being built, or -1.
+func (r *Requirements) InProgressMilestone() Milestone {
+	m, err := ParseMilestone(r.InProgress)
+	if err != nil {
+		return -1
+	}
+	return m
 }

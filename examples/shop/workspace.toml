@@ -1,0 +1,92 @@
+# A multi-repository workspace: a Rails monolith whose stack fits in memory once, a Next.js app,
+# and mobile devices shared as tokens. See docs/reference/config.md.
+
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+forge = "github"
+
+[lanes]
+max = 10
+pool = 3
+retention = "14d"
+hostname = "lane-{lane}.localhost"
+
+[lanes.data.db]
+provider = "postgres"
+template = "shop_template"
+databases = ["shop_development", "shop_test"]
+env = { DATABASE_URL = "{url:shop_development}" }
+
+[lanes.data.cache]
+provider = "redis"
+
+[lifecycle]
+prepare = "scripts/lane-env"
+teardown = "scripts/lane-cleanup"
+
+[projects.monolith]
+repo = "git@github.com:shop/monolith.git"
+runner = "devcontainer"
+install = "bundle install && yarn install"
+run = "bin/rails test"
+
+[projects.monolith.lifecycle]
+setup = { run = "bin/rails db:prepare", timeout = "10m" }
+reset = "bin/rails db:seed:replant"
+
+[projects.monolith.servers.rails]
+command = "exec bin/rails server -p {port}"
+port = 3000
+owner_port = 3000
+
+[projects.monolith.servers.webpack]
+command = "exec bin/webpack-dev-server --port {port}"
+port = 3035
+after = ["rails"]
+
+[projects.web]
+repo = "git@github.com:shop/web.git"
+install = "npm ci"
+run = "npx playwright test"
+needs = ["web-stack"]
+
+[projects.web.servers.next]
+command = "exec npx next dev --port {port}"
+port = 4000
+after = ["monolith.rails"]
+
+[resources.rails]
+kind = "process"
+capacity = 1
+servers = ["monolith.rails", "monolith.webpack"]
+owner_counts = true
+owner_preempts = true
+evict_grace = "15s"
+max_hold = "45m"
+idle_expiry = "20m"
+memory = "12GB"
+
+[resources.web-stack]
+kind = "process"
+capacity = 3
+servers = ["web.next"]
+
+[resources.android]
+kind = "token"
+tokens = ["emulator-5554", "emulator-5556"]
+
+[resources.ios-sim]
+kind = "token"
+capacity = 2
+acquire = "scripts/sim-clone"
+release = "scripts/sim-erase"
+
+[commands.e2e]
+project = "web"
+run = "npx playwright test"
+needs = ["web-stack"]
+
+[locks]
+keys = ["resources.*.owner_preempts", "lanes.data"]

@@ -20,6 +20,7 @@ type Config struct {
 	GlobalAW string // directory holding the suite's global aw (a proxy to a workspace's bin/aw)
 	StubsDir string // acceptance/stubs
 	RealGit  string // absolute path of the real git
+	Repo     string // the repository under test, for scenarios that check its examples
 }
 
 // FinalCheck is the command the runner appends to every scenario: the owner checkout must be
@@ -66,6 +67,7 @@ func Setup(cfg Config) func(*testscript.Env) error {
 			"STUB_LOG="+filepath.Join(work, ".stub", "log"),
 			"STUB_STATE="+filepath.Join(work, ".stub", "state"),
 			"AW_BIN="+cfg.AWBin,
+			"AW_REPO="+cfg.Repo,
 			"LC_ALL=C",
 			"PATH="+path,
 		)

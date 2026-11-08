@@ -17,10 +17,14 @@ func Main(args []string, stdout, stderr io.Writer) int {
 	root := newRoot(stdout, stderr)
 	root.SetArgs(args)
 
-	err := root.Execute()
+	cmd, err := root.ExecuteC()
 	code := exitCode(err)
 	if err != nil {
 		fmt.Fprintf(stderr, "aw: %v\n", err)
+		var silent *silentError
+		if code == ExitError && wantsJSON(cmd) && !errors.As(err, &silent) {
+			_ = writeJSON(stdout, newJSONError(err))
+		}
 	}
 	if code == ExitUsage {
 		fmt.Fprintf(stderr, "Run '%s --help' for usage.\n", root.CommandPath())
@@ -57,7 +61,7 @@ func newRoot(stdout, stderr io.Writer) *cobra.Command {
 	root.SetErr(stderr)
 	root.CompletionOptions.HiddenDefaultCmd = true
 
-	root.AddCommand(newVersionCmd())
+	root.AddCommand(newVersionCmd(), newConfigCmd())
 	return root
 }
 

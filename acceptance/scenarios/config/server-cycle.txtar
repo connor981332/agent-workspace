@@ -3,4 +3,22 @@
 # source: C1 test_generic.py::ManifestTests::test_dependency_cycles_are_refused
 # milestone: M1
 
-unwritten
+workspace shop
+! exec aw config validate
+stdout 'servers wait for each other in a cycle: api.server → web.server → api.server → remove one of these after entries'
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[projects.web.servers.server]
+command = "x"
+port = 3000
+after = ["api.server"]
+
+[projects.api.servers.server]
+command = "x"
+port = 4000
+after = ["web.server"]

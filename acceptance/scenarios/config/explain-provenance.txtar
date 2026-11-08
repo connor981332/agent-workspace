@@ -3,4 +3,39 @@
 # source: spec (no candidate source)
 # milestone: M1
 
-unwritten
+workspace shop
+
+exec aw config explain lanes.max
+stdout '^lanes.max = 4$'
+stdout '^  individual +4 +.*/\.config/agent-workspace/shop\.toml:2:1 +\(effective\)$'
+stdout '^  team +6 +.*it''s a workspace/shop/workspace\.toml:7:1 +\(overridden\)$'
+stdout '^  default +10 +built in +\(overridden\)$'
+
+# A table explains every key under it.
+exec aw config explain projects.web
+stdout '^projects.web.runner = "devcontainer"$'
+stdout '^projects.web.lanes = "worktree"$'
+
+exec aw config explain lanes.max --json
+json stdout .keys[0].value 4
+json stdout .keys[0].settings[1].layer team
+json stdout .keys[0].settings[1].position.line 7
+json stdout .keys[0].settings[2].status effective
+
+! exec aw config explain lanes.nope
+stderr 'lanes.nope is not a configuration key'
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+max = 6
+
+[projects.web]
+runner = "devcontainer"
+-- .home/.config/agent-workspace/shop.toml --
+[lanes]
+max = 4
