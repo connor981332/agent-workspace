@@ -1,6 +1,16 @@
-# harness/session-start-in-lane: to be written (plan §3.5).
+# A session that starts already attached to a lane is told which lane and where, even when its
+# harness runs from the owner checkout.
 # req: R23 R56
 # source: C1 test_attached_startup_preserves_routing_and_generation_checks
 # milestone: M3
 
-unwritten
+workspace shop --init
+session s-1 claude
+exec aw attach 'add feature flag'
+exec awtest-hook -session s-1 session-start -
+stdout 'You are working in lane feature-flag, at '
+stdout 'your original harness cwd'
+stdout '\.worktrees/01'
+cd .worktrees/01
+exec awtest-hook -session s-1 session-start -
+stdout 'You are working in lane feature-flag'

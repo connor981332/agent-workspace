@@ -69,9 +69,8 @@ func hook(args []string, version string, stdin io.Reader, stdout, stderr io.Writ
 	}
 	t.Mark("payload")
 
-	if p.Event != PreToolUse {
-		// Other events carry no tool call. Session tracking and context come with the session record.
-		return Allow
+	if p.Event != PreToolUse && p.Event != SessionStart {
+		return Allow // no tool call to decide
 	}
 	scope, err := resolveScope(p, version, t)
 	if err != nil {
@@ -79,6 +78,10 @@ func hook(args []string, version string, stdin io.Reader, stdout, stderr io.Writ
 	}
 	if scope == nil {
 		return Allow // not in a workspace: nothing here is aw's to protect
+	}
+	if p.Event == SessionStart {
+		fmt.Fprintln(stdout, startContext(*scope))
+		return Allow
 	}
 	scope.AskSupported = a.ask
 	d := policy.Decide(*scope, p.Call)
@@ -242,4 +245,16 @@ func attachment(s *state.Store, stateDir string, p Payload) (lane int, stale boo
 		}
 	}
 	return rec.Lane, false, nil
+}
+
+// startContext tells a new session where it is and how to work there. It changes nothing.
+func startContext(s policy.Scope) string {
+	switch s.Role {
+	case policy.Lane:
+		return fmt.Sprintf("You are working in lane %s, at %s. Stay inside it. If your working directory is elsewhere (your original harness cwd), start every shell command with cd %s && and use absolute paths inside the lane for file tools. Run bin/aw whoami if you are unsure.",
+			s.LaneName, policy.Quote(s.LaneRoot), policy.Quote(s.LaneRoot))
+	case policy.Pair:
+		return "This is a pair session in the owner checkout, granted by the human. You may edit here. Destructive Git, unapproved publication and changes to the workspace's own configuration are still refused."
+	}
+	return `You are in the owner checkout, which belongs to the human. Read-only work needs no attach. Before changing anything, run bin/aw attach "<what you are working on>", then work in the lane root it prints. If the human wants you here instead, they can run aw pair.`
 }

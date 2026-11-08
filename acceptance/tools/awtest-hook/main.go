@@ -3,7 +3,7 @@
 //
 //	awtest-hook [-harness claude|codex|grok] [-session id] [-cwd dir] <tool> <argument>
 //
-// tool is bash (the argument is the command), read, write, edit or list (a path; list is Grok's), or
+// tool is session-start (the argument is ignored), bash (the argument is the command), read, write, edit or list (a path; list is Grok's), or
 // patch (a Codex apply_patch body, or @file to read it from a file). The working directory defaults
 // to the current one.
 package main
@@ -41,6 +41,14 @@ func main() {
 	claude := map[string][2]string{"bash": {"Bash", "command"}, "read": {"Read", "file_path"}, "write": {"Write", "file_path"}, "edit": {"Edit", "file_path"}, "patch": {"apply_patch", "command"}}
 	grok := map[string][2]string{"bash": {"run_terminal_command", "command"}, "read": {"read_file", "target_file"}, "write": {"search_replace", "file_path"}, "edit": {"search_replace", "file_path"}, "list": {"list_dir", "target_directory"}}
 	var payload map[string]any
+	if tool == "session-start" {
+		payload = map[string]any{"session_id": *session, "cwd": *cwd, "hook_event_name": "SessionStart", "source": "startup"}
+		if *harness == "grok" {
+			payload = map[string]any{"hookEventName": "session_start", "hook_event_name": "SessionStart", "sessionId": *session, "cwd": *cwd, "source": "new"}
+		}
+		send(*harness, "session-start", *cwd, payload)
+		return
+	}
 	switch *harness {
 	case "claude", "codex":
 		t, ok := claude[tool]
@@ -60,9 +68,13 @@ func main() {
 	default:
 		fail("unknown harness %q", *harness)
 	}
+	send(*harness, "pre-tool-use", *cwd, payload)
+}
+
+func send(harness, event, cwd string, payload map[string]any) {
 	data, _ := json.Marshal(payload)
-	cmd := exec.Command("aw", "hook", *harness, "pre-tool-use")
-	cmd.Dir = *cwd
+	cmd := exec.Command("aw", "hook", harness, event)
+	cmd.Dir = cwd
 	cmd.Stdin = bytes.NewReader(data)
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 	if err := cmd.Run(); err != nil {
