@@ -31,3 +31,39 @@ jobs:
         with:
           name: bench-${{ matrix.os }}
           path: ${{ runner.temp }}/${{ matrix.os }}.json
+
+  refhook-linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ['ubuntu:22.04', 'debian:bookworm', 'alpine:edge']
+    runs-on: ubuntu-24.04
+    container: ${{ matrix.image }}
+    steps:
+      - name: Install Git
+        run: |
+          if command -v apk >/dev/null; then apk add --no-cache git; else apt-get update -qq && apt-get install -y -qq git >/dev/null; fi
+          git --version
+      - uses: actions/checkout@v7
+      - name: Ref-hook matrix
+        run: |
+          name=$(echo '${{ matrix.image }}' | tr ':' '-')
+          GIT=git sh spike/refhook/run.sh > "/tmp/refhook-$name.tsv"
+          echo "NAME=$name" >> "$GITHUB_ENV"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: refhook-${{ env.NAME }}
+          path: /tmp/refhook-${{ env.NAME }}.tsv
+
+  refhook-apple:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Ref-hook matrix with Apple Git
+        run: |
+          /usr/bin/git --version
+          GIT=/usr/bin/git sh spike/refhook/run.sh > "$RUNNER_TEMP/refhook-apple.tsv"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: refhook-apple
+          path: ${{ runner.temp }}/refhook-apple.tsv
