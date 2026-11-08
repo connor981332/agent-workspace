@@ -1,0 +1,6 @@
+# policy/invalid-config-denies: to be written (plan §3.5).
+# req: R55
+# source: C1 LauncherTests.test_broken_tool_blocks_with_exit_2; C1 test_guard_hook_fails_closed_and_ignores_the_gate
+# milestone: M3
+
+unwritten

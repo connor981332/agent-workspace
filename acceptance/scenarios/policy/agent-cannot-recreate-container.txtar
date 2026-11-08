@@ -1,0 +1,6 @@
+# policy/agent-cannot-recreate-container: to be written (plan §3.5).
+# req: R49 R50
+# source: C2 F3 Ports and mounts only at creation
+# milestone: M3
+
+unwritten

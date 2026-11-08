@@ -1,0 +1,6 @@
+# policy/denies-kill-container-server: to be written (plan §3.5).
+# req: R49 R55 R58
+# source: C1 test_real_hook_and_routing
+# milestone: M3
+
+unwritten

@@ -1,0 +1,6 @@
+# policy/owner-only-in-substitutions: to be written (plan §3.5).
+# req: R64
+# source: C1 test_delegation_lets_owner_checkout_run_only_in_scope_maintenance
+# milestone: M3
+
+unwritten
