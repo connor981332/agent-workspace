@@ -196,23 +196,23 @@ jobs:
           chown -R tester .
           su tester -c "cd acceptance && PATH='$PATH' GOCACHE=/tmp/gocache GOMODCACHE=/tmp/gomod go test -count=1 -run 'TestScenarios/^(policy|lanes|sweep)\$' ."
 
-  # Latency budgets (§5.2): absolute on ubuntu-24.04, and regressions against master on macos-15,
-  # whose virtual machines cannot hold an absolute budget (docs/dev/spikes.md). Master's binary is
-  # built in the same job and measured interleaved with this one, so that the noise of a shared
-  # machine affects both alike. Each run's results are kept as an artifact.
+  # Speed on CI (§5.2): regressions against master, on the median, and the guard budgets on Linux.
+  # Absolute budgets are checked on a maintainer's laptop, because a shared machine's disk and
+  # neighbours decide the tail here. Master's binary is built in the same job and measured
+  # interleaved with this one, so that the noise affects both alike. Each run's results are kept
+  # as an artifact.
   bench:
     strategy:
       fail-fast: false
       matrix:
         include:
+          # Medians need fewer samples than a p99, and every sample is taken twice (this binary and
+          # master's). On macOS at full scale the job took over 15 minutes.
           - os: ubuntu-24.04
-            mode: absolute
-            scale: 1
-          # Relative mode compares medians, which need fewer samples than a p99; and every sample
-          # is taken twice (this binary and master's) on a slow virtual machine. At full scale
-          # the job took over 15 minutes.
+            guard: true
+            scale: 0.5
           - os: macos-15
-            mode: relative
+            guard: false
             scale: 0.3
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
@@ -243,13 +243,14 @@ jobs:
         env:
           AW_BENCH_HOST: ${{ matrix.os }}
         run: |
-          args=(-on ci -mode "${{ matrix.mode }}" -scale "${{ matrix.scale }}" -out "$RUNNER_TEMP/bench.json")
+          args=(-mode relative -scale "${{ matrix.scale }}" -out "$RUNNER_TEMP/bench.json")
+          if [ "${{ matrix.guard }}" = true ]; then args+=(-guard-budgets); fi
           if [ -x "$RUNNER_TEMP/aw-baseline" ]; then args+=(-baseline-aw "$RUNNER_TEMP/aw-baseline");
-          elif [ "${{ matrix.mode }}" = relative ]; then args=(-on ci -mode absolute -scale "${{ matrix.scale }}" -out "$RUNNER_TEMP/bench.json"); echo "No baseline: reporting only"; fi
+          else args=(-mode absolute -scale "${{ matrix.scale }}" -out "$RUNNER_TEMP/bench.json"); echo "No baseline: reporting only"; fi
           set +e
           go run ./bench "${args[@]}" | tee -a "$GITHUB_STEP_SUMMARY"
           status=${PIPESTATUS[0]}
-          if [ "${{ matrix.mode }}" = relative ] && [ ! -x "$RUNNER_TEMP/aw-baseline" ]; then status=0; fi
+          if [ ! -x "$RUNNER_TEMP/aw-baseline" ]; then status=0; fi
           exit "$status"
       - uses: actions/upload-artifact@v7
         if: always()

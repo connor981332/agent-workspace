@@ -15,7 +15,8 @@ expected but can follow.
 - **R3.** Commands whose duration the tool controls (`aw`, `aw recap`, `aw attach`, `aw new` up to
   launching the harness, `aw serve` up to starting the server) must return within the budgets in
   [speed.md](speed.md). Time spent in the project's own commands is excluded.
-- **R4.** CI must run latency benchmarks and fail when a budget is exceeded.
+- **R4.** CI must run latency benchmarks and fail on a regression against the main branch, and when
+  a guard budget is exceeded. All budgets are measured on a developer laptop before each release.
 - **R5.** Slow work (dependency install, setup hooks, merge proof against a forge) must run in the
   background or only when explicitly asked for, and must report progress.
 

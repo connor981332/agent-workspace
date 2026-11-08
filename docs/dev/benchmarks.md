@@ -1,9 +1,10 @@
 # Benchmarks on developer laptops
 
-The budgets in [speed.md](../spec/speed.md) are defined on a developer laptop. CI enforces them on
-shared runners ([plan §5.2](../../plans/release-candidate.md#52-ci-enforcement)); twice per
-milestone a maintainer runs the bench on a Linux laptop and on an Apple Silicon Mac and records the
-results here:
+The budgets in [speed.md](../spec/speed.md) are defined on a developer laptop, and enforced here. CI
+looks for regressions against master ([plan §5.2](../../plans/release-candidate.md#52-ci-enforcement)).
+At each milestone exit and before each release, a maintainer runs the bench on a Linux laptop and on
+an Apple Silicon Mac, with the machine idle and on power, and records the results here. The release
+workflow refuses a tag whose milestone has no Linux laptop result:
 
 ```sh
 cd acceptance && AW_BENCH_HOST="<machine>" go run ./bench
@@ -48,6 +49,26 @@ The dashboard reads ten lanes of five repositories each (the workspace repositor
 projects) with two Git calls per repository. The first version ran the merge proof in every clean
 repository and took 80 ms here; it now proves only lanes whose repositories are all clean, one
 repository at a time, stopping at the first that is not proven.
+
+### Apple Silicon laptop
+
+Not yet measured: pending, for a maintainer with a Mac.
+
+## M3
+
+### Linux laptop, 2026-11-08
+
+The same machine as M1, on power. aw built from the m3/mux branch, with every M3 guard in place.
+
+| Operation | n | p50 ms | p95 ms | p99 ms | max ms | limit ms | result |
+|---|---|---|---|---|---|---|---|
+| hook | 1000 | 4.53 | 5.49 | 5.93 | 6.33 | 8.00 | pass |
+| whoami | 500 | 3.91 | 4.77 | 5.25 | 6.74 | 10.00 | pass |
+| config-get | 500 | 3.99 | 4.78 | 5.24 | 5.71 | 10.00 | pass |
+| attach-from-pool | 100 | 35.13 | 38.96 | 40.88 | 48.16 | 100.00 | pass |
+| new-until-harness | 100 | 37.15 | 40.52 | 43.88 | 44.22 | 150.00 | pass |
+| dashboard | 200 | 45.08 | 48.29 | 50.31 | 52.69 | 100.00 | pass |
+| ref-hook | 1000 | 4.21 | 5.03 | 5.59 | 6.49 | 8.00 | pass |
 
 ### Apple Silicon laptop
 

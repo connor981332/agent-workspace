@@ -40,6 +40,16 @@ jobs:
           git fetch -q origin master
           git merge-base --is-ancestor "$GITHUB_SHA" origin/master || {
             echo "::error::$GITHUB_REF_NAME is not on master"; exit 1; }
+      - name: The milestone's budgets were measured on a laptop
+        # CI only checks for regressions, so this is where the absolute budgets are enforced
+        # (speed.md, "Enforcement").
+        run: |
+          milestone=$(sed -n 's/^current = "\(.*\)"/\1/p' acceptance/requirements.toml)
+          awk -v m="## $milestone" '$0 == m { on = 1; next } /^## / { on = 0 } on' docs/dev/benchmarks.md > section
+          if ! grep -q '^### Linux laptop, ' section || ! grep -q '| hook |' section || grep -q '\*\*FAIL\*\*' section; then
+            echo "docs/dev/benchmarks.md has no passing Linux laptop result for $milestone: run the bench and record it first" >&2
+            exit 1
+          fi
       - name: Schema versions for the release notes
         run: |
           CGO_ENABLED=0 go build -o "$RUNNER_TEMP/aw" ./cmd/aw
