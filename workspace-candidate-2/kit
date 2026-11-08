@@ -1,0 +1,319 @@
+#!/bin/sh
+# Make and maintain a workspace from this candidate. Run from anywhere.
+#
+#   kit init <dir> --name <name> [--title T] [--prefix P] [--remote URL]
+#                  [--base-branch B] [--checkout PATH] [--port-offset N]
+#   kit update <dir>                     # refresh the core; owned files are kept
+#   kit add-project <dir> <alias> <directory> [--lanes worktree|shared]
+#                  [--port N] [--host-port N] [--user U]
+#   kit add-module <dir> <module>
+#   kit modules                          # list modules
+#   kit check <dir>                      # report problems with a workspace
+#
+# A workspace holds two kinds of files:
+#   core   bin/ws, bin/lane, bin/devcontainer-init, bin/bootstrap, lib/ws/.
+#          Copied from core/ and replaced by `kit update`. They name no project.
+#   owned  workspace.conf, projects, AGENTS.md, docs/, infra/, lanes.d/, and
+#          module files. Rendered once from template/ or a module, then edited
+#          by the workspace and never touched again by kit.
+# .workspace-kit records the values used to render, the installed modules, and
+# the candidate commit the core came from.
+
+set -eu
+
+KIT="$(cd "$(dirname "$0")" && pwd -P)"
+
+die() { echo "kit: $*" >&2; exit 1; }
+usage() { sed -n '4,11p' "$0" | sed 's/^# //' >&2; exit 2; }
+
+kit_source() {
+  git -C "$KIT" rev-parse --short=12 HEAD 2>/dev/null || echo unknown
+}
+
+# render <src> <dst>: copy a file, replacing {{KEY}} with $KIT_V_KEY,
+# {{PORT:n}} with n + KIT_PORT_OFFSET, and a line that is exactly {{PORTS}}
+# with $KIT_PORTS. The mode (executable bit) is kept.
+render() {
+  mkdir -p "$(dirname "$2")"
+  render_filter < "$1" > "$2"
+  [ -x "$1" ] && chmod +x "$2"
+  return 0
+}
+
+render_filter() {
+  awk '
+    BEGIN {
+      for (k in ENVIRON) if (k ~ /^KIT_V_/) {
+        val = ENVIRON[k]; gsub(/\\/, "\\\\", val); gsub(/&/, "\\\\&", val)
+        v[substr(k, 7)] = val
+      }
+      off = ENVIRON["KIT_PORT_OFFSET"] + 0
+    }
+    $0 == "{{PORTS}}" { if (ENVIRON["KIT_PORTS"] != "") print ENVIRON["KIT_PORTS"]; next }
+    {
+      line = $0
+      while (match(line, /\{\{PORT:[0-9]+\}\}/)) {
+        n = substr(line, RSTART + 7, RLENGTH - 9) + off
+        line = substr(line, 1, RSTART - 1) n substr(line, RSTART + RLENGTH)
+      }
+      for (k in v) gsub("\\{\\{" k "\\}\\}", v[k], line)
+      print line
+    }'
+}
+
+# Copy a tree, rendering each file; an existing destination file is kept and
+# reported, never overwritten.
+render_tree() { # <src-dir> <dst-dir>
+  (cd "$1" && find . -type f | sed 's|^\./||' | sort) | while read -r rel; do
+    out="$(printf '%s\n' "$rel" | render_filter)"
+    if [ -e "$2/$out" ]; then
+      echo "  kept existing $out"
+    else
+      render "$1/$rel" "$2/$out"
+      echo "  added $out"
+    fi
+  done
+}
+
+q() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
+
+write_state() { # <dir>
+  {
+    echo "# Written by agent-workspace kit (workspace-candidate-2). Commit it; edit with care."
+    for k in NAME TITLE PREFIX REMOTE BASE_BRANCH CHECKOUT; do
+      eval "val=\${KIT_V_$k}"
+      echo "KIT_V_$k=$(q "$val")"
+    done
+    echo "KIT_PORT_OFFSET=$KIT_PORT_OFFSET"
+    echo "KIT_MODULES=$(q "${KIT_MODULES:-}")"
+    echo "KIT_SOURCE=$(kit_source)"
+  } > "$1/.workspace-kit"
+}
+
+load_state() { # <dir>
+  [ -f "$1/.workspace-kit" ] || die "$1 has no .workspace-kit; make it with kit init"
+  # shellcheck disable=SC1091
+  . "$1/.workspace-kit"
+  export KIT_V_NAME KIT_V_TITLE KIT_V_PREFIX KIT_V_REMOTE KIT_V_BASE_BRANCH KIT_V_CHECKOUT KIT_PORT_OFFSET
+}
+
+copy_core() { # <dir>
+  (cd "$KIT/core" && find . -type f | sed 's|^\./||' | sort) | while read -r rel; do
+    if [ -f "$1/$rel" ] && cmp -s "$KIT/core/$rel" "$1/$rel"; then continue; fi
+    mkdir -p "$(dirname "$1/$rel")"
+    cp -p "$KIT/core/$rel" "$1/$rel"
+    echo "  core $rel"
+  done
+}
+
+# insert_before <file> <marker-substring> <text-file>: put lines before the
+# first line containing the marker (or at the end when there is none).
+insert_before() {
+  awk -v m="$2" -v f="$3" '
+    !done && index($0, m) { while ((getline l < f) > 0) print l; done = 1 }
+    { print }
+    END { if (!done) while ((getline l < f) > 0) print l }' "$1" > "$1.kit" && mv "$1.kit" "$1"
+}
+
+append_conf_list() { # <dir> <VAR> <words...>: add words to a VAR="..." line
+  dir=$1 var=$2; shift 2
+  for w in "$@"; do
+    if ! grep -E "^$var=" "$dir/workspace.conf" | grep -qw -- "$w"; then
+      awk -v var="$var" -v w="$w" '
+        index($0, var "=\"") == 1 { sub("=\"", "=\"" w " "); sub(" \"", "\"") }
+        { print }' "$dir/workspace.conf" > "$dir/workspace.conf.kit"
+      mv "$dir/workspace.conf.kit" "$dir/workspace.conf"
+    fi
+  done
+}
+
+cmd_init() {
+  [ $# -ge 1 ] || usage
+  dir="$1"; shift
+  KIT_V_NAME="" KIT_V_TITLE="" KIT_V_PREFIX="" KIT_V_REMOTE="" KIT_V_BASE_BRANCH=main KIT_V_CHECKOUT="" KIT_PORT_OFFSET=0
+  while [ $# -gt 0 ]; do
+    [ $# -ge 2 ] || usage
+    case "$1" in
+      --name) KIT_V_NAME="$2" ;;
+      --title) KIT_V_TITLE="$2" ;;
+      --prefix) KIT_V_PREFIX="$2" ;;
+      --remote) KIT_V_REMOTE="$2" ;;
+      --base-branch) KIT_V_BASE_BRANCH="$2" ;;
+      --checkout) KIT_V_CHECKOUT="$2" ;;
+      --port-offset) KIT_PORT_OFFSET="$2" ;;
+      *) usage ;;
+    esac
+    shift 2
+  done
+  echo "$KIT_V_NAME" | grep -Eq '^[a-z][a-z0-9-]{0,30}$' || die "--name must be lowercase letters, digits, and dashes"
+  echo "$KIT_PORT_OFFSET" | grep -Eq '^[0-9]+$' || die "--port-offset must be a number"
+  : "${KIT_V_TITLE:=$KIT_V_NAME}" "${KIT_V_PREFIX:=$KIT_V_NAME}"
+  : "${KIT_V_REMOTE:=git@example.com:$KIT_V_NAME}" "${KIT_V_CHECKOUT:=~/Code/$KIT_V_NAME-workspace}"
+  export KIT_V_NAME KIT_V_TITLE KIT_V_PREFIX KIT_V_REMOTE KIT_V_BASE_BRANCH KIT_V_CHECKOUT KIT_PORT_OFFSET
+  export KIT_V_PORT_OFFSET="$KIT_PORT_OFFSET"
+
+  [ ! -f "$dir/.workspace-kit" ] || die "$dir is already a workspace; use kit update"
+  mkdir -p "$dir"
+  dir="$(cd "$dir" && pwd -P)"
+  echo "Making workspace $KIT_V_NAME in $dir"
+  render_tree "$KIT/template" "$dir"
+  copy_core "$dir"
+  KIT_MODULES="" write_state "$dir"
+  [ -d "$dir/.git" ] || git -C "$dir" init -q
+  echo "Next: kit add-project $dir <alias> <directory> ..., review workspace.conf, and commit."
+}
+
+cmd_update() {
+  [ $# -eq 1 ] || usage
+  dir="$(cd "$1" && pwd -P)"
+  load_state "$dir"
+  echo "Updating the core of $dir from $(kit_source) (was ${KIT_SOURCE:-unknown})"
+  copy_core "$dir"
+  write_state "$dir"
+  echo "Owned files are unchanged. Compare them with template/ and modules/ for new practice."
+}
+
+cmd_add_project() {
+  [ $# -ge 3 ] || usage
+  dir="$(cd "$1" && pwd -P)" alias="$2" pdir="$3"; shift 3
+  lanes=shared port=- host_port="" user=vscode
+  while [ $# -gt 0 ]; do
+    [ $# -ge 2 ] || usage
+    case "$1" in
+      --lanes) lanes="$2" ;;
+      --port) port="$2" ;;
+      --host-port) host_port="$2" ;;
+      --user) user="$2" ;;
+      *) usage ;;
+    esac
+    shift 2
+  done
+  load_state "$dir"
+  case "$lanes" in worktree|shared) ;; *) die "--lanes is worktree or shared" ;; esac
+  echo "$alias" | grep -Eq '^[a-z][a-z0-9-]*$' || die "aliases are lowercase letters, digits, and dashes"
+  echo "$pdir" | grep -Eq '^[A-Za-z0-9._-]+$' || die "the directory is one path component"
+  sed 's/#.*//' "$dir/projects" | awk -v a="$alias" -v d="$pdir" '$1 == a || $2 == d {f=1} END {exit !f}' &&
+    die "$alias or $pdir is already in projects"
+  [ "$port" = - ] || echo "$port" | grep -Eq '^[0-9]+$' || die "--port must be a number"
+  [ -n "$host_port" ] || host_port="$port"
+
+  printf '%-8s %-24s %-8s %s\n' "$alias" "$pdir" "$lanes" "$port" >> "$dir/projects"
+  awk -v l="/$pdir/" '{print} index($0, "--- projects ---") && !d {print l; d = 1}
+    END {if (!d) print l}' "$dir/.gitignore" > "$dir/.gitignore.kit"
+  mv "$dir/.gitignore.kit" "$dir/.gitignore"
+
+  slots="$(sed -n 's/^WS_LANE_SLOTS=\([0-9]*\).*/\1/p' "$dir/workspace.conf")"
+  : "${slots:=4}"
+  KIT_PORTS=""
+  url="—" addr="—"
+  if [ "$port" != - ]; then
+    KIT_PORTS="    ports:
+      - \"$host_port:$port\""
+    url="http://localhost:$host_port" addr="$pdir:$port"
+    KIT_PORTS="$KIT_PORTS
+      - \"$((port + 1))-$((port + slots)):$((port + 1))-$((port + slots))\"   # lanes 1-$slots (bin/lane)"
+  fi
+  export KIT_PORTS KIT_V_DIR="$pdir" KIT_V_ALIAS="$alias" KIT_V_USER="$user"
+
+  printf '| `%s` | `%s/` | | `%s` | %s |\n' "$alias" "$pdir" "$addr" "$url" > "$dir/.row.kit"
+  insert_before "$dir/AGENTS.md" "kit add-project appends a row" "$dir/.row.kit"
+  if [ "$port" != - ]; then
+    printf '| %s | %s (lanes: %s … %s) | `%s` |\n' "$alias" "$url" $((port + 1)) $((port + slots)) "$addr" > "$dir/.row.kit"
+    insert_before "$dir/docs/development/setup.md" "<!-- ports:" "$dir/.row.kit"
+  fi
+  rm -f "$dir/.row.kit"
+
+  echo "Added $alias ($pdir, lanes: $lanes, port: $port)."
+  if [ -d "$dir/$pdir" ] && [ ! -d "$dir/$pdir/.devcontainer" ]; then
+    render_tree "$KIT/project-template" "$dir/$pdir"
+    echo "Wrote $pdir/.devcontainer/; commit it in that repo."
+  elif [ ! -d "$dir/$pdir" ]; then
+    mkdir -p "$dir/.kit/project-templates"
+    render_tree "$KIT/project-template" "$dir/.kit/project-templates/$pdir"
+    echo "$pdir isn't cloned yet. Its .devcontainer/ is in .kit/project-templates/$pdir/; copy it into the repo."
+  fi
+}
+
+cmd_add_module() {
+  [ $# -eq 2 ] || usage
+  dir="$(cd "$1" && pwd -P)" mod="$2"
+  src="$KIT/modules/$mod"
+  [ -d "$src" ] || die "no module '$mod' (kit modules)"
+  load_state "$dir"
+  case " ${KIT_MODULES:-} " in *" $mod "*) die "$mod is already installed" ;; esac
+  echo "Adding module $mod to $dir"
+  [ -d "$src/files" ] && render_tree "$src/files" "$dir"
+  if [ -f "$src/gitignore" ]; then
+    { echo; cat "$src/gitignore"; } >> "$dir/.gitignore"
+  fi
+  if [ -f "$src/workspace.conf" ]; then
+    { echo; echo "# --- $mod module ---"; cat "$src/workspace.conf"; } >> "$dir/workspace.conf"
+  fi
+  if [ -f "$src/infra-services" ]; then
+    # shellcheck disable=SC2046
+    append_conf_list "$dir" WS_INFRA_SERVICES $(cat "$src/infra-services")
+  fi
+  if [ -f "$src/agents.md" ]; then
+    render "$src/agents.md" "$dir/.row.kit"
+    { echo; cat "$dir/.row.kit"; } >> "$dir/AGENTS.md"
+    rm -f "$dir/.row.kit"
+  fi
+  if [ -f "$src/ports.md" ]; then
+    render "$src/ports.md" "$dir/.row.kit"
+    insert_before "$dir/docs/development/setup.md" "<!-- ports:" "$dir/.row.kit"
+    rm -f "$dir/.row.kit"
+  fi
+  KIT_MODULES="${KIT_MODULES:+$KIT_MODULES }$mod" write_state "$dir"
+  [ -f "$src/NEXT" ] && { echo "Next:"; sed 's/^/  /' "$src/NEXT"; }
+  return 0
+}
+
+cmd_modules() {
+  for m in "$KIT"/modules/*/; do
+    m="$(basename "$m")"
+    summary="$(sed -n 's/^> //p' "$KIT/modules/$m/README.md" | head -n 1)"
+    printf '%-20s %s\n' "$m" "$summary"
+  done
+}
+
+cmd_check() {
+  [ $# -eq 1 ] || usage
+  dir="$(cd "$1" && pwd -P)"
+  report="$(check_workspace "$dir" 2>&1)" || true
+  if [ -n "$report" ]; then echo "$report"; return 1; fi
+  echo "Checked $dir: no problems."
+}
+
+check_workspace() { # prints one line per problem
+  dir=$1
+  [ -f "$dir/.workspace-kit" ] || echo ".workspace-kit is missing (not made by kit init)"
+  (cd "$KIT/core" && find . -type f | sed 's|^\./||' | sort) | while read -r rel; do
+    if [ ! -f "$dir/$rel" ]; then echo "core file missing: $rel (kit update)"
+    elif ! cmp -s "$KIT/core/$rel" "$dir/$rel"; then echo "core file differs from this kit: $rel (kit update, or keep a local change on purpose)"
+    fi
+  done
+  ( ROOT="$dir"; WS_SCRIPT="workspace.conf"; . "$KIT/core/lib/ws/common.sh"; ws_load_conf; ws_load_resources
+    ws_projects | while read -r alias pdir lanes _port; do
+      grep -qx "/$pdir/" "$dir/.gitignore" || echo ".gitignore doesn't exclude /$pdir/"
+      case "$lanes" in worktree|shared) ;; *) echo "$alias: lanes is '$lanes', not worktree or shared" ;; esac
+      if [ ! -d "$dir/$pdir" ]; then
+        echo "$pdir is not cloned (bin/bootstrap)"
+      elif ! grep -q "^name: ${pdir}_devcontainer\$" "$dir/$pdir/.devcontainer/compose.yaml" 2>/dev/null; then
+        echo "$pdir/.devcontainer/compose.yaml is missing or doesn't pin name: ${pdir}_devcontainer"
+      fi
+    done
+    [ "$WS_LANE_SLOTS" -ge 1 ] || echo "WS_LANE_SLOTS must be at least 1"
+  ) || echo "workspace.conf or a lane resource adapter failed to load"
+}
+
+[ $# -ge 1 ] || usage
+cmd="$1"; shift
+case "$cmd" in
+  init) cmd_init "$@" ;;
+  update) cmd_update "$@" ;;
+  add-project) cmd_add_project "$@" ;;
+  add-module) cmd_add_module "$@" ;;
+  modules) cmd_modules ;;
+  check) cmd_check "$@" ;;
+  *) usage ;;
+esac

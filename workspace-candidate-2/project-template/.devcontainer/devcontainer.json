@@ -1,0 +1,21 @@
+// For format details, see https://aka.ms/devcontainer.json.
+{
+	"name": "{{TITLE}} {{ALIAS}}",
+	"dockerComposeFile": "./compose.yaml",
+	"service": "{{DIR}}",
+	"workspaceFolder": "/{{DIR}}",
+	// Runs on the host. Claims this container, then starts the workspace's
+	// shared infrastructure. See ../bin/devcontainer-init in the workspace.
+	"initializeCommand": "/bin/sh ./.devcontainer/on-initialize.sh",
+	// "postCreateCommand": "install dependencies here",
+
+	// Host ports are published in compose.yaml, so they work the same when the
+	// container was started by bin/ws. Don't let VS Code forward extra ones.
+	"otherPortsAttributes": { "onAutoForward": "ignore" },
+
+	"remoteUser": "{{USER}}",
+	"containerEnv": {
+		"CONTAINER_ENV": "development",
+		"GIT_PAGER": "cat"
+	}
+}

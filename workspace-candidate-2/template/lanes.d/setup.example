@@ -1,0 +1,13 @@
+#!/bin/sh
+# Runs on the host after `bin/lane new` (and `bin/lane setup <lane>`), once the
+# lane's worktrees, env file, and resources exist. Rename to lanes.d/setup and
+# make it executable to use it. A sibling lanes.d/teardown runs before
+# `bin/lane rm` removes a lane.
+#
+# Environment: WS_ROOT, WS_LANE, WS_SLOT. Use bin/ws <alias>@$WS_LANE to run
+# the project's own preparation inside its container, for example:
+#
+#   "$WS_ROOT/bin/ws" "app@$WS_LANE" bin/rails db:prepare
+#   "$WS_ROOT/bin/ws" "app@$WS_LANE" sh -c 'RAILS_ENV=test bin/rails db:prepare'
+#   "$WS_ROOT/bin/ws" "web@$WS_LANE" npm run build:css
+set -eu

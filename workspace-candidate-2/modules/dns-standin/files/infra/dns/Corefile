@@ -1,0 +1,8 @@
+# Fixture DNS for development and acceptance checks (dns-standin module). It
+# answers only for the fixture zone, from a file, and reloads it on change.
+{{NAME}}-dev.test:53 {
+    file /etc/coredns/{{NAME}}-dev.test.zone {
+        reload 2s
+    }
+    errors
+}
