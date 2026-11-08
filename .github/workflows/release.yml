@@ -45,8 +45,9 @@ jobs:
         # (speed.md, "Enforcement").
         run: |
           milestone=$(sed -n 's/^current = "\(.*\)"/\1/p' acceptance/requirements.toml)
-          awk -v m="## $milestone" '$0 == m { on = 1; next } /^## / { on = 0 } on' docs/dev/benchmarks.md > section
-          if ! grep -q '^### Linux laptop, ' section || ! grep -q '| hook |' section || grep -q '\*\*FAIL\*\*' section; then
+          awk -v m="## $milestone" '$0 == m { on = 1; next } /^## / { on = 0 } on' docs/dev/benchmarks.md > "$RUNNER_TEMP/section"
+          section=$RUNNER_TEMP/section # outside the checkout: GoReleaser refuses a dirty tree
+          if ! grep -q '^### Linux laptop, ' "$section" || ! grep -q '| hook |' "$section" || grep -q '\*\*FAIL\*\*' "$section"; then
             echo "docs/dev/benchmarks.md has no passing Linux laptop result for $milestone: run the bench and record it first" >&2
             exit 1
           fi
