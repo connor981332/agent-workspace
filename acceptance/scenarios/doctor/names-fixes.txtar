@@ -1,6 +1,32 @@
-# Every aw doctor failure names its fix. (M3 adds the hook checks.)
+# Every aw doctor failure and warning names its fix. (M3 adds the hook checks.)
 # req: R14
 # source: C1 test_generic.py::HostLaneTests::test_doctor_names_each_fix
 # milestone: M1
 
-unwritten
+workspace shop
+exec aw init
+exec aw version
+owner-may-change
+
+# Break four things: the configuration, the launcher, the lock and the state.
+exec sh -c 'printf "\n[lanes]\nslot = 3\n" >> workspace.toml'
+exec sh -c 'echo "# local tweak" >> bin/aw'
+exec sh -c ': > .aw/lock'
+exec mkdir -p .git/aw
+exec sh -c 'echo "not a database, but long enough to look like one at first" > .git/aw/state.db'
+
+! exec aw doctor
+stdout '^✗ configuration: .*workspace\.toml:\d+:1: lanes\.slot: unknown key → remove it\. Known keys here'
+stdout '^! launcher: bin/aw was edited by hand → restore it with git checkout bin/aw'
+stdout '^✗ lock: \.aw/lock has no checksum for aw '$AW_VERSION' on .* → restore \.aw/lock from Git'
+stdout '^✗ state: .*state\.db cannot be read .*treated as protected → restore it from the newest state\.db\.bak-\* backup'
+
+# No failure or warning lacks a fix.
+exec sh -c 'aw doctor | grep -E "^(✗|!) " | grep -v " → " || true'
+! stdout .
+
+exec sh -c 'aw doctor --json; echo "status=$?"'
+stdout 'status=1'
+exec sh -c 'aw doctor --json > $WORK/report.json || true'
+json $WORK/report.json .ok false
+json $WORK/report.json .checks[0].name workspace

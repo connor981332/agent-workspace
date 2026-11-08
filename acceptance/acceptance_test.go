@@ -74,6 +74,17 @@ func setup() (int, error) {
 	if err := os.MkdirAll(globalAW, 0o755); err != nil {
 		return 0, err
 	}
+	// The test tools (acceptance/tools) go next to the global aw, on every scenario's PATH.
+	tools, err := filepath.Glob(filepath.Join("tools", "*"))
+	if err != nil {
+		return 0, err
+	}
+	for _, tool := range tools {
+		build := exec.Command("go", "build", "-o", filepath.Join(globalAW, filepath.Base(tool)), "./"+tool)
+		if out, err := build.CombinedOutput(); err != nil {
+			return 0, fmt.Errorf("building %s: %v\n%s", tool, err, out)
+		}
+	}
 	if err := os.WriteFile(filepath.Join(globalAW, "aw"), []byte(globalShim), 0o755); err != nil {
 		return 0, err
 	}

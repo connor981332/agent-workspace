@@ -1,6 +1,33 @@
-# aw whoami writes nothing, in the owner checkout or anywhere else.
+# aw whoami writes nothing, in the owner checkout, its Git directory, the home directory, or a lane.
 # req: R93
 # source: C1 test_tooling.py::test_identity_is_observational_and_handles_unknown_slot
 # milestone: M1
 
-unwritten
+workspace shop
+exec aw init
+exec aw version
+owner-snapshot
+
+# A lane root, as M2 will create one: a directory under .worktrees whose .aw/owner names the owner.
+exec mkdir -p .worktrees/03/.aw .worktrees/03/bin
+exec sh -c 'printf "%s\n" "$OWNER" > .worktrees/03/.aw/owner && cp bin/aw .worktrees/03/bin/aw'
+
+exec sh $WORK/tree.sh
+cp stdout $WORK/before
+
+exec aw whoami
+exec aw whoami --json
+cd .worktrees/03
+exec aw whoami
+stdout '^location   lane root .*/\.worktrees/03$'
+exec aw whoami --json
+json stdout .location lane
+cd $OWNER
+
+exec sh $WORK/tree.sh
+cmp stdout $WORK/before
+
+-- tree.sh --
+# Every file under the owner checkout (lanes and Git directory included) and the home directory,
+# with its size and checksum, so that any write shows up.
+find "$OWNER" "$HOME" -type f | LC_ALL=C sort | while IFS= read -r f; do cksum < "$f" | tr '\n' ' '; echo "$f"; done

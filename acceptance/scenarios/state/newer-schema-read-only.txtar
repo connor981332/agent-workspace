@@ -1,6 +1,43 @@
-# A state database with a newer or unknown schema is opened read-only, and commands that would write refuse with the fix.
+# A state database with a newer schema is only read: nothing is written, migrated or backed up, and
+# guards refuse with the fix. An unreadable one protects everything it describes. With no state
+# at all (before setup), the hook stub allows.
 # req: R19
 # source: spec (no candidate source)
 # milestone: M1
 
-unwritten
+workspace shop
+exec aw init
+exec aw version
+owner-snapshot
+
+exec sh $WORK/hook.sh
+stdout '^status=0$'
+
+exec mkdir -p .git/aw
+exec awtest-sqlite .git/aw/state.db 'PRAGMA user_version = 99' 'CREATE TABLE future (x INTEGER)'
+exec cksum .git/aw/state.db
+cp stdout $WORK/before
+
+exec aw doctor
+stdout '^! state: state schema 99 is newer than this aw''s 1, so this aw only reads it and guards refuse → run bin/aw'
+
+exec sh $WORK/hook.sh
+stdout '^status=2$'
+stderr 'this call is refused: .*state\.db is read-only: it has state schema 99, newer than this aw''s 1 → run the workspace''s pinned aw'
+
+exec cksum .git/aw/state.db
+cmp stdout $WORK/before
+exec sh -c 'ls .git/aw'
+! stdout 'bak'
+
+# An unreadable database protects everything.
+exec sh -c 'echo "this is not a SQLite database, but it is long enough" > .git/aw/state.db'
+exec sh $WORK/hook.sh
+stdout '^status=2$'
+stderr 'cannot be read .*treated as protected'
+! exec aw doctor
+stdout '^✗ state: '
+
+-- hook.sh --
+printf '{"session_id":"s1","cwd":"%s","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"ls"}}' "$OWNER" | aw hook claude pre-tool-use
+echo "status=$?"

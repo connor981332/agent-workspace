@@ -17,7 +17,7 @@ const module = "github.com/connor981332/agent-workspace"
 // Leaves import only other leaves (rule 1).
 var leaves = []string{
 	"internal/config", "internal/state", "internal/workspace", "internal/gitx", "internal/gitx/run",
-	"internal/extproto", "internal/platform", "internal/ui",
+	"internal/extproto", "internal/platform", "internal/ui", "internal/timing",
 }
 
 // The hot path (rule 3). Subpackages are included, except the ones in hotPathExcluded, which exist

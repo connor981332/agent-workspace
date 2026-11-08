@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/connor981332/agent-workspace/internal/config"
+	"github.com/connor981332/agent-workspace/internal/ui"
 	"github.com/connor981332/agent-workspace/internal/workspace"
 )
 
@@ -68,6 +70,9 @@ func newConfigGetCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if err := unknownName(c, path); err != nil {
+				return err
+			}
 			v, ok := c.Get(path)
 			if !ok {
 				if _, known := c.Explain(path); known {
@@ -90,11 +95,52 @@ func unknownKey(p config.Path) error {
 	return fmt.Errorf("%s is not a configuration key → see docs/reference/config.md for the keys", p)
 }
 
+// unknownName explains a key that names a project, resource, command or data entry that does not
+// exist, listing the ones that do.
+func unknownName(c *config.Config, p config.Path) error {
+	if len(p) < 2 {
+		return nil
+	}
+	var kind string
+	var known []string
+	switch {
+	case p[0] == "projects":
+		kind, known = "project", keys(c.Projects)
+	case p[0] == "resources":
+		kind, known = "resource", keys(c.Resources)
+	case p[0] == "commands":
+		kind, known = "command", keys(c.Commands)
+	case p[0] == "lanes" && p[1] == "data" && len(p) > 2:
+		kind, known, p = "data entry", keys(c.Lanes.Data), p[1:]
+	default:
+		return nil
+	}
+	for _, k := range known {
+		if k == p[1] {
+			return nil
+		}
+	}
+	list := "none are configured"
+	if len(known) > 0 {
+		list = "known: " + strings.Join(known, ", ")
+	}
+	return fmt.Errorf("there is no %s named %q → %s", kind, p[1], list)
+}
+
+func keys[V any](m map[string]V) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	slices.Sort(out)
+	return out
+}
+
 // printValue prints a string as it is (for scripts), any other leaf as TOML, and a table as TOML.
 func printValue(w io.Writer, p config.Path, v any) error {
 	switch x := v.(type) {
 	case string:
-		_, err := fmt.Fprintln(w, x)
+		_, err := fmt.Fprintln(w, ui.Clean(x))
 		return err
 	case map[string]any:
 		data, err := toml.Marshal(x)
@@ -130,6 +176,9 @@ shown as refused, with the lock.`,
 			}
 			_, c, err := loadConfig()
 			if err != nil {
+				return err
+			}
+			if err := unknownName(c, path); err != nil {
 				return err
 			}
 			provs, known := c.Explain(path)

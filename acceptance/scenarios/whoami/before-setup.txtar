@@ -1,6 +1,22 @@
-# aw whoami works before setup.
+# aw whoami works before setup: no state is needed, and none is created.
 # req: R14
 # source: C1 test_tooling.py::test_observers_tolerate_a_never_created_gate
 # milestone: M1
 
-unwritten
+workspace shop
+exec aw init
+owner-snapshot
+
+exec aw whoami
+stdout '^workspace  shop \(namespace shop\)$'
+stdout '^location   the owner checkout$'
+stdout '^session    none$'
+stdout '^aw         '$AW_VERSION'$'
+! exists .git/aw/state.db
+
+exec aw whoami --json
+json stdout .workspace.namespace shop
+json stdout .location owner
+json stdout .lane_root null
+json stdout .session null
+json stdout .pinned $AW_VERSION

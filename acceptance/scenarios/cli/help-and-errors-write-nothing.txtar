@@ -1,6 +1,28 @@
-# Help and usage errors create no state and take no lock.
+# Help and usage errors create no state, take no lock and write nothing.
 # req: R93
 # source: C1 test_tooling.py::test_rt_usage_and_identity_do_not_initialize_or_acquire_writable_gate
 # milestone: M1
 
-unwritten
+workspace shop
+exec aw init
+exec aw version
+owner-snapshot
+exec sh $WORK/tree.sh
+cp stdout $WORK/before
+
+exec aw --help
+exec aw config --help
+exec aw doctor --help
+exec aw
+! exec aw no-such-command
+! exec aw config get
+! exec aw whoami extra
+! exec aw init --no-such-flag
+! exec aw config get projects.nope.runner
+
+exec sh $WORK/tree.sh
+cmp stdout $WORK/before
+! exists .git/aw/state.db
+
+-- tree.sh --
+find "$OWNER" "$HOME" -type f | LC_ALL=C sort | while IFS= read -r f; do cksum < "$f" | tr '\n' ' '; echo "$f"; done
