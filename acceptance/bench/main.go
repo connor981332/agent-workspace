@@ -586,6 +586,13 @@ func (fx *fixture) addLaneOps(tmp, launcher string) error {
 	if err := mkfifo(fifo); err != nil {
 		return err
 	}
+	// Held open for reading and writing for the whole run: the harness's open never blocks, and
+	// each iteration reads exactly its one byte, never waiting for end of file (which kqueue can
+	// miss on a FIFO on macOS).
+	signals, err := os.OpenFile(fifo, os.O_RDWR, 0)
+	if err != nil {
+		return err
+	}
 	harnessDir := filepath.Join(tmp, "harness")
 	if err := os.MkdirAll(harnessDir, 0o755); err != nil {
 		return err
@@ -653,10 +660,9 @@ func (fx *fixture) addLaneOps(tmp, launcher string) error {
 		go func() { done <- c.Wait() }()
 		started := make(chan time.Duration, 1)
 		go func() {
-			f, err := os.Open(fifo) // blocks until the harness opens it for writing
-			if err == nil {
-				io.ReadAll(f)
-				f.Close()
+			var b [1]byte
+			if _, err := io.ReadFull(signals, b[:]); err != nil {
+				fatalf("reading the harness's signal: %v", err)
 			}
 			started <- time.Since(start)
 		}()
@@ -673,7 +679,7 @@ func (fx *fixture) addLaneOps(tmp, launcher string) error {
 				if err == nil {
 					return d
 				}
-			case <-time.After(2 * time.Second):
+			case <-time.After(10 * time.Second):
 			}
 			fatalf("aw new exited before the harness started: %v\n%s", err, errOut.String())
 		}
