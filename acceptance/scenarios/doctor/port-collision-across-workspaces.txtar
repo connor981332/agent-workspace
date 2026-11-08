@@ -1,0 +1,63 @@
+# Two workspaces on one machine that could use the same ports are reported, and an individual-layer
+# offset separates them.
+# req: R16
+# source: spec (no candidate source)
+# milestone: M4
+
+workspace shop --init
+owner-may-change
+exec aw setup
+exec sh $WORK/other.sh
+exec aw doctor --json
+stdout 'seat ports overlap'
+stdout 'offset'
+exec sh $WORK/offset.sh
+exec aw doctor --json
+stdout 'no overlap with other workspaces'
+
+-- other.sh --
+d="$WORK/other-workspace"
+mkdir -p "$d"
+cd "$d"
+git init -q
+cat > workspace.toml <<'TOML'
+[workspace]
+name = "Other"
+namespace = "other"
+schema = 1
+
+[projects.app]
+directory = "."
+
+[projects.app.servers.web]
+command = "exec sleep 1"
+port = 3000
+TOML
+mkdir -p "$XDG_STATE_HOME/agent-workspace"
+echo "$d" >> "$XDG_STATE_HOME/agent-workspace/workspaces"
+-- offset.sh --
+mkdir -p "$XDG_CONFIG_HOME/agent-workspace"
+printf '[ports]\noffset = 1000\n' > "$XDG_CONFIG_HOME/agent-workspace/shop.toml"
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[projects.web]
+directory = "web"
+
+[projects.web.servers.app]
+command = "exec sleep 1"
+port = 3000
+
+[projects.api]
+directory = "api"
+
+[resources.stack]
+kind = "process"
+capacity = 1
+servers = ["web.app"]

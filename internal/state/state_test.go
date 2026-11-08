@@ -221,3 +221,39 @@ func TestArchivedHandoffStaysOnRecord(t *testing.T) {
 		t.Fatalf("after: %+v, %v", h, err)
 	}
 }
+
+// The log is kept between commands, so it must not grow without limit, and what each command wrote
+// must be there for the next.
+func TestKeptLogStaysBoundedAndLosesNothing(t *testing.T) {
+	dir := t.TempDir()
+	const commands = 3000
+	for i := range commands {
+		s, err := Open(dir, ReadWrite)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := s.Write(context.Background(), func(tx *sql.Tx) error {
+			_, err := tx.Exec(`INSERT INTO meta (key, value) VALUES (?, ?)`, "k"+strconv.Itoa(i), strings.Repeat("x", 4000))
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+		s.Close()
+		r, err := Open(dir, ReadOnly)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var n int
+		if err := r.DB().QueryRow(`SELECT count(*) FROM meta WHERE key LIKE 'k%'`).Scan(&n); err != nil || n != i+1 {
+			t.Fatalf("after command %d: %d rows, %v", i, n, err)
+		}
+		r.Close()
+	}
+	info, err := os.Stat(filepath.Join(dir, File+"-wal"))
+	if err != nil {
+		t.Fatalf("the log should be kept between commands: %v", err)
+	}
+	if info.Size() > maxLog+64<<10 {
+		t.Errorf("the log has grown to %d bytes", info.Size())
+	}
+}

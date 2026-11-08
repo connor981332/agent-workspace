@@ -22,6 +22,7 @@ import (
 	"github.com/connor981332/agent-workspace/internal/compose"
 	"github.com/connor981332/agent-workspace/internal/config"
 	"github.com/connor981332/agent-workspace/internal/launcher"
+	"github.com/connor981332/agent-workspace/internal/platform"
 	"github.com/connor981332/agent-workspace/internal/state"
 	"github.com/connor981332/agent-workspace/internal/timing"
 	"github.com/connor981332/agent-workspace/internal/workspace"
@@ -135,6 +136,7 @@ func Run(dir, version string, withTimings bool) *Report {
 	checkIgnored(ws.Owner, c, add)
 	checkHooksPath(ws.Owner, c, add)
 	checkInstructions(ws.Owner, add)
+	checkMachine(ws.Owner, c, add)
 	addMachine(add)
 	if withTimings {
 		r.Timings = t.Phases()
@@ -296,6 +298,102 @@ func checkHooksPath(owner string, c *config.Config, add func(Check)) {
 		add(Check{Name: "git hooks", Status: Info, Message: "aw's hooks are not installed in " + strings.Join(notSet, " ") + " yet", Fix: "run aw setup"})
 	default:
 		add(Check{Name: "git hooks", Status: OK, Message: "every repository runs aw's hooks dispatcher"})
+	}
+}
+
+// seatPorts are every port a workspace's servers might use: seat 0 to capacity of each.
+func seatPorts(c *config.Config) map[int]string {
+	out := map[int]string{}
+	capacity := map[string]int{}
+	for _, r := range c.Resources {
+		for _, s := range r.Servers {
+			capacity[s] = r.Capacity
+		}
+	}
+	for _, pname := range sortedKeys(c.Projects) {
+		for _, sname := range sortedKeys(c.Projects[pname].Servers) {
+			full, n := pname+"."+sname, c.Lanes.ServerCapacity
+			if v, ok := capacity[full]; ok {
+				n = v
+			}
+			for seat := 0; seat <= n; seat++ {
+				out[c.Projects[pname].Servers[sname].Port+c.Lanes.PortStride*seat+c.Ports.Offset] = full
+			}
+		}
+	}
+	return out
+}
+
+func memoryNeeded(c *config.Config) uint64 {
+	var total uint64
+	for _, r := range c.Resources {
+		capacity := r.Capacity
+		if len(r.Tokens) > 0 {
+			capacity = len(r.Tokens)
+		}
+		total += parseSize(r.Memory) * uint64(capacity)
+	}
+	return total
+}
+
+// parseSize reads an approximate size such as 12GB or 512MB, and 0 for anything else.
+func parseSize(s string) uint64 {
+	s = strings.ToUpper(strings.TrimSpace(s))
+	for _, u := range []struct {
+		suffix string
+		bytes  uint64
+	}{{"TB", 1 << 40}, {"GB", 1 << 30}, {"MB", 1 << 20}, {"KB", 1 << 10}} {
+		if n, ok := strings.CutSuffix(s, u.suffix); ok {
+			v, err := strconv.ParseFloat(strings.TrimSpace(n), 64)
+			if err != nil || v < 0 {
+				return 0
+			}
+			return uint64(v * float64(u.bytes))
+		}
+	}
+	return 0
+}
+
+// checkMachine compares this workspace with the others registered on the machine (S15): ports they
+// could both use, and whether all their seats together would fit in memory.
+func checkMachine(owner string, c *config.Config, add func(Check)) {
+	if c == nil {
+		return
+	}
+	data, _ := os.ReadFile(config.RegistryFile())
+	mine := seatPorts(c)
+	need := memoryNeeded(c)
+	var clashes []string
+	for _, line := range strings.Split(string(data), "\n") {
+		if line == "" || line == owner {
+			continue
+		}
+		other, err := config.Load(line)
+		if err != nil {
+			continue // moved or broken: not this workspace's problem
+		}
+		need += memoryNeeded(other)
+		ports := seatPorts(other)
+		var shared []int
+		for p := range mine {
+			if _, ok := ports[p]; ok {
+				shared = append(shared, p)
+			}
+		}
+		if len(shared) > 0 {
+			slices.Sort(shared)
+			clashes = append(clashes, fmt.Sprintf("%s (from port %d, %d shared)", line, shared[0], len(shared)))
+		}
+	}
+	if len(clashes) > 0 {
+		add(Check{Name: "ports", Status: Warn, Message: "this workspace's seat ports overlap " + strings.Join(clashes, ", "),
+			Fix: "set [ports] offset in your individual layer, so that the two cannot collide"})
+	} else if len(mine) > 0 {
+		add(Check{Name: "ports", Status: OK, Message: "no overlap with other workspaces on this machine"})
+	}
+	if total := platform.TotalMemory(); total > 0 && need > total {
+		add(Check{Name: "machine capacity", Status: Warn, Message: fmt.Sprintf("the resources of every workspace on this machine could need %.1f GB of memory, and it has %.1f GB", float64(need)/(1<<30), float64(total)/(1<<30)),
+			Fix: "lower some capacity, or do not run these at once"})
 	}
 }
 

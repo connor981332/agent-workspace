@@ -1,0 +1,28 @@
+# aw doctor warns when every resource at full capacity could need more memory than the machine has.
+# req: R36
+# source: spec (no candidate source)
+# milestone: M4
+
+workspace shop --init
+exec aw doctor --json
+stdout 'could need 2000000.0 GB'
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[projects.web]
+directory = "web"
+
+[projects.api]
+directory = "api"
+
+[resources.stack]
+kind = "process"
+capacity = 2
+memory = "1000000GB"

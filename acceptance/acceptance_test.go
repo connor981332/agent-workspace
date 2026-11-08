@@ -30,6 +30,9 @@ import (
 
 var cfg cmds.Config
 
+// tempDir holds the run's binaries and mirror.
+var tempDir string
+
 func TestMain(m *testing.M) {
 	code, err := setup()
 	if err != nil {
@@ -39,6 +42,9 @@ func TestMain(m *testing.M) {
 	if code == 0 {
 		code = m.Run()
 	}
+	if code == 0 {
+		os.RemoveAll(tempDir) // a failed run's directory is kept, to be inspected
+	}
 	os.Exit(code)
 }
 
@@ -47,7 +53,7 @@ func setup() (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	// The temporary directory is left for the OS to clean, so a failed run can be inspected.
+	tempDir = tmp
 
 	awBin := os.Getenv("AW_BIN")
 	if awBin == "" {

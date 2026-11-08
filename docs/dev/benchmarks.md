@@ -54,21 +54,55 @@ repository at a time, stopping at the first that is not proven.
 
 Not yet measured: pending, for a maintainer with a Mac.
 
+## A correction to earlier results
+
+Until 2026-11-08 the bench kept its fixture in the system's temporary directory, which on this machine
+is a RAM disk, where a sync costs nothing. The M1 and M2 results above, and the first M3 results, were
+measured that way. The bench now uses the user's cache directory, on the real disk.
+
+On a real disk, deleting and recreating SQLite's write-ahead log for each command cost about 27 ms, and
+`grant-next` missed its budget at 53 ms p99. Writers now keep the log between commands and compact it
+at 4 MB, and read-only connections open with `mode=ro`, so they cannot touch it. With the log at 4 MB,
+opening the state for a read costs about 1.5 ms more, which keeps the guard hook within its budget.
+
 ## M3
 
 ### Linux laptop, 2026-11-08
 
-The same machine as M1, on power. aw built from the m3/mux branch, with every M3 guard in place.
+The same machine as M1, on power, on its NVMe disk (btrfs), the machine mostly idle. aw built from the m4/exit branch. Measured again after the correction above; v0.0.4 was released on the RAM-disk result.
 
 | Operation | n | p50 ms | p95 ms | p99 ms | max ms | limit ms | result |
 |---|---|---|---|---|---|---|---|
-| hook | 1000 | 4.53 | 5.49 | 5.93 | 6.33 | 8.00 | pass |
-| whoami | 500 | 3.91 | 4.77 | 5.25 | 6.74 | 10.00 | pass |
-| config-get | 500 | 3.99 | 4.78 | 5.24 | 5.71 | 10.00 | pass |
-| attach-from-pool | 100 | 35.13 | 38.96 | 40.88 | 48.16 | 100.00 | pass |
-| new-until-harness | 100 | 37.15 | 40.52 | 43.88 | 44.22 | 150.00 | pass |
-| dashboard | 200 | 45.08 | 48.29 | 50.31 | 52.69 | 100.00 | pass |
-| ref-hook | 1000 | 4.21 | 5.03 | 5.59 | 6.49 | 8.00 | pass |
+| hook | 1000 | 4.18 | 4.78 | 5.09 | 5.69 | 8.00 | pass |
+| whoami | 500 | 3.38 | 3.83 | 4.04 | 4.46 | 10.00 | pass |
+| config-get | 500 | 3.33 | 3.79 | 4.12 | 4.45 | 10.00 | pass |
+| attach-from-pool | 100 | 63.61 | 73.32 | 76.27 | 76.75 | 100.00 | pass |
+| new-until-harness | 100 | 65.78 | 76.01 | 89.00 | 95.25 | 150.00 | pass |
+| dashboard | 200 | 43.47 | 44.90 | 45.26 | 45.85 | 100.00 | pass |
+| ref-hook | 1000 | 4.64 | 5.26 | 5.64 | 6.68 | 8.00 | pass |
+
+### Apple Silicon laptop
+
+Not yet measured: pending, for a maintainer with a Mac.
+
+## M4
+
+### Linux laptop, 2026-11-08
+
+The same machine as M1, on power, on its NVMe disk (btrfs), the machine mostly idle. aw built from the m4/exit branch. 
+
+| Operation | n | p50 ms | p95 ms | p99 ms | max ms | limit ms | result |
+|---|---|---|---|---|---|---|---|
+| hook | 1000 | 4.18 | 4.78 | 5.09 | 5.69 | 8.00 | pass |
+| whoami | 500 | 3.38 | 3.83 | 4.04 | 4.46 | 10.00 | pass |
+| config-get | 500 | 3.33 | 3.79 | 4.12 | 4.45 | 10.00 | pass |
+| attach-from-pool | 100 | 63.61 | 73.32 | 76.27 | 76.75 | 100.00 | pass |
+| new-until-harness | 100 | 65.78 | 76.01 | 89.00 | 95.25 | 150.00 | pass |
+| dashboard | 200 | 43.47 | 44.90 | 45.26 | 45.85 | 100.00 | pass |
+| ref-hook | 1000 | 4.64 | 5.26 | 5.64 | 6.68 | 8.00 | pass |
+| serve-free-seat | 100 | 7.73 | 8.89 | 32.68 | 43.81 | 50.00 | pass |
+| grant-next | 100 | 26.70 | 42.18 | 44.85 | 44.93 | 50.00 | pass |
+| preempt | 100 | 7.11 | 7.95 | 8.32 | 27.85 | 50.00 | pass |
 
 ### Apple Silicon laptop
 

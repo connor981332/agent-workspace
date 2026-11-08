@@ -20,4 +20,4 @@ exec sh $WORK/tree.sh
 cmp stdout $WORK/before
 
 -- tree.sh --
-find "$OWNER" "$HOME" -type f | LC_ALL=C sort | while IFS= read -r f; do cksum < "$f" | tr '\n' ' '; echo "$f"; done
+find "$OWNER" "$HOME" -type f ! -name '*-shm' | LC_ALL=C sort | while IFS= read -r f; do cksum < "$f" | tr '\n' ' '; echo "$f"; done

@@ -112,3 +112,28 @@ exec %s git-hook %s "$@"
 func shQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
+
+// RegisterWorkspace records this workspace on the machine, so that aw doctor can compare it with the
+// others there (S15). It is safe to rerun.
+func RegisterWorkspace(owner string) error {
+	path := config.RegistryFile()
+	data, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if line == owner {
+			return nil
+		}
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = fmt.Fprintln(f, owner)
+	return err
+}

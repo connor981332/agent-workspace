@@ -25,4 +25,4 @@ cmp stdout $WORK/before
 ! exists .git/aw/state.db
 
 -- tree.sh --
-find "$OWNER" "$HOME" -type f | LC_ALL=C sort | while IFS= read -r f; do cksum < "$f" | tr '\n' ' '; echo "$f"; done
+find "$OWNER" "$HOME" -type f ! -name '*-shm' | LC_ALL=C sort | while IFS= read -r f; do cksum < "$f" | tr '\n' ' '; echo "$f"; done

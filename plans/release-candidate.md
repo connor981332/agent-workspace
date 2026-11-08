@@ -94,7 +94,11 @@ Speed enforcement changed at the M3 exit, by the spec owner (§5.2): CI checks r
 
 (PR #40.) Now (`m4/limits`): maximum hold and idle expiry, token scripts through `internal/extproto`, team commands with `needs`, seats and URLs in `aw whoami`, seat variables in `aw run`.
 
-**Next step:** rest of M4: port collisions and machine capacity in `aw doctor` (S15), the three M4 benchmarks, the M4 exit.
+(PR #41.) Now (`m4/exit`): port collisions and machine capacity in `aw doctor` (S15), the three M4 benchmarks, and `requirements.toml` moved to `current = "M4"`.
+
+The bench had been running on a RAM disk. It now uses the real disk, where every budget holds after writers began keeping SQLite's log between commands (`docs/dev/benchmarks.md`).
+
+**Next step:** the M4 pre-release (v0.0.5), then M5.
 
 **Pending manual checks:** the hot-path and budget benchmarks on an Apple Silicon laptop (T3, M1, M2;
 docs/dev/benchmarks.md).
