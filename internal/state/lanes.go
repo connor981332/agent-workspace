@@ -308,6 +308,18 @@ func RecordSessionIdentity(dir string, id int, harnessSession string, pid int, p
 	return err
 }
 
+// RecordSessionPurpose is the hook's write for a session with no purpose: its first prompt. Like
+// RecordSessionIdentity it never waits for a lock.
+func RecordSessionPurpose(dir string, id int, purpose string) error {
+	db, err := sql.Open("sqlite", "file:"+filepath.Join(dir, File)+"?_pragma=busy_timeout(0)")
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	_, err = db.Exec(`UPDATE sessions SET purpose = ? WHERE id = ? AND purpose = ''`, purpose, id)
+	return err
+}
+
 // RefTokenKey is the meta key of a ref token: aw's authorization for its own ref updates from a
 // lane (S3), which the reference-transaction hook checks.
 func RefTokenKey(token string) string { return "ref-token:" + token }

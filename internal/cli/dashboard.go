@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -81,7 +82,7 @@ func dashboard(cmd *cobra.Command, asJSON bool) error {
 	}
 	width := ui.Width(os.Stdout)
 	printSections(out, all, width, false)
-	printPairs(out, pairs, width)
+	printPairs(out, m.WS.Owner, pairs, width)
 	return nil
 }
 
@@ -97,13 +98,30 @@ func pairSessions(m *lanes.Manager) ([]state.Session, error) {
 	return out, err
 }
 
-func printPairs(out io.Writer, pairs []state.Session, width int) {
+// ownerBranch is the owner checkout's branch, read directly, or "".
+func ownerBranch(owner string) string {
+	data, err := os.ReadFile(filepath.Join(owner, ".git", "HEAD"))
+	if err != nil {
+		return ""
+	}
+	branch, _ := strings.CutPrefix(strings.TrimSpace(string(data)), "ref: refs/heads/")
+	if branch == strings.TrimSpace(string(data)) {
+		return "" // a detached HEAD has no name to show
+	}
+	return branch
+}
+
+func printPairs(out io.Writer, owner string, pairs []state.Session, width int) {
 	if len(pairs) == 0 {
 		return
 	}
 	fmt.Fprintln(out, ui.Fit("PAIR SESSIONS (in the owner checkout)", width))
 	for _, s := range pairs {
-		fmt.Fprintln(out, ui.Fit(fmt.Sprintf("  %-16s started %s", ui.Clean(s.Harness), ago(s.Started)), width))
+		purpose := s.Purpose
+		if purpose == "" { // no prompt seen yet: the branch says what it is working on (ux.md)
+			purpose = ownerBranch(owner)
+		}
+		fmt.Fprintln(out, ui.Fit(fmt.Sprintf("  %-16s started %-10s %s", ui.Clean(s.Harness), ago(s.Started), quoted(purpose)), width))
 	}
 }
 
@@ -304,7 +322,7 @@ state, within a deadline. It writes nothing.`,
 				return err
 			}
 			printSections(out, ss, ui.Width(os.Stdout), true)
-			printPairs(out, pairs, ui.Width(os.Stdout))
+			printPairs(out, m.WS.Owner, pairs, ui.Width(os.Stdout))
 			return nil
 		}),
 	}

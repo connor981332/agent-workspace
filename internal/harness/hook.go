@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -69,6 +70,10 @@ func hook(args []string, version string, stdin io.Reader, stdout, stderr io.Writ
 	}
 	t.Mark("payload")
 
+	if p.Event == UserPrompt {
+		capturePurpose(p) // advice for the dashboard: whatever happens here, the prompt goes through
+		return Allow
+	}
 	if p.Event != PreToolUse && p.Event != SessionStart {
 		return Allow // no tool call to decide
 	}
@@ -138,6 +143,15 @@ func resolveScope(p Payload, version string, t *timing.Recorder) (*policy.Scope,
 		for sname, sv := range pr.Servers {
 			scope.Servers = append(scope.Servers, policy.ServerCommand{Name: name + "." + sname, Words: strings.Fields(sv.Command)})
 		}
+	}
+
+	for _, name := range slices.Sorted(maps.Keys(cfg.Guards)) {
+		g := cfg.Guards[name]
+		tg := policy.TeamGuard{Name: name, Paths: g.Paths, Ask: g.Action == "ask", Message: g.Message, Requires: g.Requires}
+		for _, c := range g.Commands {
+			tg.Commands = append(tg.Commands, strings.Fields(c))
+		}
+		scope.Guards = append(scope.Guards, tg)
 	}
 
 	s, err := state.Open(stateDir, state.ReadOnly)
@@ -269,6 +283,50 @@ func attachment(s *state.Store, stateDir string, p Payload) (attached, error) {
 		}
 	}
 	return current, nil
+}
+
+// maxPurpose is how many characters of a first prompt are kept as a session's purpose.
+const maxPurpose = 80
+
+// firstLine is the start of a prompt, short enough to show as a purpose.
+func firstLine(prompt string) string {
+	line, _, _ := strings.Cut(strings.TrimSpace(prompt), "\n")
+	line = strings.TrimSpace(line)
+	if r := []rune(line); len(r) > maxPurpose {
+		return strings.TrimSpace(string(r[:maxPurpose])) + "…"
+	}
+	return line
+}
+
+// capturePurpose names a session that has no purpose after its first prompt (ux.md, "The session
+// record"). Only a session aw knows and that has none is written to, once, and it never waits.
+func capturePurpose(p Payload) {
+	purpose := firstLine(p.Prompt)
+	if purpose == "" || !filepath.IsAbs(p.Cwd) {
+		return
+	}
+	ws, err := workspace.Find(p.Cwd)
+	if err != nil {
+		return
+	}
+	stateDir, err := ws.StateDir()
+	if err != nil {
+		return
+	}
+	s, err := state.Open(stateDir, state.ReadOnly)
+	if err != nil {
+		return
+	}
+	defer s.Close()
+	rec, err := state.SessionByHarnessID(s.DB(), p.Harness, p.Session)
+	if errors.Is(err, state.ErrNotFound) {
+		if h, id, ok := strings.Cut(os.Getenv("AW_SESSION"), ":"); ok && h == p.Harness {
+			rec, err = state.SessionByHarnessID(s.DB(), h, id)
+		}
+	}
+	if err == nil && rec.Purpose == "" {
+		_ = state.RecordSessionPurpose(stateDir, rec.ID, purpose) // best effort: the next prompt tries again
+	}
 }
 
 // maxPersonal is how much of the personal layer a session-start context carries.

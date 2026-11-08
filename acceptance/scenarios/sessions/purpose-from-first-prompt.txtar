@@ -1,0 +1,36 @@
+# A session with no purpose takes it from its first prompt, cut to one short line. Until then it is
+# known by the branch. A later prompt, or a session that already has a purpose, changes nothing.
+# req: R77
+# source: spec (no candidate source)
+# milestone: M3
+
+workspace solo --single --init
+exec aw pair --session claude:p-1
+exec aw
+stdout 'PAIR SESSIONS'
+stdout '"main"'
+exec aw --json
+json stdout .pair_sessions[0].purpose ''
+
+exec sh $WORK/first.sh
+! stdout .
+exec aw --json
+json stdout .pair_sessions[0].purpose 'Fix the tax rounding in the cart'
+exec awtest-hook -session p-1 prompt 'Something else entirely'
+exec aw --json
+json stdout .pair_sessions[0].purpose 'Fix the tax rounding in the cart'
+
+exec awtest-hook -session p-2 prompt 'A session aw does not know is not recorded'
+exec aw --json
+! stdout 'does not know'
+
+session s-1 claude
+exec aw attach 'add feature flag'
+env AW_SESSION=
+exec awtest-hook -session s-1 prompt 'Not the purpose'
+exec aw recap --json
+! stdout 'Not the purpose'
+
+-- first.sh --
+awtest-hook -session p-1 prompt 'Fix the tax rounding in the cart
+and then check every locale'

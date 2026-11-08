@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -27,6 +28,7 @@ type Config struct {
 	Projects  map[string]*Project  `json:"projects"`
 	Resources map[string]*Resource `json:"resources"`
 	Commands  map[string]*Command  `json:"commands"`
+	Guards    map[string]*Guard    `json:"guards"`
 	Locks     Locks                `json:"locks"`
 	User      User                 `json:"user"`
 	Ports     Ports                `json:"ports"`
@@ -128,6 +130,15 @@ type Command struct {
 	Run     string   `json:"run"`
 	Needs   []string `json:"needs"`
 	After   []string `json:"after"`
+}
+
+// Guard is a team guard (R54, S9): declarative, and decided in-process on every tool call.
+type Guard struct {
+	Commands []string `json:"commands"`
+	Paths    []string `json:"paths"`
+	Action   string   `json:"action"`
+	Message  string   `json:"message"`
+	Requires []string `json:"requires"`
 }
 
 type Locks struct {
@@ -628,6 +639,30 @@ func (c *Config) check(team *doc) Errors {
 		}{{"setup", pr.Lifecycle.Setup}, {"reset", pr.Lifecycle.Reset}} {
 			if h.hook != nil {
 				c.checkNeeds(h.hook.Needs, p.child("lifecycle").child(h.name).child("needs"), fail)
+			}
+		}
+	}
+	for _, name := range sortedMap(c.Guards) {
+		g, gp := c.Guards[name], Path{"guards", name}
+		if len(g.Commands) == 0 && len(g.Paths) == 0 {
+			fail(gp, "has no commands or paths, so it would never apply", `add commands = ["<program> <subcommand>"] or paths = ["<file pattern>"]`)
+		}
+		if g.Message == "" {
+			fail(gp, "has no message", `add message = "<why this is refused, and what to do instead>"`)
+		}
+		for i, cmd := range g.Commands {
+			if strings.TrimSpace(cmd) == "" {
+				fail(gp.child("commands").index(i), "is empty", "name a program, and any words it must be followed by")
+			}
+		}
+		for i, p := range g.Paths {
+			if _, err := path.Match(strings.ReplaceAll(p, "**", "*"), ""); err != nil || p == "" || strings.HasPrefix(p, "/") {
+				fail(gp.child("paths").index(i), fmt.Sprintf("%q is not a file pattern from the workspace root", p), `write it like "db/schema.rb" or "config/**/*.yml"`)
+			}
+		}
+		for i, r := range g.Requires {
+			if clean := filepath.ToSlash(filepath.Clean(r)); filepath.IsAbs(r) || clean != r || clean == "." || clean == ".." || strings.HasPrefix(clean, "../") {
+				fail(gp.child("requires").index(i), fmt.Sprintf("%q is not a clean path inside the workspace", r), `name the file from the workspace root, e.g. "bin/deploy-check"`)
 			}
 		}
 	}

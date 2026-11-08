@@ -132,7 +132,7 @@ session that is refused a write prints the exact command. Only you can grant pai
 
 func savePair(ctx context.Context, store *state.Store, s state.Session) error {
 	now := state.Now()
-	s.Pair, s.Purpose, s.State, s.Started, s.LastActivity = true, "pair session", state.SessionActive, now, now
+	s.Pair, s.State, s.Started, s.LastActivity = true, state.SessionActive, now, now
 	return store.Write(ctx, func(tx *sql.Tx) error {
 		_, err := state.SaveSession(tx, s)
 		return err

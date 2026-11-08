@@ -41,6 +41,10 @@ func main() {
 	claude := map[string][2]string{"bash": {"Bash", "command"}, "read": {"Read", "file_path"}, "write": {"Write", "file_path"}, "edit": {"Edit", "file_path"}, "patch": {"apply_patch", "command"}}
 	grok := map[string][2]string{"bash": {"run_terminal_command", "command"}, "read": {"read_file", "target_file"}, "write": {"search_replace", "file_path"}, "edit": {"search_replace", "file_path"}, "list": {"list_dir", "target_directory"}}
 	var payload map[string]any
+	if tool == "prompt" {
+		send(*harness, "user-prompt-submit", *cwd, map[string]any{"session_id": *session, "cwd": *cwd, "hook_event_name": "UserPromptSubmit", "prompt": arg})
+		return
+	}
 	if tool == "session-start" {
 		payload = map[string]any{"session_id": *session, "cwd": *cwd, "hook_event_name": "SessionStart", "source": "startup"}
 		if *harness == "grok" {
