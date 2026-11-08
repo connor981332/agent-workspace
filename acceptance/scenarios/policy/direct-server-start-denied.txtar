@@ -1,6 +1,27 @@
-# policy/direct-server-start-denied: to be written (plan §3.5).
+# A configured server starts through aw serve, which takes a seat, not directly, however it is wrapped. Other scripts of the project run as usual.
 # req: R31 R37 R93
 # source: C1 test_setup_failure_no_wait_and_server_refusal
 # milestone: M3
 
-unwritten
+workspace shop --init
+exec aw attach 'add feature flag'
+cd .worktrees/01
+! exec awtest-hook bash 'cd web && bin/rails server -p 3001'
+stderr 'starts the rails server of web directly'
+stderr 'bin/aw serve'
+! exec awtest-hook bash 'cd web && nohup bin/rails server -p 3001 &'
+! exec awtest-hook bash 'env PORT=1 bin/rails server'
+exec awtest-hook bash 'cd web && bin/rails test'
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[projects.web]
+[projects.web.servers.rails]
+command = "exec bin/rails server -p {port}"
+port = 3000
+
+[projects.api]

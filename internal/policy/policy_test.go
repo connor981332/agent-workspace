@@ -281,6 +281,8 @@ func TestCommandRules(t *testing.T) {
 			{"kill -l", Allow, ""},
 			// Servers.
 			{"npm run dev -- --port 3000", Deny, "servers"},
+			{"npm run dev", Deny, "servers"},
+			{"nohup npm run dev -- --host 0.0.0.0 &", Deny, "servers"},
 			{"npm run build", Allow, ""},
 			// Secrets.
 			{"env", Deny, "secrets"},

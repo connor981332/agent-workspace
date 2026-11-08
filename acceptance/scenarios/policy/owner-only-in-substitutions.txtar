@@ -1,6 +1,18 @@
-# policy/owner-only-in-substitutions: to be written (plan §3.5).
+# Owner-only commands are found wherever the shell would run them: substitutions, pipes, wrappers, nested shells. Merely mentioning one is not running it.
 # req: R64
 # source: C1 test_delegation_lets_owner_checkout_run_only_in_scope_maintenance
 # milestone: M3
 
-unwritten
+workspace shop --init
+exec aw attach 'add feature flag'
+cd .worktrees/01
+! exec awtest-hook bash 'x=$(bin/aw discard y --yes)'
+stderr 'inside a substitution'
+! exec awtest-hook bash 'echo `bin/aw delegate --for 1h`'
+! exec awtest-hook bash 'true && bin/aw upgrade'
+! exec awtest-hook bash 'true | bin/aw pair'
+! exec awtest-hook bash 'env A=1 nohup bin/aw setup'
+! exec awtest-hook bash 'sh -c "bin/aw park x"'
+! exec awtest-hook bash 'eval bin/aw unpark x'
+exec awtest-hook bash 'echo "then run bin/aw discard x; done"'
+exec awtest-hook bash 'grep "bin/aw discard" README.md'

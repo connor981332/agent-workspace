@@ -1,6 +1,22 @@
-# policy/path-env-overrides-refused: to be written (plan §3.5).
+# Environment settings cannot point a command or aw itself outside the lane: Git's directory variables are paths like any other, and aw takes no location from the environment.
 # req: R49 R55 R58
 # source: C1 test_real_hook_and_routing
 # milestone: M3
 
-unwritten
+workspace shop --init
+exec aw attach 'add feature flag'
+cd .worktrees/01
+! exec awtest-hook bash 'GIT_DIR=../../.git git status'
+stderr 'is outside lane feature-flag'
+! exec awtest-hook bash 'GIT_WORK_TREE=$HOME/../x GIT_DIR=$OWNER/.git git status'
+! exec awtest-hook bash 'env GIT_DIR=../../.git git log'
+! exec awtest-hook bash 'export GIT_DIR=../../.git'
+exec awtest-hook bash 'RAILS_ENV=test bin/aw run web true'
+
+env AW_LANES_DIR=$WORK/outside
+env AW_STATE_DIR=$WORK/outside
+exec aw whoami --json
+json stdout .location lane
+exec aw recap --json
+json stdout .lanes[0].name feature-flag
+! exists $WORK/outside

@@ -1,6 +1,13 @@
-# policy/agent-cannot-recreate-container: to be written (plan §3.5).
+# Ports and mounts are fixed when a shared container is created, so agents cannot recreate one to change them.
 # req: R49 R50
 # source: C2 F3 Ports and mounts only at creation
 # milestone: M3
 
-unwritten
+workspace shop --init
+exec aw attach 'add feature flag'
+cd .worktrees/01
+! exec awtest-hook bash 'docker compose up -d --force-recreate db'
+stderr 'docker compose up changes shared containers'
+! exec awtest-hook bash 'docker container rm -f shop-db && docker run -p 5433:5432 postgres'
+! exec awtest-hook bash 'podman run -v /:/host alpine'
+! exec awtest-hook bash 'devcontainer up --remove-existing-container'

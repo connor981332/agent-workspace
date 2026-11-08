@@ -1,6 +1,13 @@
-# lanes/discard-refused-to-agents: to be written (plan §3.5).
+# Only the human abandons work: aw discard, and the other commands that are the human's, are refused to agents wherever they appear.
 # req: R27
 # source: spec (no candidate source)
 # milestone: M3
 
-unwritten
+workspace shop --init
+exec aw attach 'add feature flag'
+cd .worktrees/01
+! exec awtest-hook bash 'bin/aw discard feature-flag --yes'
+stderr 'aw discard abandons a lane''s work, which only the human does'
+! exec awtest-hook bash 'bin/aw sweep --apply'
+stderr 'aw sweep --apply removes lanes'
+exec awtest-hook bash 'bin/aw sweep'
