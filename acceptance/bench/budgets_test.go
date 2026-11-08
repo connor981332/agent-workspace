@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"regexp"
 	"strconv"
@@ -19,6 +20,7 @@ func TestBudgetsMatchTheSpec(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	flat := strings.Join(strings.Fields(string(data)), " ")
 	spec := map[string]int{}
 	for _, m := range regexp.MustCompile(`(?m)^\| (.+?) \| (\d+) ms`).FindAllStringSubmatch(string(data), -1) {
 		n, _ := strconv.Atoi(m[2])
@@ -35,6 +37,10 @@ func TestBudgetsMatchTheSpec(t *testing.T) {
 			t.Errorf("%s: speed.md has no budget row %q", op.Name, op.Spec)
 		case op.BudgetMS != want:
 			t.Errorf("%s: budgets.toml says %d ms, speed.md says %d ms", op.Name, op.BudgetMS, want)
+		}
+		// A CI ceiling must be stated in speed.md's "Enforcement" too.
+		if op.CIBudgetMS > 0 && !strings.Contains(flat, fmt.Sprintf("above %d ms p99", op.CIBudgetMS)) {
+			t.Errorf("%s: budgets.toml sets a CI ceiling of %d ms, which speed.md does not state", op.Name, op.CIBudgetMS)
 		}
 		covered[op.Spec] = true
 	}

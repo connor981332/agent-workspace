@@ -29,13 +29,19 @@ func (e *NotFoundError) Error() string {
 const OwnerPointer = ".aw/owner"
 
 // Find walks up from dir. A directory with .aw/owner is a lane root, and the file names the owner
-// checkout. A directory with workspace.toml is the owner checkout.
+// checkout. A directory with workspace.toml is the owner checkout, unless the walk came through a
+// project's lane worktree, <project>/.worktrees/NN, reached by its real path rather than through
+// the lane root's link: that is lane NN, when its lane root points back at this owner checkout.
 func Find(dir string) (*Workspace, error) {
 	abs, err := filepath.Abs(dir)
 	if err != nil {
 		return nil, err
 	}
+	var lanes []string // NN of each <project>/.worktrees/NN passed on the way up
 	for d := abs; ; d = filepath.Dir(d) {
+		if filepath.Base(filepath.Dir(d)) == ".worktrees" {
+			lanes = append(lanes, filepath.Base(d))
+		}
 		if data, err := os.ReadFile(filepath.Join(d, OwnerPointer)); err == nil {
 			owner := strings.TrimSpace(string(data))
 			if !filepath.IsAbs(owner) {
@@ -49,6 +55,19 @@ func Find(dir string) (*Workspace, error) {
 			return &Workspace{Owner: owner, LaneRoot: d}, nil
 		}
 		if _, err := os.Stat(filepath.Join(d, "workspace.toml")); err == nil {
+			for i := len(lanes) - 1; i >= 0; i-- {
+				root := filepath.Join(d, ".worktrees", lanes[i])
+				data, err := os.ReadFile(filepath.Join(root, OwnerPointer))
+				if err != nil {
+					continue
+				}
+				// The pointer may name the owner by another path to it (a symlinked parent).
+				pointed, err1 := os.Stat(strings.TrimSpace(string(data)))
+				here, err2 := os.Stat(d)
+				if err1 == nil && err2 == nil && os.SameFile(pointed, here) {
+					return &Workspace{Owner: strings.TrimSpace(string(data)), LaneRoot: filepath.Join(strings.TrimSpace(string(data)), ".worktrees", lanes[i])}, nil
+				}
+			}
 			return &Workspace{Owner: d}, nil
 		}
 		if parent := filepath.Dir(d); parent == d {

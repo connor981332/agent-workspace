@@ -4,8 +4,10 @@
 //
 // It builds a fixture workspace through aw init and the bin/aw launcher, with the binary cached, then
 // runs each budgeted operation as a new process, measuring from just before the process starts to
-// its exit. Recording stubs for git, docker, devcontainer, gh, glab, psql, curl and wget are first
-// on PATH: any call to one of them from these operations fails the run (§5.3).
+// its exit (for aw new, to the moment the stub harness starts). Recording stubs for git, docker,
+// devcontainer, gh, glab, psql, curl and wget are first on PATH: any call to one of them from the
+// hot-path operations fails the run (§5.3). The lane operations read and change worktrees, so for
+// them Git is real and only the others are stubbed.
 //
 // In absolute mode an operation fails when its p99 exceeds its budget; in relative mode (macOS CI)
 // when its p99 grows more than 25 % over the baseline's. A failing operation is measured once more,
@@ -36,6 +38,7 @@ type op struct {
 	Name       string `toml:"name"`
 	Spec       string `toml:"spec"`
 	BudgetMS   int    `toml:"budget_ms"`
+	CIBudgetMS int    `toml:"ci_budget_ms"` // the ceiling on the CI runner, where it differs (speed.md)
 	Iterations int    `toml:"iterations"`
 	From       string `toml:"from"`
 	About      string `toml:"about"`
@@ -88,6 +91,7 @@ func main() {
 	baselineAW := flag.String("baseline-aw", "", "a baseline aw binary (master's), measured interleaved with -aw on this machine")
 	out := flag.String("out", "", "write the JSON report here")
 	scale := flag.Float64("scale", 1, "multiply every operation's iterations, e.g. 0.1 for a quick run")
+	on := flag.String("on", "laptop", "laptop (the budgets as speed.md defines them) or ci (ci_budget_ms where an operation has one)")
 	flag.Parse()
 
 	ops, err := loadBudgets("bench/budgets.toml")
@@ -123,12 +127,17 @@ func main() {
 		case m > upTo && (m != inProgress || !ok):
 			continue
 		}
-		var baseRun runner
+		var baseRun *benchOp
 		if baseFx != nil {
 			baseRun = baseFx.ops[o.Name] // nil when the baseline predates the operation
 		}
 		n := max(10, int(float64(o.Iterations)**scale))
 		r, b := measure(o, n, run, baseRun)
+		if *on == "ci" && o.CIBudgetMS > 0 {
+			o.BudgetMS = o.CIBudgetMS
+		} else if *on != "ci" && *on != "laptop" {
+			fatalf("-on must be laptop or ci")
+		}
 		judge(o, r, b, *mode)
 		if !r.Pass {
 			// One noisy run on a shared runner cannot fail CI on its own (§5.2).
@@ -190,18 +199,22 @@ func judge(o op, r, b *Result, mode string) {
 
 // measure runs an operation n times, after a warm-up. With a baseline, the two alternate, so that
 // drift on a shared runner affects both alike.
-func measure(o op, n int, run, base runner) (*Result, *Result) {
+func measure(o op, n int, run, base *benchOp) (*Result, *Result) {
+	for _, b := range []*benchOp{run, base} {
+		if b != nil && b.prepare != nil {
+			b.prepare()
+			b.prepare = nil // a second measurement (after a failure) reuses it
+		}
+	}
 	for range min(50, n/5) {
-		run()
+		run.once()
 		if base != nil {
-			base()
+			base.once()
 		}
 	}
 	var mine, theirs []float64
-	timeIt := func(f runner, into *[]float64) {
-		start := time.Now()
-		f()
-		*into = append(*into, float64(time.Since(start).Microseconds())/1000)
+	timeIt := func(b *benchOp, into *[]float64) {
+		*into = append(*into, float64(b.once().Microseconds())/1000)
 	}
 	for range n {
 		timeIt(run, &mine)
@@ -308,13 +321,29 @@ func fatalf(format string, args ...any) {
 
 // The fixture.
 
-type runner func()
+// benchOp is one measured operation: run returns how long it took. prepare, when set, runs once
+// before the first iteration, untimed; reset, when set, runs after each iteration, untimed, to put
+// the fixture back (a claimed lane returned to the pool).
+type benchOp struct {
+	prepare func()
+	run     func() time.Duration
+	reset   func()
+}
+
+func (b *benchOp) once() time.Duration {
+	d := b.run()
+	if b.reset != nil {
+		b.reset()
+	}
+	return d
+}
 
 type fixture struct {
 	owner   string
-	env     []string
+	env     []string // the hot-path environment: every tool stubbed
+	laneEnv []string // the lane operations' environment: real Git, the rest stubbed
 	stubLog string
-	ops     map[string]runner
+	ops     map[string]*benchOp
 }
 
 // stubbed are the tools the measured operations may not run (speed.md, "The hot path").
@@ -428,33 +457,242 @@ func newFixture(tmp, awBin string) (*fixture, error) {
 			measured = append(measured, e)
 		}
 	}
+	laneStubs := filepath.Join(tmp, "lane-stubs")
+	if err := os.MkdirAll(laneStubs, 0o755); err != nil {
+		return nil, err
+	}
+	for _, s := range stubbed[1:] { // all but git
+		if err := os.Link(filepath.Join(stubs, s), filepath.Join(laneStubs, s)); err != nil {
+			return nil, err
+		}
+	}
+	laneEnv := append(slices.Clone(measured), "PATH="+laneStubs+string(os.PathListSeparator)+os.Getenv("PATH"))
 	measured = append(measured, "PATH="+stubs+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	payload, _ := json.Marshal(map[string]any{
 		"session_id": "bench-session", "cwd": owner, "hook_event_name": "PreToolUse", "tool_name": "Bash",
 		"tool_input": map[string]string{"command": `cd web && npm run test -- --grep "checkout tax" 2>&1 | tee /tmp/out.log; git status --porcelain`},
 	})
-	fx := &fixture{owner: owner, env: measured, stubLog: stubLog}
-	cmd := func(stdin []byte, args ...string) runner {
-		return func() {
-			c := exec.Command(launcher, args...)
-			c.Dir, c.Env = owner, fx.env
-			if stdin != nil {
-				c.Stdin = bytes.NewReader(stdin)
+	fx := &fixture{owner: owner, env: measured, laneEnv: laneEnv, stubLog: stubLog}
+	timed := func(env []string, stdin []byte, args ...string) func() time.Duration {
+		return func() time.Duration {
+			start := time.Now()
+			fx.aw(env, stdin, args...)
+			return time.Since(start)
+		}
+	}
+	fx.ops = map[string]*benchOp{
+		"hook":       {run: timed(measured, payload, "hook", "claude", "pre-tool-use")},
+		"whoami":     {run: timed(measured, nil, "whoami")},
+		"config-get": {run: timed(measured, nil, "config", "get", "lanes.max")},
+	}
+	if err := fx.addLaneOps(tmp, launcher); err != nil {
+		// The baseline's binary may predate lanes: its lane operations are then not compared.
+		if !isBaseline(tmp) {
+			return nil, err
+		}
+		fmt.Fprintf(os.Stderr, "bench: the baseline cannot run the lane operations (%v); they are reported without it\n", firstLine(err))
+	}
+	return fx, nil
+}
+
+// aw runs bin/aw in the owner checkout, failing the bench if it fails.
+func (fx *fixture) aw(env []string, stdin []byte, args ...string) {
+	if err := fx.try(env, stdin, args...); err != nil {
+		fatalf("%v", err)
+	}
+}
+
+// output runs bin/aw in the owner checkout and returns its standard output.
+func (fx *fixture) output(env []string, args ...string) ([]byte, error) {
+	c := exec.Command(filepath.Join(fx.owner, "bin", "aw"), args...)
+	c.Dir, c.Env = fx.owner, env
+	var errOut bytes.Buffer
+	c.Stderr = &errOut
+	out, err := c.Output()
+	if err != nil {
+		return nil, fmt.Errorf("aw %s: %v\n%s", strings.Join(args, " "), err, errOut.String())
+	}
+	return out, nil
+}
+
+func (fx *fixture) try(env []string, stdin []byte, args ...string) error {
+	c := exec.Command(filepath.Join(fx.owner, "bin", "aw"), args...)
+	c.Dir, c.Env = fx.owner, env
+	if stdin != nil {
+		c.Stdin = bytes.NewReader(stdin)
+	}
+	var errOut bytes.Buffer
+	c.Stderr = &errOut
+	if err := c.Run(); err != nil {
+		return fmt.Errorf("aw %s: %v\n%s", strings.Join(args, " "), err, errOut.String())
+	}
+	return nil
+}
+
+func isBaseline(tmp string) bool { return filepath.Base(tmp) == "baseline" }
+
+func firstLine(err error) string {
+	s, _, _ := strings.Cut(err.Error(), "\n")
+	return s
+}
+
+// laneCount and pool shape the M2 fixture: §5.1's ten lanes across four repositories, each with
+// unmerged work, half of them with uncommitted work too, and a warm pool to claim from.
+const (
+	laneCount = 10
+	poolSize  = 2
+)
+
+// addLaneOps builds the lanes and adds the dashboard, attach-from-pool and new-until-harness
+// operations. Each lane operation's reset returns the claimed lane to the pool with aw sweep.
+func (fx *fixture) addLaneOps(tmp, launcher string) error {
+	toml := filepath.Join(fx.owner, "workspace.toml")
+	data, err := os.ReadFile(toml)
+	if err != nil {
+		return err
+	}
+	settings := fmt.Sprintf("\n[lanes]\nmax = %d\npool = %d\n", laneCount+poolSize+1, poolSize)
+	if strings.Contains(string(data), "\n[lanes]\n") {
+		return fmt.Errorf("aw init wrote a [lanes] table; the bench must merge into it")
+	}
+	if err := os.WriteFile(toml, append(data, settings...), 0o644); err != nil {
+		return err
+	}
+	env := fx.laneEnv
+	git := func(dir string, args ...string) error {
+		c := exec.Command("git", args...)
+		c.Dir, c.Env = dir, env
+		if out, err := c.CombinedOutput(); err != nil {
+			return fmt.Errorf("git %v in %s: %v\n%s", args, dir, err, out)
+		}
+		return nil
+	}
+	// As a maintainer would after aw init: commit what it wrote.
+	if err := git(fx.owner, "add", "-A"); err != nil {
+		return err
+	}
+	if err := git(fx.owner, "commit", "-q", "-m", "Add Agent Workspace"); err != nil {
+		return err
+	}
+	if err := fx.try(env, nil, "recap", "--json"); err != nil {
+		return err // no dashboard in this binary
+	}
+	// The pool: lanes claimed and released at once, which aw sweep recycles.
+	for i := range poolSize {
+		if err := fx.try(env, nil, "attach", fmt.Sprintf("pool lane %d", i)); err != nil {
+			return err
+		}
+	}
+	refill := func() { fx.aw(env, nil, "sweep", "--apply") }
+	refill()
+
+	// aw new execs the harness. The stub harness writes one byte to a FIFO, so the time is taken
+	// when the harness starts, not when it exits.
+	fifo := filepath.Join(tmp, "harness.fifo")
+	if err := mkfifo(fifo); err != nil {
+		return err
+	}
+	// Held open for reading and writing for the whole run: the harness's open never blocks, and
+	// each iteration reads exactly its one byte, never waiting for end of file (which kqueue can
+	// miss on a FIFO on macOS).
+	signals, err := os.OpenFile(fifo, os.O_RDWR, 0)
+	if err != nil {
+		return err
+	}
+	harnessDir := filepath.Join(tmp, "harness")
+	if err := os.MkdirAll(harnessDir, 0o755); err != nil {
+		return err
+	}
+	stub := fmt.Sprintf("#!/bin/sh\nprintf x > %q\n", fifo)
+	if err := os.WriteFile(filepath.Join(harnessDir, "benchharness"), []byte(stub), 0o755); err != nil {
+		return err
+	}
+	newEnv := append(slices.Clone(env[:len(env)-1]), env[len(env)-1]+string(os.PathListSeparator)+harnessDir)
+	n := 0
+	// The dashboard's ten lanes are built only when it is measured, after attach and new, so that
+	// their resets (aw sweep) see only the pool.
+	buildLanes := func() {
+		for i := 1; i <= laneCount; i++ {
+			out, err := fx.output(env, "attach", fmt.Sprintf("bench lane %d", i), "--json")
+			if err != nil {
+				fatalf("%v", err)
 			}
-			var errOut bytes.Buffer
-			c.Stderr = &errOut
-			if err := c.Run(); err != nil {
-				fatalf("%v: %v\n%s", args, err, errOut.String())
+			var claimed struct{ Root string }
+			if err := json.Unmarshal(out, &claimed); err != nil || claimed.Root == "" {
+				fatalf("aw attach --json: no root in %s", out)
+			}
+			root := claimed.Root
+			for _, p := range []string{"web", "api", "android", "ios"} {
+				dir := filepath.Join(root, p)
+				if err := os.WriteFile(filepath.Join(dir, "work.txt"), []byte("work\n"), 0o644); err != nil {
+					fatalf("%v", err)
+				}
+				if err := git(dir, "add", "work.txt"); err != nil {
+					fatalf("%v", err)
+				}
+				if err := git(dir, "commit", "-q", "-m", "work"); err != nil {
+					fatalf("%v", err)
+				}
+			}
+			if i%2 == 1 { // half the lanes have uncommitted work; the others are clean, so their proof is tried
+				if err := os.WriteFile(filepath.Join(root, "web", "dirty.txt"), []byte("wip\n"), 0o644); err != nil {
+					fatalf("%v", err)
+				}
 			}
 		}
 	}
-	fx.ops = map[string]runner{
-		"hook":       cmd(payload, "hook", "claude", "pre-tool-use"),
-		"whoami":     cmd(nil, "whoami"),
-		"config-get": cmd(nil, "config", "get", "lanes.max"),
-	}
-	return fx, nil
+	fx.ops["dashboard"] = &benchOp{prepare: buildLanes, run: func() time.Duration {
+		start := time.Now()
+		fx.aw(env, nil)
+		return time.Since(start)
+	}}
+	fx.ops["attach-from-pool"] = &benchOp{run: func() time.Duration {
+		n++
+		start := time.Now()
+		fx.aw(env, nil, "attach", fmt.Sprintf("bench attach %d", n))
+		return time.Since(start)
+	}, reset: refill}
+	fx.ops["new-until-harness"] = &benchOp{run: func() time.Duration {
+		n++
+		c := exec.Command(launcher, "new", fmt.Sprintf("bench new %d", n), "--harness", "benchharness")
+		c.Dir, c.Env = fx.owner, newEnv
+		var errOut bytes.Buffer
+		c.Stderr = &errOut
+		start := time.Now()
+		if err := c.Start(); err != nil {
+			fatalf("aw new: %v", err)
+		}
+		done := make(chan error, 1)
+		go func() { done <- c.Wait() }()
+		started := make(chan time.Duration, 1)
+		go func() {
+			var b [1]byte
+			if _, err := io.ReadFull(signals, b[:]); err != nil {
+				fatalf("reading the harness's signal: %v", err)
+			}
+			started <- time.Since(start)
+		}()
+		select {
+		case d := <-started:
+			if err := <-done; err != nil {
+				fatalf("aw new: %v\n%s", err, errOut.String())
+			}
+			return d
+		case err := <-done:
+			// The harness writes and exits at once, so both may be ready together.
+			select {
+			case d := <-started:
+				if err == nil {
+					return d
+				}
+			case <-time.After(10 * time.Second):
+			}
+			fatalf("aw new exited before the harness started: %v\n%s", err, errOut.String())
+		}
+		return 0
+	}, reset: refill}
+	return nil
 }
 
 func (fx *fixture) stubCalls() string {

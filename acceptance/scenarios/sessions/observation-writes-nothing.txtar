@@ -1,6 +1,28 @@
-# sessions/observation-writes-nothing: to be written (plan §3.5).
+# Observing sessions does not touch their records: the dashboard, aw recap and the sweep preview
+# leave an attached session's last activity as it was, and write nothing anywhere.
 # req: R25 R77
 # source: C1 test_attachment_reservations_are_observational; C1 test_observe_sessions_does_not_refresh_record
 # milestone: M2
 
-unwritten
+workspace solo --single --init
+session s-1 claude
+exec aw attach 'add feature flag'
+exec aw recap --json
+json stdout .lanes[0].sessions[0].state active
+cp stdout $WORK/first.json
+exec sh $WORK/tree.sh
+cp stdout $WORK/before
+
+exec sleep 1.1
+exec aw
+exec aw recap
+exec aw sweep
+exec aw sweep --json
+json stdout .lanes[0].action keep
+exec sh $WORK/tree.sh
+cmp stdout $WORK/before
+exec aw recap --json
+cmp stdout $WORK/first.json
+
+-- tree.sh --
+find "$OWNER" "$HOME" -type f | LC_ALL=C sort | while IFS= read -r f; do cksum < "$f" | tr '\n' ' '; echo "$f"; done

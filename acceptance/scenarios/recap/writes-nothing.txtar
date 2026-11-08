@@ -1,6 +1,36 @@
-# recap/writes-nothing: to be written (plan §3.5).
+# aw recap only observes: in every form, and whatever the lanes' states, it writes nothing. A lane
+# whose work was merged shows as cleanable, but recap records nothing about it: the lane stays ready
+# until aw sweep proves the merge itself.
 # req: R81 R82
 # source: C1 test_recap_is_observational_and_merging_does_not_complete_plan
 # milestone: M2
 
-unwritten
+workspace shop --init
+exec aw attach 'first thing'
+lane-commit 01 web/a.txt 'done'
+exec aw finish first-thing --summary 'Done.'
+exec aw attach 'second thing'
+exec sh -c 'echo wip > web/.worktrees/02/wip.txt'
+exec aw attach 'third thing'
+exec aw park third-thing
+git-merge web aw/first-thing
+
+exec sh $WORK/tree.sh
+cp stdout $WORK/before
+exec aw recap
+stdout '(?s)CLEANABLE\n  1 lane proven merged → aw sweep: first-thing'
+exec aw recap --json
+exec aw recap --remote
+cd .worktrees/02
+exec aw recap
+exec aw recap --all --json
+cd $OWNER
+exec sh $WORK/tree.sh
+cmp stdout $WORK/before
+
+exec aw recap --json
+json stdout .lanes[0].state ready
+json stdout .lanes[0].section cleanable
+
+-- tree.sh --
+find "$OWNER" "$HOME" -type f | LC_ALL=C sort | while IFS= read -r f; do cksum < "$f" | tr '\n' ' '; echo "$f"; done

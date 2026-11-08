@@ -1,6 +1,40 @@
-# cli/dashboard-writes-nothing: to be written (plan §3.5).
+# aw alone is the dashboard. It writes nothing: no state is created before there is any, and with
+# lanes it reads the state without changing it, the lanes, the owner checkout or the home directory.
+# Outside a workspace it says so and shows the usage.
 # req: R81
 # source: C1 test_default_cli_and_removed_commands_have_no_effects
 # milestone: M2
 
-unwritten
+workspace shop --init
+exec sh $WORK/tree.sh
+cp stdout $WORK/empty
+exec aw
+stdout '^NEEDS YOU$'
+stdout '^CLEANABLE$'
+exec aw --json
+json stdout .lanes
+exec sh $WORK/tree.sh
+cmp stdout $WORK/empty
+! exists .git/aw/state.db
+
+exec aw attach 'first thing'
+lane-commit 01 web/y.txt 'work'
+exec aw attach 'second thing'
+lane-commit 02 web/x.txt 'unmerged'
+exec aw park second-thing
+exec sh $WORK/tree.sh
+cp stdout $WORK/before
+exec aw
+stdout '(?s)^NEEDS YOU\n  first-thing +no session attached.*\nPARKED\n  second-thing +parked'
+exec aw --json
+json stdout .lanes[1].section parked
+exec sh $WORK/tree.sh
+cmp stdout $WORK/before
+
+cd $WORK
+exec aw
+stdout 'Not inside an Agent Workspace. Create one with aw init, or cd into one.'
+stdout '^Usage:'
+
+-- tree.sh --
+find "$OWNER" "$HOME" -type f | LC_ALL=C sort | while IFS= read -r f; do cksum < "$f" | tr '\n' ' '; echo "$f"; done

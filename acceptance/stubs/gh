@@ -3,10 +3,11 @@
 # "<tool> api [--hostname H] <path>" answers from $STUB_STATE/<tool>/rules, written by the suite's
 # forge-reply command: lines "<extended regexp><TAB><file>". The first rule whose regexp matches
 # the path wins, and the file's contents are printed. With no match it fails like an API that
-# cannot be reached.
+# cannot be reached. With $STUB_DELAY set, it first sleeps that many seconds, as a forge that hangs.
 set -eu
 tool=${0##*/}
 echo "$tool $*" >> "$STUB_LOG"
+if [ -n "${STUB_DELAY:-}" ]; then sleep "$STUB_DELAY"; fi
 [ "${1:-}" = api ] || { echo "$tool stub: only '$tool api' is supported" >&2; exit 1; }
 shift
 if [ "${1:-}" = --hostname ]; then shift 2; fi

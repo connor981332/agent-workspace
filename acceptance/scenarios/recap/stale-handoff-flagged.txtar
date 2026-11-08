@@ -1,6 +1,28 @@
-# recap/stale-handoff-flagged: to be written (plan §3.5).
+# A handoff records the heads it was made at. When the work moves on afterwards, aw recap flags the
+# handoff as stale rather than presenting it as describing the current work.
 # req: R78
 # source: C1 test_finish_no_plan_idempotence_and_session
 # milestone: M2
 
-unwritten
+workspace shop --init
+exec aw attach 'add feature flag'
+lane-commit 01 web/flag.txt 'flag'
+exec aw finish feature-flag --summary 'Adds the flag. Verify the toggle by hand.'
+exec aw recap
+stdout '(?s)^NEEDS YOU\n  feature-flag +ready for review .*\n +handoff: "Adds the flag. Verify the toggle by hand."\n'
+! stdout 'stale'
+exec aw recap --json
+json stdout .lanes[0].handoff.stale false
+
+lane-commit 01 api/more.txt 'more'
+exec aw recap
+stdout '(?s)^NEEDS YOU\n  feature-flag +ready for review, but changed since the handoff'
+stdout 'handoff: "Adds the flag. Verify the toggle by hand." \(stale: the work changed since\)'
+exec aw recap --json
+json stdout .lanes[0].handoff.stale true
+
+# Handing off again at the new heads clears it.
+exec aw finish feature-flag --summary 'Adds the flag and an API change.'
+exec aw recap --json
+json stdout .lanes[0].handoff.stale false
+json stdout .lanes[0].handoff.summary 'Adds the flag and an API change.'

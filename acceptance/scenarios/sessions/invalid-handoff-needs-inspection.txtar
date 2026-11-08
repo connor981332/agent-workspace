@@ -1,6 +1,25 @@
-# sessions/invalid-handoff-needs-inspection: to be written (plan §3.5).
+# A handoff record that cannot be read is never taken as a valid one: the lane needs inspection,
+# and it is kept.
 # req: R77 R78
 # source: C1 test_local_handoff_reader_versions_and_resume_archive
 # milestone: M2
+# changed: C1 read versioned handoff files; here the handoff is a state record, and the damage is a
+# record whose heads cannot be read.
 
-unwritten
+workspace solo --single --init
+exec aw attach 'add feature flag'
+lane-commit 01 file.txt 'work'
+exec aw finish feature-flag --summary 'Ready.'
+exec aw recap --json
+json stdout .lanes[0].why 'ready for review'
+
+exec awtest-sqlite .git/aw/state.db 'UPDATE handoffs SET heads = ''{not json'''
+exec aw recap
+stdout '(?s)^NEEDS YOU\n  feature-flag +handoff needs inspection \(it cannot be read\)'
+! stdout 'handoff: "Ready."'
+exec aw recap --json
+json stdout .lanes[0].section 'needs you'
+json stdout .lanes[0].handoff.invalid true
+exec aw sweep --apply --json
+json stdout .lanes[0].action keep
+exists .worktrees/01/file.txt

@@ -27,18 +27,12 @@ from = "M1"
 about = "aw config get lanes.max through bin/aw"
 
 [[op]]
-name = "dashboard"
-spec = "`aw` dashboard and `aw recap` (local only)"
-budget_ms = 100
-iterations = 200
-from = "M2"
-
-[[op]]
 name = "attach-from-pool"
 spec = "`aw attach` from the warm pool"
 budget_ms = 100
 iterations = 100
 from = "M2"
+about = "aw attach through bin/aw, claiming a warm lane; aw sweep returns it to the pool, untimed"
 
 [[op]]
 name = "new-until-harness"
@@ -46,6 +40,16 @@ spec = "`aw new` until the harness launches"
 budget_ms = 150
 iterations = 100
 from = "M2"
+about = "aw new through bin/aw from the warm pool, until the stub harness starts (it signals through a FIFO)"
+
+[[op]]
+name = "dashboard"
+spec = "`aw` dashboard and `aw recap` (local only)"
+budget_ms = 100
+ci_budget_ms = 200 # one git status per worktree, 50 of them, on a 4-core runner (speed.md)
+iterations = 200
+from = "M2"
+about = "aw (the dashboard) through bin/aw: 10 lanes across 4 repositories, half with uncommitted work, half clean with unmerged commits"
 
 [[op]]
 name = "serve-free-seat"
