@@ -38,6 +38,7 @@ type Scenario struct {
 	Milestone Milestone // from which it must pass
 	Req       []int     // requirement numbers from "# req:"
 	Source    string    // "# source:", if any
+	Unwritten bool      // the script is only the placeholder unwritten
 }
 
 var reqRE = regexp.MustCompile(`^R([1-9][0-9]*)$`)
@@ -51,15 +52,23 @@ func Parse(path, name string) (Scenario, error) {
 	}
 	defer f.Close()
 
-	var haveMilestone bool
+	var haveMilestone, inScript bool
+	var script []string
 	s := bufio.NewScanner(f)
 	for line := 1; s.Scan(); line++ {
 		text := strings.TrimSpace(s.Text())
+		if strings.HasPrefix(text, "-- ") && strings.HasSuffix(text, " --") {
+			break // the archive's files start
+		}
 		if text == "" {
 			continue
 		}
-		if !strings.HasPrefix(text, "#") {
-			break // the script starts; the header is over
+		if inScript || !strings.HasPrefix(text, "#") {
+			inScript = true
+			if !strings.HasPrefix(text, "#") {
+				script = append(script, text)
+			}
+			continue
 		}
 		key, value, ok := strings.Cut(strings.TrimSpace(strings.TrimPrefix(text, "#")), ":")
 		if !ok {
@@ -92,6 +101,7 @@ func Parse(path, name string) (Scenario, error) {
 	if err := s.Err(); err != nil {
 		return sc, err
 	}
+	sc.Unwritten = len(script) == 1 && script[0] == "unwritten"
 	if !haveMilestone {
 		return sc, fmt.Errorf("%s: no '# milestone: Mn' line in the header", path)
 	}

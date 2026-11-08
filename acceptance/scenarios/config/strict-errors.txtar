@@ -3,4 +3,165 @@
 # source: C1 test_generic.py::ManifestTests::test_mistakes_are_errors_rather_than_ignored
 # milestone: M1
 
-unwritten
+workspace shop
+owner-may-change
+
+# Each case replaces workspace.toml, then validates. The owner checkout changes, by design.
+cp $WORK/no-projects.toml workspace.toml
+! exec aw config validate
+stdout 'workspace.toml:\d+:\d+: projects: the workspace has no projects → add a \[projects.<name>\] table'
+
+cp $WORK/unknown-key.toml workspace.toml
+! exec aw config validate
+stdout 'workspace.toml:7:1: lanes.slot: unknown key → remove it. Known keys here: max, pool'
+
+cp $WORK/namespace.toml workspace.toml
+! exec aw config validate
+stdout 'workspace.toml:3:1: workspace.namespace: is not a valid namespace → use 1 to 20 lowercase letters'
+
+cp $WORK/forge.toml workspace.toml
+! exec aw config validate
+stdout 'workspace.toml:5:1: workspace.forge: must be one of auto, github, gitlab, none, not "bitbucket" → use'
+
+cp $WORK/reserved.toml workspace.toml
+! exec aw config validate
+stdout 'projects.all: "all" is reserved'
+
+cp $WORK/escape.toml workspace.toml
+! exec aw config validate
+stdout 'workspace.toml:7:1: projects.a.directory: "../x" leaves the workspace → move the repository inside'
+
+cp $WORK/dot.toml workspace.toml
+! exec aw config validate
+stdout 'must be the only project'
+
+cp $WORK/unique.toml workspace.toml
+! exec aw config validate
+stdout 'directories must be unique'
+
+cp $WORK/runner.toml workspace.toml
+! exec aw config validate
+stdout 'workspace.toml:7:1: projects.a.runner: must be one of host, devcontainer, not "podman"'
+
+cp $WORK/port.toml workspace.toml
+! exec aw config validate
+stdout 'projects.a.servers.web: has no base port → add port ='
+
+cp $WORK/after.toml workspace.toml
+! exec aw config validate
+stdout 'workspace.toml:10:10: projects.a.servers.web.after\[0\]: there is no server named "b"'
+
+# Every problem is reported at once, in line order, and --json gives each with its position.
+cp $WORK/two.toml workspace.toml
+! exec aw config validate --json
+json stdout .valid false
+json stdout .results[0].errors[0].key lanes.max
+json stdout .results[0].errors[0].position.line 7
+json stdout .results[0].errors[1].key lanes.pool
+json stdout .results[0].errors[1].fix 'use a number of 0 or more'
+
+# A TOML syntax error names its line too.
+cp $WORK/syntax.toml workspace.toml
+! exec aw config get lanes.max
+stderr 'workspace.toml:6:7: invalid TOML'
+
+-- no-projects.toml --
+[workspace]
+name = "S"
+namespace = "s"
+schema = 1
+-- unknown-key.toml --
+[workspace]
+name = "S"
+namespace = "s"
+schema = 1
+[projects.a]
+[lanes]
+slot = 2
+-- namespace.toml --
+[workspace]
+name = "S"
+namespace = "Bad-Name"
+schema = 1
+[projects.a]
+-- forge.toml --
+[workspace]
+name = "S"
+namespace = "s"
+schema = 1
+forge = "bitbucket"
+[projects.a]
+-- reserved.toml --
+[workspace]
+name = "S"
+namespace = "s"
+schema = 1
+[projects.all]
+directory = "x"
+-- escape.toml --
+[workspace]
+name = "S"
+namespace = "s"
+schema = 1
+
+[projects.a]
+directory = "../x"
+-- dot.toml --
+[workspace]
+name = "S"
+namespace = "s"
+schema = 1
+[projects.a]
+directory = "."
+[projects.b]
+-- unique.toml --
+[workspace]
+name = "S"
+namespace = "s"
+schema = 1
+[projects.a]
+directory = "x"
+[projects.b]
+directory = "x"
+-- runner.toml --
+[workspace]
+name = "S"
+namespace = "s"
+schema = 1
+
+[projects.a]
+runner = "podman"
+-- port.toml --
+[workspace]
+name = "S"
+namespace = "s"
+schema = 1
+[projects.a.servers.web]
+command = "x"
+-- after.toml --
+[workspace]
+name = "S"
+namespace = "s"
+schema = 1
+
+[projects.a.servers.web]
+command = "x"
+port = 1
+# waits for a server that does not exist
+after = ["b"]
+-- two.toml --
+[workspace]
+name = "S"
+namespace = "s"
+schema = 1
+[projects.a]
+[lanes]
+max = "ten"
+pool = -1
+-- syntax.toml --
+[workspace]
+name = "S"
+namespace = "s"
+schema = 1
+[projects.a]
+[lanes

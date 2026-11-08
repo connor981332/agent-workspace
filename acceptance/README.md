@@ -40,7 +40,10 @@ later milestone is reported as skipped with `pending: must pass from Mn`, so sce
 before the code. A pending scenario that has not been written yet holds the single command
 `unwritten`, which fails, so it cannot pass by accident once its milestone is reached.
 
-`current` moves forward in the PR that makes the milestone's last scenario pass.
+`in_progress` names the milestone being built. Its scenarios that have been written run and must
+pass, so CI checks them on every platform from the PR that adds them; those that still hold only
+`unwritten` stay pending. When the milestone's last scenario passes, that PR moves `current`
+forward and `in_progress` to the next milestone.
 
 ### What every scenario gets
 
@@ -49,7 +52,8 @@ before the code. A pending scenario that has not been written yet holds the sing
 - `aw` on `PATH`: the suite's global `aw`. Inside a workspace that has a `bin/aw` launcher, it runs
   that launcher, as the real global `aw` will (distribution.md); elsewhere it runs the binary under
   test (`$AW_BIN`). Use `exec aw …`.
-- `$STUB_LOG` and `$STUB_STATE` for the stubs.
+- `$STUB_LOG` and `$STUB_STATE` for the stubs, and `$AW_REPO`, the repository under test (for
+  scenarios that check its examples).
 - **The owner check.** When the scenario has built a workspace, the runner appends a final check
   that the owner checkout is exactly as the last snapshot recorded it. A scenario that changes the
   owner checkout on purpose declares `owner-may-change`.

@@ -3,4 +3,44 @@
 # source: C1 test_generic.py::ManifestTests::test_defaults_and_fixture
 # milestone: M1
 
-unwritten
+workspace shop
+
+exec aw config get workspace.forge
+stdout '^auto$'
+exec aw config get lanes.max
+stdout '^10$'
+exec aw config get lanes.pool
+stdout '^3$'
+exec aw config get lanes.retention
+stdout '^14d$'
+exec aw config get lanes.hostname
+stdout '^lane-\{lane\}\.localhost$'
+exec aw config get projects.web.runner
+stdout '^host$'
+exec aw config get projects.web.lanes
+stdout '^worktree$'
+exec aw config get resources.stack.owner_preempts
+stdout '^true$'
+
+# A key nobody set is reported as unset, and an unknown key as unknown.
+! exec aw config get projects.web.install
+stderr 'projects.web.install is not set'
+! exec aw config get lanes.slots
+stderr 'lanes.slots is not a configuration key'
+
+exec aw config get lanes.max --json
+json stdout .key lanes.max
+json stdout .value 10
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[projects.web]
+[projects.api]
+
+[resources.stack]
+kind = "process"
+capacity = 1

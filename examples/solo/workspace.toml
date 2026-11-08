@@ -1,0 +1,15 @@
+# A single-repository workspace: the repository is its own workspace.
+
+[workspace]
+name = "Solo"
+namespace = "solo"
+schema = 1
+
+[projects.app]
+directory = "."
+install = "npm ci"
+run = "npm test"
+
+[projects.app.servers.dev]
+command = "exec npm run dev -- --port {port}"
+port = 5173

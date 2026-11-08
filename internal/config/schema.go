@@ -1,0 +1,475 @@
+package config
+
+import (
+	"fmt"
+	"regexp"
+	"slices"
+	"sort"
+	"strings"
+	"time"
+)
+
+// SchemaVersion is the configuration schema this binary reads and writes (R10).
+const SchemaVersion = 1
+
+// kind is the type of a schema node.
+type kind int
+
+const (
+	kTable      kind = iota // fixed keys
+	kMap                    // any keys, each holding elem
+	kString                 // string
+	kInt                    // integer
+	kBool                   // boolean
+	kDuration               // string such as "15s", "45m", "14d"
+	kStringList             // array of strings
+	kHook                   // string, or { run, timeout, needs }
+)
+
+// layer names where a key comes from.
+const (
+	LayerDefault    = "default"
+	LayerTeam       = "team"
+	LayerIndividual = "individual"
+)
+
+// node describes one key of the schema.
+type node struct {
+	kind   kind
+	doc    string
+	fields map[string]*node // kTable
+	order  []string         // kTable: key order for documentation
+	elem   *node            // kMap
+	keyRE  *regexp.Regexp   // kMap: what a key must look like
+	keyFix string           // kMap: how to fix a bad key
+	def    any              // default value, for leaves
+	enum   []string         // allowed strings
+	min    *int             // integers
+	max    *int
+	team   bool // only the team layer may set it
+	check  func(v any) (msg, fix string)
+}
+
+func table(doc string, kv ...any) *node {
+	n := &node{kind: kTable, doc: doc, fields: map[string]*node{}}
+	for i := 0; i < len(kv); i += 2 {
+		name := kv[i].(string)
+		n.fields[name] = kv[i+1].(*node)
+		n.order = append(n.order, name)
+	}
+	return n
+}
+
+func mapOf(doc string, keyRE *regexp.Regexp, keyFix string, elem *node) *node {
+	return &node{kind: kMap, doc: doc, elem: elem, keyRE: keyRE, keyFix: keyFix}
+}
+
+func str(doc string) *node      { return &node{kind: kString, doc: doc} }
+func integer(doc string) *node  { return &node{kind: kInt, doc: doc} }
+func boolean(doc string) *node  { return &node{kind: kBool, doc: doc} }
+func duration(doc string) *node { return &node{kind: kDuration, doc: doc} }
+func strList(doc string) *node  { return &node{kind: kStringList, doc: doc} }
+func hook(doc string) *node     { return &node{kind: kHook, doc: doc} }
+
+func (n *node) withDefault(v any) *node { n.def = v; return n }
+func (n *node) oneOf(vs ...string) *node {
+	n.enum = vs
+	return n
+}
+func (n *node) between(lo, hi int) *node { n.min, n.max = &lo, &hi; return n }
+func (n *node) atLeast(lo int) *node     { n.min = &lo; return n }
+func (n *node) teamOnly() *node          { n.team = true; return n }
+func (n *node) checked(f func(v any) (string, string)) *node {
+	n.check = f
+	return n
+}
+
+var (
+	nameRE      = regexp.MustCompile(`^[a-z][a-z0-9-]{0,39}$`)
+	namespaceRE = regexp.MustCompile(`^[a-z][a-z0-9]{0,19}$`)
+	nameFix     = "use lowercase letters, digits and hyphens, starting with a letter (at most 40 characters)"
+)
+
+// schema is the whole configuration. docs/reference/config.md is generated from it.
+var schema = table("",
+	"workspace", table("The workspace itself. Team layer only.",
+		"name", str("Display name.").teamOnly(),
+		"namespace", str("Names the state, Git metadata, environment prefixes and the individual file "+
+			"(~/.config/agent-workspace/<namespace>.toml). Lowercase letters and digits, starting with a letter.").teamOnly().
+			checked(func(v any) (string, string) {
+				if !namespaceRE.MatchString(v.(string)) {
+					return "is not a valid namespace", "use 1 to 20 lowercase letters and digits, starting with a letter, e.g. \"shop\""
+				}
+				return "", ""
+			}),
+		"schema", integer("Configuration schema version. This release reads schema 1.").teamOnly(),
+		"forge", str("Where merge requests live: auto (from each remote's host), github, gitlab or none.").
+			oneOf("auto", "github", "gitlab", "none").withDefault("auto"),
+	),
+	"lanes", table("Lanes: the numbered, stable directories agents work in.",
+		"max", integer("Most lanes that may exist at once.").between(1, 999).withDefault(int64(10)),
+		"pool", integer("Clean lanes kept warm for reuse.").atLeast(0).withDefault(int64(3)),
+		"retention", duration("Pooled lanes older than this are destroyed.").withDefault("14d"),
+		"hostname", str("Each lane's hostname. {lane} is the lane number, {namespace} the namespace.").
+			withDefault("lane-{lane}.localhost").checked(func(v any) (string, string) {
+			if !strings.Contains(v.(string), "{lane}") {
+				return "does not contain {lane}, so every lane would get the same hostname", `include {lane}, e.g. "lane-{lane}.localhost"`
+			}
+			return "", ""
+		}),
+		"server_capacity", integer("Capacity of the implicit resource \"servers\", which holds every server not "+
+			"listed in a resource.").atLeast(1).withDefault(int64(2)),
+		"port_stride", integer("A server in seat k listens on port + port_stride × k.").atLeast(1).withDefault(int64(100)),
+		"data", mapOf("Per-lane data, owned by a provider. The key names the data, e.g. db.", nameRE, nameFix,
+			table("",
+				"provider", str("postgres, redis, or external (through the extension protocol).").oneOf("postgres", "redis", "external"),
+				"command", str("For provider = \"external\": the provider executable."),
+				"template", str("postgres: the template database lanes are cloned from. Nothing ever connects to it."),
+				"databases", strList("postgres: the databases each lane gets, named <database>_<lane>."),
+				"service", str("Run the provider's client (psql, redis-cli) in this container service instead of on the host."),
+				"env", mapOf("Variables the lane's commands receive, e.g. DATABASE_URL = \"{url:shop_development}\".",
+					envRE, envFix, str("")),
+			)),
+	),
+	"lifecycle", table("Workspace-level lifecycle hooks.",
+		"prepare", hook("After data is provisioned, before installs. Writes each project's env file."),
+		"teardown", hook("Before data is dropped, when a lane is destroyed."),
+	),
+	"projects", mapOf("The project repositories. The key is the project's name.", nameRE, nameFix,
+		table("",
+			"directory", str("Where the repository lives, relative to the workspace. Defaults to the project's name. "+
+				"\".\" makes a single-repository workspace."),
+			"repo", str("Clone URL."),
+			"lanes", str("worktree: every lane gets a worktree. shared: lanes run the owner checkout with lane settings.").
+				oneOf("worktree", "shared").withDefault("worktree"),
+			"runner", str("Where commands run: host, or devcontainer (one container per project, shared with VS Code).").
+				oneOf("host", "devcontainer").withDefault("host"),
+			"install", str("Installs dependencies. Rerun when its stamp changes."),
+			"run", str("The default command for aw run <project> with no command."),
+			"needs", strList("Resources the project's commands need."),
+			"lifecycle", table("Per-project lifecycle hooks.",
+				"setup", hook("After installs, for a newly created lane."),
+				"reset", hook("Instead of setup, for a lane recycled from the pool."),
+			),
+			"servers", mapOf("Servers the project runs. The key names the server, e.g. rails.", nameRE, nameFix,
+				table("",
+					"command", str("Starts the server. {port} is the seat's port. Should exec the server process."),
+					"port", integer("Base port, used by the owner's seat 0. Seat k uses port + port_stride × k.").between(1, 65535),
+					"owner_port", integer("A process listening here is the owner's copy, started without aw.").between(1, 65535),
+					"after", strList("Servers that must start first: <server> in the same project, or <project>.<server>."),
+					"ready", str("A command that exits 0 when the server is ready."),
+				)),
+		)),
+	"resources", mapOf("Resources lanes queue for. The key names the resource.", nameRE, nameFix,
+		table("",
+			"kind", str("process: owns servers. token: hands out a handle.").oneOf("process", "token"),
+			"capacity", integer("Seats. For a token resource with tokens, the number of tokens.").atLeast(1),
+			"servers", strList("process: the servers, as <project>.<server>, started and stopped together."),
+			"tokens", strList("token: the handles, e.g. emulator-5554."),
+			"acquire", str("token: extension-protocol command that returns a new token."),
+			"release", str("token: extension-protocol command that releases a token."),
+			"owner_counts", boolean("The owner's own copy uses a seat.").withDefault(true),
+			"owner_preempts", boolean("The owner cuts in line and evicts the longest holder.").withDefault(true),
+			"evict_grace", duration("SIGTERM to the process group, then SIGKILL after this.").withDefault("15s"),
+			"max_hold", duration("While others wait, a holder is evicted after this. 0 means no limit.").withDefault("0s"),
+			"idle_expiry", duration("A lease with no activity for this long is released. 0 means never.").withDefault("0s"),
+			"memory", str("Approximate memory per seat, e.g. \"12GB\", for aw doctor's machine check."),
+		)),
+	"commands", mapOf("Named team commands, run with aw <name>.", nameRE, nameFix,
+		table("",
+			"project", str("The project the command runs in."),
+			"run", str("The command."),
+			"needs", strList("Resources it holds while it runs."),
+			"after", strList("Lifecycle steps to wait for besides the defaults (prepare, install, setup or reset)."),
+		)),
+	"locks", table("Keys the individual layer may not override. Team layer only.",
+		"keys", strList("Key patterns. * matches one key segment; a pattern locks everything under it.").teamOnly(),
+	),
+	"user", table("Personal preferences, usually set in the individual layer.",
+		"harness", str("The harness aw new launches: claude, codex, grok, opencode, or another on PATH.").withDefault("claude").
+			checked(func(v any) (string, string) {
+				if !nameRE.MatchString(v.(string)) {
+					return "is not a harness name", "name the harness's command, e.g. \"claude\""
+				}
+				return "", ""
+			}),
+		"multiplexer", str("Where aw new, resume and pair open sessions with --mux: herdr, tmux, or a command "+
+			"template containing {command}.").withDefault("tmux").checked(func(v any) (string, string) {
+			s := v.(string)
+			if s == "herdr" || s == "tmux" || strings.Contains(s, "{command}") {
+				return "", ""
+			}
+			return "is neither herdr, tmux nor a template", `use "herdr", "tmux", or a command containing {command}`
+		}),
+		"auto_sweep", boolean("Recycle proven-merged lanes in the background.").withDefault(false),
+		"owner_sessions", str("normal: sessions in the owner checkout must attach to a lane before writing. pair: "+
+			"every session started in the owner checkout is a pair session.").oneOf("normal", "pair").withDefault("normal"),
+	),
+	"ports", table("Machine-specific port settings.",
+		"offset", integer("Added to every port of this workspace, so two workspaces on one machine do not collide.").
+			between(0, 60000).withDefault(int64(0)),
+	),
+)
+
+var (
+	envRE  = regexp.MustCompile(`^[A-Z_][A-Z0-9_]*$`)
+	envFix = "use an environment variable name: uppercase letters, digits and underscores"
+)
+
+// ParseDuration accepts Go durations ("15s", "1h30m") and days ("14d"). Negative durations are
+// refused.
+func ParseDuration(s string) (time.Duration, error) {
+	if d, ok := strings.CutSuffix(s, "d"); ok && d != "" && !strings.ContainsAny(d, "hmsuµn") {
+		var n int
+		if _, err := fmt.Sscanf(d, "%d", &n); err != nil || fmt.Sprint(n) != d || n < 0 {
+			return 0, fmt.Errorf("%q is not a duration", s)
+		}
+		return time.Duration(n) * 24 * time.Hour, nil
+	}
+	dur, err := time.ParseDuration(s)
+	if err != nil || dur < 0 {
+		return 0, fmt.Errorf("%q is not a duration", s)
+	}
+	return dur, nil
+}
+
+// validateLayer checks one layer's values against the schema: unknown keys, types, enums, bounds,
+// key names, and keys only the team layer may set.
+func validateLayer(d *doc, layer string) Errors {
+	var errs Errors
+	walk(d, layer, d.values, schema, nil, &errs)
+	return errs
+}
+
+func walk(d *doc, layer string, v any, n *node, path Path, errs *Errors) {
+	fail := func(p Path, msg, fix string) {
+		*errs = append(*errs, &Error{Pos: d.at(p), Key: p.String(), Msg: msg, Fix: fix})
+	}
+	if n.team && layer != LayerTeam {
+		fail(path, "can only be set in the team layer (workspace.toml)", "remove it from this file")
+		return
+	}
+	switch n.kind {
+	case kTable:
+		m, ok := v.(map[string]any)
+		if !ok {
+			fail(path, "must be a table, not "+typeName(v), fmt.Sprintf("write it as [%s] with keys under it", path))
+			return
+		}
+		for _, k := range sortedKeys(m) {
+			child, ok := n.fields[k]
+			if !ok {
+				fail(path.child(k), "unknown key", unknownFix(k, n))
+				continue
+			}
+			walk(d, layer, m[k], child, path.child(k), errs)
+		}
+	case kMap:
+		m, ok := v.(map[string]any)
+		if !ok {
+			fail(path, "must be a table, not "+typeName(v), fmt.Sprintf("write it as [%s.<name>] tables", path))
+			return
+		}
+		for _, k := range sortedKeys(m) {
+			if n.keyRE != nil && !n.keyRE.MatchString(k) {
+				fail(path.child(k), fmt.Sprintf("%q is not a valid name", k), n.keyFix)
+				continue
+			}
+			walk(d, layer, m[k], n.elem, path.child(k), errs)
+		}
+	case kHook:
+		switch h := v.(type) {
+		case string:
+			if strings.TrimSpace(h) == "" {
+				fail(path, "is empty", "give the command to run, or remove the key")
+			}
+		case map[string]any:
+			walk(d, layer, h, hookTable, path, errs)
+			if _, ok := h["run"]; !ok {
+				fail(path, "has no run key", `add run = "<command>"`)
+			}
+		default:
+			fail(path, "must be a command string or a table { run = \"…\" }, not "+typeName(v), `write it as "<command>" or { run = "<command>", timeout = "10m" }`)
+		}
+	default:
+		if msg, fix := checkLeaf(v, n); msg != "" {
+			fail(path, msg, fix)
+		}
+	}
+}
+
+var hookTable = table("",
+	"run", str("The command."),
+	"timeout", duration("Fails the step after this long."),
+	"needs", strList("Resources the step holds while it runs."),
+)
+
+func checkLeaf(v any, n *node) (string, string) {
+	switch n.kind {
+	case kString, kDuration:
+		s, ok := v.(string)
+		if !ok {
+			return "must be a string, not " + typeName(v), fmt.Sprintf("quote it: %q", fmt.Sprint(v))
+		}
+		if n.kind == kDuration {
+			if _, err := ParseDuration(s); err != nil {
+				return "is not a duration", `write a duration such as "30s", "15m", "2h" or "14d"`
+			}
+		}
+		if len(n.enum) > 0 && !slices.Contains(n.enum, s) {
+			return fmt.Sprintf("must be one of %s, not %q", strings.Join(n.enum, ", "), s), "use " + quoteAll(n.enum)
+		}
+	case kInt:
+		i, ok := v.(int64)
+		if !ok {
+			return "must be an integer, not " + typeName(v), "write a whole number without quotes"
+		}
+		if n.min != nil && i < int64(*n.min) {
+			return fmt.Sprintf("must be at least %d", *n.min), fmt.Sprintf("use a number of %d or more", *n.min)
+		}
+		if n.max != nil && i > int64(*n.max) {
+			return fmt.Sprintf("must be at most %d", *n.max), fmt.Sprintf("use a number of %d or less", *n.max)
+		}
+	case kBool:
+		if _, ok := v.(bool); !ok {
+			return "must be true or false, not " + typeName(v), "write true or false without quotes"
+		}
+	case kStringList:
+		arr, ok := v.([]any)
+		if !ok {
+			return "must be an array of strings, not " + typeName(v), fmt.Sprintf("write it as [%s]", tomlValue(fmt.Sprint(v)))
+		}
+		for _, e := range arr {
+			if _, ok := e.(string); !ok {
+				return "must contain only strings, not " + typeName(e), "quote every element"
+			}
+		}
+	}
+	if n.check != nil {
+		return n.check(v)
+	}
+	return "", ""
+}
+
+func unknownFix(k string, n *node) string {
+	known := slices.Clone(n.order)
+	best, bestDist := "", 3
+	for _, name := range known {
+		if d := editDistance(k, name); d < bestDist {
+			best, bestDist = name, d
+		}
+	}
+	if best != "" {
+		return fmt.Sprintf("did you mean %s? Known keys here: %s", best, strings.Join(known, ", "))
+	}
+	return "remove it. Known keys here: " + strings.Join(known, ", ")
+}
+
+func editDistance(a, b string) int {
+	prev := make([]int, len(b)+1)
+	for j := range prev {
+		prev[j] = j
+	}
+	for i := 1; i <= len(a); i++ {
+		cur := make([]int, len(b)+1)
+		cur[0] = i
+		for j := 1; j <= len(b); j++ {
+			cost := 1
+			if a[i-1] == b[j-1] {
+				cost = 0
+			}
+			cur[j] = min(prev[j]+1, cur[j-1]+1, prev[j-1]+cost)
+		}
+		prev = cur
+	}
+	return prev[len(b)]
+}
+
+func typeName(v any) string {
+	switch v.(type) {
+	case string:
+		return "a string"
+	case int64:
+		return "an integer"
+	case float64:
+		return "a number with a fraction"
+	case bool:
+		return "a boolean"
+	case []any:
+		return "an array"
+	case map[string]any:
+		return "a table"
+	}
+	return "a date or time"
+}
+
+func quoteAll(vs []string) string {
+	q := make([]string, len(vs))
+	for i, v := range vs {
+		q[i] = fmt.Sprintf("%q", v)
+	}
+	return strings.Join(q, ", ")
+}
+
+func sortedKeys(m map[string]any) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// defaults builds the default layer from the schema.
+func defaults() map[string]any {
+	var build func(n *node) map[string]any
+	build = func(n *node) map[string]any {
+		out := map[string]any{}
+		for _, k := range n.order {
+			f := n.fields[k]
+			switch {
+			case f.kind == kTable:
+				if sub := build(f); len(sub) > 0 {
+					out[k] = sub
+				}
+			case f.def != nil:
+				out[k] = f.def
+			}
+		}
+		return out
+	}
+	return build(schema)
+}
+
+// elemDefaults are defaults that apply inside every entry of a map, such as a project's runner.
+// They are filled in when the typed configuration is built, and shown as "default" provenance.
+func elemDefaults(n *node) map[string]any {
+	out := map[string]any{}
+	for _, k := range n.order {
+		if f := n.fields[k]; f.def != nil && f.kind != kTable {
+			out[k] = f.def
+		}
+	}
+	return out
+}
+
+// lookupSchema returns the schema node for a path, or nil.
+func lookupSchema(p Path) *node {
+	n := schema
+	for _, seg := range p {
+		switch n.kind {
+		case kTable:
+			n = n.fields[seg]
+		case kMap:
+			n = n.elem
+		case kHook:
+			n = hookTable.fields[seg]
+		default:
+			return nil
+		}
+		if n == nil {
+			return nil
+		}
+	}
+	return n
+}

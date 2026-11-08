@@ -1,6 +1,22 @@
-# An unknown table or key is an error, never ignored.
+# An unknown table or key is an error, never ignored, and a near miss is named.
 # req: R9
 # source: C1 test_tooling.py::test_unknown_config_and_symlinks_refused
 # milestone: M1
 
-unwritten
+workspace shop
+! exec aw config get lanes.max
+stderr '2 configuration problems'
+stderr 'workspace.toml:7:1: projects.web.runer: unknown key → did you mean runner\?'
+stderr 'workspace.toml:9:2: typo: unknown key → remove it. Known keys here: workspace, lanes'
+! stdout .
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[projects.web]
+runer = "host"
+
+[typo]

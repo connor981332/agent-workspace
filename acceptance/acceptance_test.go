@@ -72,7 +72,11 @@ func setup() (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	cfg = cmds.Config{AWBin: awBin, GlobalAW: globalAW, StubsDir: stubs, RealGit: realGit}
+	repo, err := filepath.Abs("..")
+	if err != nil {
+		return 0, err
+	}
+	cfg = cmds.Config{AWBin: awBin, GlobalAW: globalAW, StubsDir: stubs, RealGit: realGit, Repo: repo}
 	return 0, nil
 }
 
@@ -100,6 +104,7 @@ func TestScenarios(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	inProgress := reqs.InProgressMilestone()
 	all, err := scenario.Find("scenarios")
 	if err != nil {
 		t.Fatal(err)
@@ -122,7 +127,7 @@ func TestScenarios(t *testing.T) {
 			areas[name] = a
 			order = append(order, name)
 		}
-		if sc.Milestone > current {
+		if sc.Milestone > current && !(sc.Milestone == inProgress && !sc.Unwritten) {
 			a.pending = append(a.pending, sc)
 			waiting++
 			continue
@@ -139,6 +144,9 @@ func TestScenarios(t *testing.T) {
 			for _, sc := range a.pending {
 				_, base, _ := strings.Cut(sc.Name, "/")
 				t.Run(base, func(t *testing.T) {
+					if sc.Unwritten {
+						t.Skipf("pending: not written yet; must pass from %s (current milestone %s)", sc.Milestone, current)
+					}
 					t.Skipf("pending: must pass from %s (current milestone %s)", sc.Milestone, current)
 				})
 			}

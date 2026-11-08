@@ -19,8 +19,9 @@ milestone named in its row.
 [PR #7](https://github.com/connor981332/agent-workspace/pull/7) (T1),
 [PR #8](https://github.com/connor981332/agent-workspace/pull/8) (T2),
 [PR #9](https://github.com/connor981332/agent-workspace/pull/9) (GoReleaser),
-[PR #10](https://github.com/connor981332/agent-workspace/pull/10) (spike results), all merged.
-`m0/budget` (the 8 ms budget, open). `spike/hot-path` (T3 and the ref-hook spike, never merged).
+[PR #10](https://github.com/connor981332/agent-workspace/pull/10) (spike results),
+[PR #11](https://github.com/connor981332/agent-workspace/pull/11) (the 8 ms budget), all merged.
+`m1/config` (M1 configuration, open). `spike/hot-path` (T3 and the ref-hook spike, never merged).
 
 **Done:** Read the spec and both candidates and wrote this plan. Settled the spec's five open
 questions (§8). The spec owner accepted every proposed answer in [Spec issues](#spec-issues) (S1 to
@@ -33,10 +34,14 @@ T3 missed its 3 ms target; the spec owner kept the design and set the guard budg
 (the M0 target to 6 ms, which the prototype meets on ubuntu-24.04 at 5.58 ms), with budgets on
 macOS CI checked for regressions only.
 
-**In progress:** Recording the budget decision in the spec and this plan (`m0/budget`).
+**In progress:** M1. Configuration (`m1/config`): the three layers with provenance, locks, strict
+decoding with file, line and fix, the compiled cache, `aw config get|explain|validate`, the
+configuration reference generated from the schema (docs/reference/config.md), examples, and the
+seven `config/` scenarios. The acceptance runner gained `in_progress` (requirements.toml), so the
+milestone's written scenarios run in CI from the PR that adds them.
 
-**Next step:** M1: configuration, state and launcher. Start by turning the M1 scenarios in
-`acceptance/scenarios/` from `unwritten` into real scripts.
+**Next step:** M1 state store, then the launcher and `aw init`, then `aw whoami`, `aw doctor`, the
+hook stub, timings and the `bench` job.
 
 **Pending manual checks:** hot-path benchmark on an Apple Silicon laptop (T3).
 
