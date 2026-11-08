@@ -40,7 +40,7 @@ are recorded).
   `requirements.toml` gained `in_progress`, so a milestone's written scenarios and benchmarks run
   in CI from the PR that adds them.
 
-**In progress:** M2. The M2 rows of §3.5 are pending scenario files, with seven rows that need
+**M2 complete (v0.0.2).** The M2 rows of §3.5 are pending scenario files, with seven rows that need
 hooks, seats or `aw open` moved to M3 and M4. S4 and S17 are recorded in the spec. Done: state
 schema 2, lane names from purpose, `aw attach` with worktrees, links, the owner pointer, secret
 links, lane guards, the lane limit, `--branch` and the pool (PR #17). Local merge proof (ancestry,
@@ -54,21 +54,23 @@ owner during M2: the dashboard keeps its 100 ms budget on laptops and has a 200 
 protected `release` environment, an acceptance run against the published assets, and
 `requirements.toml` moved to `current = "M2"`. All 74 M2 scenarios pass.
 
-**Release:** v0.0.2 is tagged (PR #22 merged, the macOS bench trimmed in PR #23) and waits for the
-maintainer's approval in the `release` environment. M2 is complete when its acceptance run against
-the published assets passes.
+The release workflow published v0.0.2 after the maintainer's approval, and the acceptance suite
+passed against the published assets on all four platforms.
 
 **In progress:** M3. The M3 rows of §3.5 and its spec-only scenarios are pending scenario files
 (53), plus four the coverage check needed: R54 team guards, R63 self-modification and R72
 publication had no scenario, and R94 (the safety model) is a document, to be checked as such. `internal/shell` and `internal/policy`
-(PR #24). Now (`m3/harness`): the adapters (Claude Code from payloads recorded from 2.1.319; Codex
-and Grok from C1 and Grok's documentation, until recorded; a Grok payload is recognized whatever
-hook delivers it), and the hook wired to the policy, with the role taken from the working directory
-until the session record is consulted. Ten policy and harness scenarios pass through the real hook.
+(PR #24). The adapters and the hook wired to the policy (PR #25), with the role taken from the working
+directory until the session record is consulted. Now (`m3/recorded-fixtures`): Codex 0.167.0 and
+Grok 1.0.77 payloads, recorded by the maintainer, replace the assumed shapes.
 
-**Next step:** sessions in the hook (resolution with the generation check, a session attached
-from the owner checkout, the first hook call recording a session), then Codex and Grok fixtures
-recorded by the maintainer with internal/harness/testdata/record.sh.
+**Next step:** sessions in the hook (resolution with the generation check, a session attached from
+the owner checkout, the first hook call recording a session).
+
+**Open question for the spec owner:** architecture.md names OpenCode's `tool.execute.before` plugin
+hook, which cancels a call on a deny. OpenCode 2.x documents a new plugin interface (`ctx.tool`,
+`execute.before`) and no way for it to cancel a call. OpenCode's adapter denies every call until
+this is settled and its payloads are recorded.
 
 **Pending manual checks:** the hot-path and budget benchmarks on an Apple Silicon laptop (T3, M1, M2;
 docs/dev/benchmarks.md).

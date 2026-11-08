@@ -3,8 +3,9 @@
 //
 //	awtest-hook [-harness claude|codex|grok] [-session id] [-cwd dir] <tool> <argument>
 //
-// tool is bash (the argument is the command), read, write or edit (a path), or patch (a Codex
-// apply_patch body). The working directory defaults to the current one.
+// tool is bash (the argument is the command), read, write, edit or list (a path; list is Grok's), or
+// patch (a Codex apply_patch body, or @file to read it from a file). The working directory defaults
+// to the current one.
 package main
 
 import (
@@ -14,6 +15,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 )
 
 func main() {
@@ -29,8 +31,15 @@ func main() {
 		*cwd, _ = os.Getwd()
 	}
 	tool, arg := flag.Arg(0), flag.Arg(1)
+	if rest, ok := strings.CutPrefix(arg, "@"); ok && tool == "patch" {
+		data, err := os.ReadFile(rest)
+		if err != nil {
+			fail("%v", err)
+		}
+		arg = string(data)
+	}
 	claude := map[string][2]string{"bash": {"Bash", "command"}, "read": {"Read", "file_path"}, "write": {"Write", "file_path"}, "edit": {"Edit", "file_path"}, "patch": {"apply_patch", "command"}}
-	grok := map[string][2]string{"bash": {"run_terminal_command", "command"}, "read": {"read_file", "file_path"}, "write": {"write", "file_path"}, "edit": {"search_replace", "file_path"}}
+	grok := map[string][2]string{"bash": {"run_terminal_command", "command"}, "read": {"read_file", "target_file"}, "write": {"search_replace", "file_path"}, "edit": {"search_replace", "file_path"}, "list": {"list_dir", "target_directory"}}
 	var payload map[string]any
 	switch *harness {
 	case "claude", "codex":

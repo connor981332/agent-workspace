@@ -188,7 +188,7 @@ func claudeCall(tool string, in map[string]any, cwd, harness string) (policy.Cal
 // filePaths collects the path arguments a tool input may carry.
 func filePaths(in map[string]any) []string {
 	var out []string
-	for _, k := range []string{"file_path", "notebook_path", "path", "target_file", "filePath"} {
+	for _, k := range []string{"file_path", "notebook_path", "path", "target_file", "target_directory", "filePath"} {
 		if s := str(in, k); s != "" {
 			out = append(out, s)
 		}
@@ -221,8 +221,8 @@ func replyClaude(p Payload, d policy.Decision, stdout, stderr io.Writer) int {
 	return Allow
 }
 
-// Codex (not yet recorded: built from C1's adapter, which measured it; testdata/record.sh records
-// it). Its payload has Claude Code's shape; it edits files with apply_patch, whose patch names them.
+// Codex (measured: 0.167.0, testdata/codex-0.167.0). Its payload has Claude Code's shape; it edits
+// files with apply_patch, whose patch names them, and it sends no SessionEnd.
 
 func normalizeCodex(m map[string]any, event string) (Payload, error) {
 	p, err := common(m, "codex", event, "session_id", "hook_event_name", "cwd")
@@ -265,8 +265,8 @@ func PatchFiles(patch string) []string {
 	return out
 }
 
-// Grok (not yet recorded: built from its hook documentation and C1's adapter). Its payload has
-// camelCase fields and its own tool names.
+// Grok (measured: 1.0.77, testdata/grok-1.0.77). Its payload has its own tool names, and both
+// camelCase and snake_case fields; hookEventName is what tells it from Claude Code's.
 
 var (
 	grokShell = []string{"run_terminal_command", "Shell"}

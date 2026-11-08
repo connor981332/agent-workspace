@@ -65,6 +65,105 @@ func TestClaudeRecorded(t *testing.T) {
 	}
 }
 
+// TestCodexRecorded normalizes what Codex 0.167.0 sent.
+func TestCodexRecorded(t *testing.T) {
+	const dir = "codex-0.167.0"
+	for name, want := range map[string]struct {
+		tool  policy.Tool
+		paths []string
+		cmd   string
+	}{
+		"pre-tool-use-apply-patch":   {tool: policy.Write, paths: []string{"/WORKSPACE/out.txt"}},
+		"pre-tool-use-apply-patch-2": {tool: policy.Write, paths: []string{"/WORKSPACE/out.txt"}},
+	} {
+		p, a, err := Normalize("codex", PreToolUse, fixture(t, dir, name))
+		if err != nil {
+			t.Errorf("%s: %v", name, err)
+			continue
+		}
+		if a.name != "codex" || p.Session != "SESSION_ID" || p.Call.Tool != want.tool || !slices.Equal(p.Call.Paths, want.paths) {
+			t.Errorf("%s: %+v", name, p)
+		}
+	}
+	entries, err := filepath.Glob(filepath.Join("testdata", dir, "*.json"))
+	if err != nil || len(entries) == 0 {
+		t.Fatal(entries, err)
+	}
+	for _, f := range entries {
+		raw, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		p, _, err := Normalize("codex", "", raw)
+		if err != nil {
+			t.Errorf("%s: %v", f, err)
+		}
+		if strings.Contains(f, "pre-tool-use-bash") && (p.Call.Tool != policy.Shell || p.Call.Command == "") {
+			t.Errorf("%s: %+v", f, p.Call)
+		}
+	}
+}
+
+// TestGrokRecorded normalizes what Grok 1.0.77 sent.
+func TestGrokRecorded(t *testing.T) {
+	const dir = "grok-1.0.77"
+	for name, want := range map[string]struct {
+		tool  policy.Tool
+		paths []string
+		cmd   string
+	}{
+		"pre-tool-use-read-file":            {tool: policy.Read, paths: []string{"/WORKSPACE/notes.txt"}},
+		"pre-tool-use-search-replace":       {tool: policy.Write, paths: []string{"/WORKSPACE/out.txt"}},
+		"pre-tool-use-search-replace-2":     {tool: policy.Write, paths: []string{"/WORKSPACE/out.txt"}},
+		"pre-tool-use-list-dir":             {tool: policy.Read, paths: []string{"/WORKSPACE"}},
+		"pre-tool-use-grep":                 {tool: policy.Read},
+		"pre-tool-use-run-terminal-command": {tool: policy.Shell, cmd: "ls -la && git status --short"},
+	} {
+		// Grok runs Claude Code's hook configuration too: the shape decides, not the hook.
+		for _, installed := range []string{"grok", "claude"} {
+			p, a, err := Normalize(installed, PreToolUse, fixture(t, dir, name))
+			if err != nil {
+				t.Errorf("%s via %s: %v", name, installed, err)
+				continue
+			}
+			if a.name != "grok" || p.Harness != "grok" || p.Session != "SESSION_ID" || p.Call.Tool != want.tool || !slices.Equal(p.Call.Paths, want.paths) || p.Call.Command != want.cmd {
+				t.Errorf("%s via %s: %+v", name, installed, p)
+			}
+		}
+	}
+	if p, _, err := Normalize("grok", UserPrompt, fixture(t, dir, "user-prompt-submit")); err != nil || p.Prompt == "" {
+		t.Errorf("the prompt: %+v, %v", p, err)
+	}
+}
+
+// TestFixturesAreScrubbed keeps recorded payloads free of real paths and tool output.
+func TestFixturesAreScrubbed(t *testing.T) {
+	files, _ := filepath.Glob("testdata/*/*.json")
+	if len(files) == 0 {
+		t.Fatal("no fixtures")
+	}
+	for _, f := range files {
+		data, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, real := range []string{"/home/", "/Users/", "%2Fhome%2F", "%2FUsers%2F"} {
+			if strings.Contains(string(data), real) {
+				t.Errorf("%s holds a real home directory (%s)", f, real)
+			}
+		}
+		var m map[string]any
+		if err := json.Unmarshal(data, &m); err != nil {
+			t.Fatal(f, err)
+		}
+		for _, k := range []string{"tool_response", "toolResponse", "tool_output", "toolResult", "tool_result"} {
+			if v, ok := m[k]; ok && v != "(omitted)" {
+				t.Errorf("%s keeps the tool's output in %s", f, k)
+			}
+		}
+	}
+}
+
 func TestUnknownPayloadsDeny(t *testing.T) {
 	for _, raw := range []string{
 		``, `[]`, `null`, `{}`, `{"cwd":"/w"}`,

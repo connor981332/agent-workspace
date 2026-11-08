@@ -1,0 +1,14 @@
+{
+ "cwd": "/WORKSPACE",
+ "hookEventName": "session_end",
+ "hook_event_name": "SessionEnd",
+ "permissionMode": "bypassPermissions",
+ "permission_mode": "bypassPermissions",
+ "reason": "shutdown",
+ "sessionId": "SESSION_ID",
+ "session_id": "SESSION_ID",
+ "timestamp": "2026-11-08T17:57:56.599287285+00:00",
+ "transcriptPath": "/HOME/.grok/sessions/%2FWORKSPACE/SESSION_ID/updates.jsonl",
+ "transcript_path": "/HOME/.grok/sessions/%2FWORKSPACE/SESSION_ID/updates.jsonl",
+ "workspaceRoot": "/WORKSPACE"
+}

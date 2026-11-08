@@ -1,0 +1,15 @@
+{
+ "cwd": "/WORKSPACE",
+ "hookEventName": "user_prompt_submit",
+ "hook_event_name": "UserPromptSubmit",
+ "permissionMode": "bypassPermissions",
+ "permission_mode": "bypassPermissions",
+ "prompt": "Do exactly these steps with your tools, and nothing else: 1. Read the file notes.txt. 2. Create a file out.txt containing hi. 3. Edit out.txt to replace hi with hello. 4. Run the shell command: ls -la && git status --short. 5. Search the files for hello. 6. List the *.txt files. Then reply done.",
+ "promptId": "004e252a-da69-49ac-ae42-f071b9d37bb2",
+ "sessionId": "SESSION_ID",
+ "session_id": "SESSION_ID",
+ "timestamp": "2026-11-08T17:57:30.075606044+00:00",
+ "transcriptPath": "/HOME/.grok/sessions/%2FWORKSPACE/SESSION_ID/updates.jsonl",
+ "transcript_path": "/HOME/.grok/sessions/%2FWORKSPACE/SESSION_ID/updates.jsonl",
+ "workspaceRoot": "/WORKSPACE"
+}

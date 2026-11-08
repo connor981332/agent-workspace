@@ -1,0 +1,14 @@
+{
+ "cwd": "/WORKSPACE",
+ "hook_event_name": "PreToolUse",
+ "model": "gpt-6-astra",
+ "permission_mode": "default",
+ "session_id": "SESSION_ID",
+ "tool_input": {
+  "command": "sed -i 's/hi/hello/' out.txt"
+ },
+ "tool_name": "Bash",
+ "tool_use_id": "exec-8c308f38-b4f2-4970-b1ce-4f1c56abfe7e",
+ "transcript_path": "/HOME/.codex/sessions/2026/11/08/rollout-2026-11-08T10-58-33-SESSION_ID.jsonl",
+ "turn_id": "TURN_ID"
+}

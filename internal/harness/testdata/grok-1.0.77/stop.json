@@ -1,0 +1,21 @@
+{
+ "backgroundTasks": [],
+ "cwd": "/WORKSPACE",
+ "hookEventName": "stop",
+ "hook_event_name": "Stop",
+ "lastAssistantMessage": "done.",
+ "last_assistant_message": "done.",
+ "permissionMode": "bypassPermissions",
+ "permission_mode": "bypassPermissions",
+ "promptId": "004e252a-da69-49ac-ae42-f071b9d37bb2",
+ "reason": "end_turn",
+ "sessionCrons": [],
+ "sessionId": "SESSION_ID",
+ "session_id": "SESSION_ID",
+ "stopHookActive": false,
+ "stop_hook_active": false,
+ "timestamp": "2026-11-08T17:57:53.705621767+00:00",
+ "transcriptPath": "/HOME/.grok/sessions/%2FWORKSPACE/SESSION_ID/updates.jsonl",
+ "transcript_path": "/HOME/.grok/sessions/%2FWORKSPACE/SESSION_ID/updates.jsonl",
+ "workspaceRoot": "/WORKSPACE"
+}

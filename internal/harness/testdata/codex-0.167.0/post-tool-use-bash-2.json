@@ -1,0 +1,15 @@
+{
+ "cwd": "/WORKSPACE",
+ "hook_event_name": "PostToolUse",
+ "model": "gpt-6-astra",
+ "permission_mode": "default",
+ "session_id": "SESSION_ID",
+ "tool_input": {
+  "command": "ls -la && git status --short"
+ },
+ "tool_name": "Bash",
+ "tool_response": "(omitted)",
+ "tool_use_id": "exec-69453b07-ae93-4faa-a5e7-11ea1a4bce4d",
+ "transcript_path": "/HOME/.codex/sessions/2026/11/08/rollout-2026-11-08T10-53-44-SESSION_ID.jsonl",
+ "turn_id": "TURN_ID"
+}
