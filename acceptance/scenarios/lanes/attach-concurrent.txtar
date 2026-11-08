@@ -5,7 +5,7 @@
 # changed: all four callers get the same lane, instead of losers being told to retry.
 
 workspace shop --init
-exec sh -c 'for i in 1 2 3 4; do aw attach "fix checkout tax" --harness claude --session same --json > "$WORK/out$i.json" & done; wait'
+exec sh -c 'for i in 1 2 3 4; do CLAUDE_CODE_SESSION_ID=same aw attach "fix checkout tax" --json > "$WORK/out$i.json" & done; wait'
 exec sh -c 'cat "$WORK"/out*.json | grep "\"lane\"" | sort | uniq -c'
 stdout '^ *4 +"lane": "01",$'
 ! exists .worktrees/02

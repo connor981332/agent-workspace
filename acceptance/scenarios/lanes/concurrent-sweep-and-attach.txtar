@@ -9,7 +9,7 @@ workspace solo --single --init
 exec aw attach 'one'
 exec aw attach 'two'
 exec aw sweep --apply
-exec sh -c 'for i in 1 2 3 4; do aw attach "work $i" --harness claude --session "s$i" --json > "$WORK/a$i.json" & aw sweep --apply --json > "$WORK/s$i.json" & done; wait'
+exec sh -c 'for i in 1 2 3 4; do CLAUDE_CODE_SESSION_ID="s$i" aw attach "work $i" --json > "$WORK/a$i.json" & aw sweep --apply --json > "$WORK/s$i.json" & done; wait'
 exec sh -c 'for i in 1 2 3 4; do grep -c "\"state\": \"working\"" "$WORK/a$i.json"; done'
 stdout -count=4 '^1$'
 exec aw sweep --json

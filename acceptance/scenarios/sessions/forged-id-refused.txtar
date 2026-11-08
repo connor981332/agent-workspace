@@ -1,6 +1,14 @@
-# sessions/forged-id-refused: to be written (plan §3.5).
+# aw attach takes the session's identity from what the harness set. A --session the harness did not
+# issue is refused, because it could claim another session's lane.
 # req: R23 R58
 # source: C1 test_attach_is_protected_and_idempotent
 # milestone: M3
 
-unwritten
+workspace shop --init
+env CLAUDE_CODE_SESSION_ID=real
+! exec aw attach 'x' --harness claude --session forged
+stderr '--session "forged" is not the session CLAUDE_CODE_SESSION_ID says this is'
+exec aw attach 'x' --harness claude --session real --json
+json stdout .reused false
+exec aw attach 'x' --json
+json stdout .reused true

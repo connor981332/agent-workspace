@@ -24,6 +24,11 @@ func pathsRule(s Scope, c shell.Command) Decision {
 	if !c.Dir.Known {
 		return deny("boundary", "this command runs after a cd to a directory aw cannot determine, so it is refused → cd to a literal path inside the lane, %s", quote(s.LaneRoot))
 	}
+	// Each command must run in the lane: from the owner checkout, a session starts with cd into it.
+	// cd is that step (its target is checked below), and attaching or asking who it is is allowed.
+	if s.fromOutsideLane(c.Dir.Physical) && len(c.Args) > 0 && c.Name() != "cd" && !isIdentityCommand(c) {
+		return deny("boundary", "this session belongs to lane %s, but this command would run in %s → start it with cd %s &&", s.LaneName, quote(c.Dir.Logical), quote(s.LaneRoot))
+	}
 	cdTarget := false
 	check := func(w shell.Word, always bool) Decision {
 		text := w.Text
@@ -60,6 +65,9 @@ func pathsRule(s Scope, c shell.Command) Decision {
 	}
 	name := c.Name()
 	for i, a := range c.Args {
+		if i == 0 && isAW(c) {
+			continue // running the workspace's launcher touches none of the owner's files
+		}
 		always := i > 0 && (name == "cd" || name == "pushd") && !strings.HasPrefix(a.Text, "-")
 		cdTarget = always
 		if i > 0 && c.Args[i-1].Known && dirOptions[c.Args[i-1].Text] {
@@ -106,6 +114,15 @@ func isAW(c shell.Command) bool {
 	}
 	a := c.Args[0].Text
 	return a == "aw" || a == "bin/aw" || strings.HasSuffix(a, "/bin/aw")
+}
+
+// isIdentityCommand is aw attach or aw whoami, which a session may run before it is in its lane.
+func isIdentityCommand(c shell.Command) bool {
+	if !isAW(c) {
+		return false
+	}
+	sub, _ := subcommand(c.Args[1:])
+	return sub == "attach" || sub == "whoami"
 }
 
 // subcommand is the first argument that is not an option.

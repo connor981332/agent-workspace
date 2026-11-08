@@ -1,6 +1,23 @@
-# harness/stale-generation-denies: to be written (plan §3.5).
+# A session whose lane has since moved on to other work cannot act on it: in that lane it is
+# refused and told to attach again. From the owner checkout it is simply no longer attached.
 # req: R23 R56
 # source: C1 test_attached_startup_preserves_routing_and_generation_checks
 # milestone: M3
 
-unwritten
+workspace solo --single --init
+session old claude
+exec aw attach 'first thing'
+exec aw discard first-thing --yes
+env AW_SESSION=
+env AW_SESSION_PID=
+exec aw attach 'second thing' --json
+json stdout .lane 01
+cd .worktrees/01
+! exec awtest-hook -session old bash 'ls'
+stderr 'has moved on to other work since this session attached'
+stderr 'bin/aw attach'
+exec awtest-hook -session unrelated bash 'ls'
+cd $OWNER
+exec awtest-hook -session old bash 'git status'
+! exec awtest-hook -session old write x.txt
+stderr 'bin/aw attach'

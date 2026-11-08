@@ -26,3 +26,21 @@ func Alive(pid int, identity string) bool {
 	}
 	return got == identity
 }
+
+// HarnessAncestor returns the nearest ancestor of pid that goes by name, or 0. A hook or a tool
+// command is a descendant of its harness, so its ancestry names the live harness process.
+func HarnessAncestor(pid int, name string) int {
+	for range 32 {
+		parent, err := Parent(pid)
+		if err != nil || parent <= 1 {
+			return 0
+		}
+		for _, n := range Names(parent) {
+			if n == name {
+				return parent
+			}
+		}
+		pid = parent
+	}
+	return 0
+}

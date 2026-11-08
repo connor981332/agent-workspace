@@ -9,12 +9,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/connor981332/agent-workspace/internal/config"
+	"github.com/connor981332/agent-workspace/internal/platform"
 	"github.com/connor981332/agent-workspace/internal/policy"
 	"github.com/connor981332/agent-workspace/internal/shell"
 	"github.com/connor981332/agent-workspace/internal/state"
@@ -87,9 +89,9 @@ func hook(args []string, version string, stdin io.Reader, stdout, stderr io.Writ
 // resolveScope builds the policy's scope from the workspace around the call's directory: its
 // configuration (from the cache when it is current) and its state, read-only.
 //
-// Until the session record is consulted, the role follows the directory: a call in a lane root is
-// confined to that lane, and one in the owner checkout is unattached (or a pair session, when the
-// individual layer says owner_sessions = "pair").
+// A session with a current attachment works in its lane, wherever it runs from. Without one, the
+// directory decides: a call in a lane root is confined to that lane, and one in the owner checkout
+// is unattached (or a pair session, when the individual layer says owner_sessions = "pair").
 func resolveScope(p Payload, version string, t *timing.Recorder) (*policy.Scope, error) {
 	dir := p.Cwd
 	if !filepath.IsAbs(dir) {
@@ -146,27 +148,98 @@ func resolveScope(p Payload, version string, t *timing.Recorder) (*policy.Scope,
 	}
 	t.Mark("state")
 
-	if ws.LaneRoot == "" {
-		return scope, nil
+	n, attached := 0, false
+	if s != nil {
+		var stale bool
+		if n, stale, err = attachment(s, stateDir, p); err != nil {
+			return nil, err
+		}
+		attached = n > 0
+		if stale && ws.LaneRoot != "" {
+			return nil, fmt.Errorf("the lane at %s has moved on to other work since this session attached → go back to the owner checkout, and run bin/aw attach \"<what you are working on>\"", ws.LaneRoot)
+		}
 	}
-	n, err := strconv.Atoi(filepath.Base(ws.LaneRoot))
-	if err != nil || s == nil {
-		return scope, fmt.Errorf("%s is a lane root with no record in the state → run aw doctor", ws.LaneRoot)
+	if !attached {
+		// No current attachment: the working directory decides.
+		if ws.LaneRoot == "" {
+			return scope, nil
+		}
+		if n, err = strconv.Atoi(filepath.Base(ws.LaneRoot)); err != nil || s == nil {
+			return nil, fmt.Errorf("%s is a lane root with no record in the state → run aw doctor", ws.LaneRoot)
+		}
+	}
+	root, dirName := ws.LaneRoot, workspace.LaneDir(n, cfg.Lanes.Max)
+	if attached || root == "" {
+		root = filepath.Join(ws.Owner, ".worktrees", dirName)
 	}
 	lane, err := state.LaneByNumber(s.DB(), n)
 	if err != nil {
-		return scope, fmt.Errorf("lane %s has no record in the state (%v) → run aw doctor", filepath.Base(ws.LaneRoot), err)
+		return nil, fmt.Errorf("lane %s has no record in the state (%v) → run aw doctor", dirName, err)
 	}
 	repos, err := state.LaneRepos(s.DB(), n)
 	if err != nil {
-		return scope, err
+		return nil, err
 	}
 	scope.Role = policy.Lane
-	scope.LaneRoot = ws.LaneRoot
+	scope.LaneRoot = root
 	scope.LaneName = lane.Name
-	scope.LaneDirs = []string{shell.Resolve(ws.LaneRoot), shell.Resolve(filepath.Join(stateDir, "lanes", filepath.Base(ws.LaneRoot)))}
+	scope.LaneDirs = []string{shell.Resolve(root), shell.Resolve(filepath.Join(stateDir, "lanes", dirName))}
 	for _, r := range repos {
 		scope.LaneDirs = append(scope.LaneDirs, shell.Resolve(r.Path))
 	}
 	return scope, nil
+}
+
+// attachment finds the lane a hook call's session is attached to. It returns 0 when there is none:
+// no record, a record that has ended, or one whose process has gone. stale means the session's lane
+// has since moved on, or been recycled or destroyed (architecture.md, step 2: a stale session cannot
+// act on it).
+//
+// On a session's first hook call it records the harness's own session ID (aw new only knows the one
+// it made up), and the session's process when that was not known; a harness's tool commands may be
+// unable to see it, but a hook can. Neither waits: a busy database is tried again on the next call.
+func attachment(s *state.Store, stateDir string, p Payload) (lane int, stale bool, err error) {
+	rec, err := state.SessionByHarnessID(s.DB(), p.Harness, p.Session)
+	adopted := false
+	if errors.Is(err, state.ErrNotFound) {
+		h, id, ok := strings.Cut(os.Getenv("AW_SESSION"), ":")
+		if !ok || h != p.Harness || id == p.Session {
+			return 0, false, nil
+		}
+		adopted = true
+		if rec, err = state.SessionByHarnessID(s.DB(), h, id); errors.Is(err, state.ErrNotFound) {
+			return 0, false, nil
+		}
+	}
+	if err != nil {
+		return 0, false, err
+	}
+	if rec.Lane == 0 {
+		return 0, true, nil // its lane was recycled or destroyed: whatever is there now is not its own
+	}
+	if rec.State != state.SessionActive {
+		return 0, false, nil
+	}
+	l, err := state.LaneByNumber(s.DB(), rec.Lane)
+	if errors.Is(err, state.ErrNotFound) || (err == nil && l.Generation != rec.LaneGeneration) {
+		return 0, true, nil
+	}
+	if err != nil {
+		return 0, false, err
+	}
+	if !platform.Alive(rec.PID, rec.PIDStart) {
+		return 0, false, nil
+	}
+	if adopted || rec.PID == 0 {
+		pid, start := 0, ""
+		if rec.PID == 0 {
+			if pid = platform.HarnessAncestor(os.Getpid(), p.Harness); pid > 0 {
+				start, _ = platform.ProcessIdentity(pid)
+			}
+		}
+		if adopted || pid > 0 {
+			_ = state.RecordSessionIdentity(stateDir, rec.ID, p.Session, pid, start) // best effort: retried next call
+		}
+	}
+	return rec.Lane, false, nil
 }

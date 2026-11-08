@@ -61,11 +61,13 @@ passed against the published assets on all four platforms.
 (53), plus four the coverage check needed: R54 team guards, R63 self-modification and R72
 publication had no scenario, and R94 (the safety model) is a document, to be checked as such. `internal/shell` and `internal/policy`
 (PR #24). The adapters and the hook wired to the policy (PR #25), with the role taken from the working
-directory until the session record is consulted. Now (`m3/recorded-fixtures`): Codex 0.167.0 and
-Grok 1.0.77 payloads, recorded by the maintainer, replace the assumed shapes.
+directory until the session record is consulted. Codex 0.167.0 and Grok 1.0.77 payloads, recorded by the maintainer, replaced the assumed shapes
+(PR #26). Now (`m3/sessions`): the hook resolves a call to its session's record (generation check,
+process liveness, a session attached from the owner checkout), the first hook call records a
+session's ID and process, and `aw attach` takes its identity from the harness's environment.
 
-**Next step:** sessions in the hook (resolution with the generation check, a session attached from
-the owner checkout, the first hook call recording a session).
+**Next step:** session start context, resumed processes joining a record, and the session-start
+revival rule; then `aw pair`, the Git hooks dispatcher, `compose`, `aw setup`, team guards.
 
 **Open question for the spec owner:** architecture.md names OpenCode's `tool.execute.before` plugin
 hook, which cancels a call on a deny. OpenCode 2.x documents a new plugin interface (`ctx.tool`,
