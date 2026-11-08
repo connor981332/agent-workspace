@@ -1,6 +1,48 @@
-# sessions/open-archives-handoff: to be written (plan §3.5).
+# aw open starts a new session on existing work with the latest handoff as its first prompt. The
+# lane goes back to work, the handoff stops describing it, and it stays on record.
 # req: R77 R78
 # source: C1 test_local_handoff_reader_versions_and_resume_archive
 # milestone: M3
 
-unwritten
+workspace solo --single --init
+stubs claude opencode
+session s-1 claude
+exec aw attach 'add feature flag'
+cd .worktrees/01
+exec sh -c 'echo x > a; git add a; git commit -qm work'
+exec aw finish --summary 'Tests pass. Check the flag by hand.'
+cd $OWNER
+end-session s-1
+exec aw recap --json
+json stdout .lanes[0].state ready
+stdout 'Check the flag by hand'
+
+exec aw open feature-flag
+stderr 'opening lane feature-flag with claude'
+exec cat $STUB_LOG
+stdout 'picking up existing work in lane feature-flag'
+stdout 'Tests pass. Check the flag by hand.'
+stdout '^claude cwd .*/\.worktrees/01$'
+stdout '^claude AW_SESSION=claude:open-[0-9a-f]{16}$'
+exec aw recap --json
+json stdout .lanes[0].state working
+! stdout 'Check the flag by hand'
+exec aw recap --json
+! stdout 'handoff'
+
+# A second session is told to work from what is there, in the harness's own way of taking a prompt.
+exec aw open feature-flag --harness opencode
+exec cat $STUB_LOG
+stdout '^opencode \[--prompt\]'
+
+# Only the human, and not on a lane someone is working in.
+env AW_SESSION=claude:s-2
+! exec aw open feature-flag
+stderr 'only for the human'
+env AW_SESSION=
+env STUB_HARNESS_SLEEP=20
+exec sh -c 'aw open feature-flag > /dev/null 2>&1 & echo started'
+exec sh -c 'i=0; n=$(grep -c "AW_SESSION=" "$STUB_LOG"); while [ "$(grep -c "AW_SESSION=" "$STUB_LOG")" = "$n" ] && [ $i -lt 100 ]; do sleep 0.05; i=$((i + 1)); done'
+env STUB_HARNESS_SLEEP=
+! exec aw open feature-flag
+stderr 'already has a running session'
