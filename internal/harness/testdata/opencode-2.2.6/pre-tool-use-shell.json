@@ -1,0 +1,16 @@
+{
+ "hook_event_name": "pre-tool-use",
+ "input": {
+  "command": "ls -la && git status --short"
+ },
+ "keys": [
+  "tool",
+  "sessionID",
+  "agent",
+  "messageID",
+  "id",
+  "input"
+ ],
+ "sessionID": "SESSIONID",
+ "tool": "shell"
+}

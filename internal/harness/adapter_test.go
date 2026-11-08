@@ -244,3 +244,37 @@ func TestClaudeReplies(t *testing.T) {
 		t.Errorf("allow: %d %q", code, out.String())
 	}
 }
+
+func TestOpenCodeRecorded(t *testing.T) {
+	dir := "opencode-2.2.6"
+	for name, tool := range map[string]policy.Tool{
+		"pre-tool-use-read": policy.Read, "pre-tool-use-glob": policy.Read, "pre-tool-use-grep": policy.Read,
+		"pre-tool-use-write": policy.Write, "pre-tool-use-edit": policy.Write, "pre-tool-use-shell": policy.Shell,
+	} {
+		// The recording hook saved the event as OpenCode sent it; aw's plugin adds the directory.
+		raw := bytes.Replace(fixture(t, dir, name), []byte("{"), []byte(`{"cwd":"/WORKSPACE",`), 1)
+		p, a, err := Normalize("opencode", PreToolUse, raw)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if a.ask || p.Call.Tool != tool || p.Session != "SESSIONID" {
+			t.Errorf("%s: ask %v, payload %+v", name, a.ask, p)
+		}
+	}
+	for name, raw := range map[string]string{
+		"no directory":  `{"hook_event_name":"pre-tool-use","sessionID":"s","tool":"read","input":{"path":"x"}}`,
+		"no command":    `{"hook_event_name":"pre-tool-use","sessionID":"s","cwd":"/w","tool":"shell","input":{}}`,
+		"no file":       `{"hook_event_name":"pre-tool-use","sessionID":"s","cwd":"/w","tool":"write","input":{}}`,
+		"empty patch":   `{"hook_event_name":"pre-tool-use","sessionID":"s","cwd":"/w","tool":"apply_patch","input":{"patchText":"x"}}`,
+		"program":       `{"hook_event_name":"pre-tool-use","sessionID":"s","cwd":"/w","tool":"execute","input":{}}`,
+		"unknown event": `{"hook_event_name":"other","sessionID":"s","cwd":"/w","tool":"read","input":{}}`,
+	} {
+		if _, _, err := Normalize("opencode", "", []byte(raw)); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+	p, _, err := Normalize("opencode", "", []byte(`{"hook_event_name":"pre-tool-use","sessionID":"s","cwd":"/w","tool":"shell","input":{"command":"ls","workdir":"sub"}}`))
+	if err != nil || p.Call.Cwd != "/w/sub" {
+		t.Errorf("workdir: %v, %q", err, p.Call.Cwd)
+	}
+}

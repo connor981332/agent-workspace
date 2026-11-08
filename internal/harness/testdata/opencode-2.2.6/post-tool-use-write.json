@@ -1,0 +1,20 @@
+{
+ "hook_event_name": "post-tool-use",
+ "input": {
+  "content": "hi",
+  "path": "out.txt"
+ },
+ "keys": [
+  "tool",
+  "sessionID",
+  "agent",
+  "messageID",
+  "id",
+  "input",
+  "status",
+  "result"
+ ],
+ "sessionID": "SESSIONID",
+ "status": "completed",
+ "tool": "write"
+}

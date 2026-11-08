@@ -44,6 +44,46 @@ func isAWHook(entry any) bool {
 	return false
 }
 
+// OpenCodePluginPath is where OpenCode loads aw's plugin from, in the workspace.
+const OpenCodePluginPath = ".opencode/plugins/aw.js"
+
+// OpenCodePlugin is OpenCode's guard: OpenCode runs plugins, not hook commands, so this sends each
+// tool call to aw hook and throws on anything but success, which cancels the call (measured with
+// 2.2.6). The working directory it reports is the workspace or lane root the plugin was loaded from,
+// because OpenCode's event does not carry one. For a session started in a subdirectory, a relative
+// path is then read from higher up than it really is, which can refuse a path but cannot let one
+// out of the lane.
+const OpenCodePlugin = `// Managed by aw setup: do not edit. It sends each tool call to aw's guard, and cancels the call
+// when the guard refuses or cannot run.
+import { spawnSync } from "node:child_process"
+import { dirname, join } from "node:path"
+import { fileURLToPath } from "node:url"
+
+const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..")
+
+export default {
+  id: "agent-workspace",
+  async setup(ctx) {
+    await ctx.tool.hook("execute.before", (event) => {
+      const payload = JSON.stringify({
+        hook_event_name: "pre-tool-use",
+        sessionID: event.sessionID,
+        cwd: root,
+        tool: event.tool,
+        input: event.input,
+      })
+      const result = spawnSync(join(root, "bin", "aw"), ["hook", "opencode", "pre-tool-use"], {
+        cwd: root,
+        input: payload,
+        encoding: "utf8",
+      })
+      if (result.error) throw new Error("aw: this call is refused: the guard could not run: " + result.error.message)
+      if (result.status !== 0) throw new Error((result.stderr || "aw: this call is refused").trim())
+    })
+  },
+}
+`
+
 // ConfigResult says what aw setup did to one harness's configuration.
 type ConfigResult struct {
 	Path    string `json:"path"`
@@ -104,5 +144,22 @@ func InstallHarnessConfig(owner string) ([]ConfigResult, error) {
 		}
 		out = append(out, res)
 	}
-	return out, nil
+	res, err := installOpenCodePlugin(owner)
+	return append(out, res), err
+}
+
+func installOpenCodePlugin(owner string) (ConfigResult, error) {
+	res := ConfigResult{Path: OpenCodePluginPath}
+	path := filepath.Join(owner, filepath.FromSlash(OpenCodePluginPath))
+	old, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return res, err
+	}
+	if res.Changed = string(old) != OpenCodePlugin; !res.Changed {
+		return res, nil
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return res, err
+	}
+	return res, os.WriteFile(path, []byte(OpenCodePlugin), 0o644)
 }

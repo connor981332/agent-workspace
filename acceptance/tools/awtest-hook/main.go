@@ -65,6 +65,12 @@ func main() {
 		payload = map[string]any{"hookEventName": "pre_tool_use", "hook_event_name": "PreToolUse", "sessionId": *session, "cwd": *cwd,
 			"workspaceRoot": *cwd, "permissionMode": "default", "toolName": t[0], "toolInput": map[string]any{t[1]: arg},
 			"toolUseId": "t1", "toolInputTruncated": false}
+	case "opencode":
+		t, ok := map[string][2]string{"bash": {"shell", "command"}, "read": {"read", "path"}, "write": {"write", "path"}, "edit": {"edit", "path"}, "list": {"list", "path"}, "patch": {"apply_patch", "patchText"}}[tool]
+		if !ok {
+			fail("unknown tool %q", tool)
+		}
+		payload = map[string]any{"hook_event_name": "pre-tool-use", "sessionID": *session, "cwd": *cwd, "tool": t[0], "input": map[string]any{t[1]: arg}}
 	default:
 		fail("unknown harness %q", *harness)
 	}

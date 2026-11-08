@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -336,10 +337,77 @@ func replyGrok(p Payload, d policy.Decision, stdout, stderr io.Writer) int {
 	return Allow
 }
 
-// OpenCode (M3, later: its managed plugin calls aw hook opencode with this shape).
+// OpenCode (measured: 2.2.6, testdata/opencode-2.2.6). It has no command hooks: aw setup installs a
+// plugin (app.OpenCodePlugin) that sends each tool.execute.before event here with the working
+// directory added, and throws when this refuses, which cancels the call. Its shell tool may carry
+// its own working directory.
+
+var (
+	openCodeShell = []string{"shell", "bash"}
+	openCodeRead  = []string{"read", "grep", "glob", "list"}
+	openCodeWrite = []string{"write", "edit"}
+	openCodePatch = []string{"apply_patch", "patch"}
+)
 
 func normalizeOpenCode(m map[string]any, event string) (Payload, error) {
-	return Payload{}, &UnknownPayloadError{"opencode", "the OpenCode plugin is not built yet"}
+	p := Payload{Session: str(m, "sessionID"), Cwd: str(m, "cwd"), Event: str(m, "hook_event_name"), Tool: str(m, "tool")}
+	switch {
+	case p.Session == "":
+		return p, &UnknownPayloadError{"opencode", "no sessionID"}
+	case p.Cwd == "":
+		return p, &UnknownPayloadError{"opencode", "no cwd"}
+	case p.Event != PreToolUse && p.Event != PostToolUse:
+		return p, &UnknownPayloadError{"opencode", fmt.Sprintf("the event %q", p.Event)}
+	case event != "" && event != p.Event:
+		return p, &UnknownPayloadError{"opencode", fmt.Sprintf("the hook is installed for %s, but the payload is %s", event, p.Event)}
+	case p.Tool == "":
+		return p, &UnknownPayloadError{"opencode", "no tool"}
+	case p.Tool == "execute":
+		return p, &UnknownPayloadError{"opencode", "its execute tool runs a program whose effects aw cannot read"}
+	}
+	in := obj(m, "input")
+	if in == nil {
+		in = map[string]any{}
+	}
+	c := policy.Call{Cwd: p.Cwd}
+	paths := filePaths(in)
+	switch {
+	case slices.Contains(openCodeShell, p.Tool):
+		c.Tool, c.Command = policy.Shell, str(in, "command")
+		if c.Command == "" {
+			return p, &UnknownPayloadError{"opencode", "a shell call with no command"}
+		}
+		if dir := str(in, "workdir"); dir != "" {
+			if !filepath.IsAbs(dir) {
+				dir = filepath.Join(p.Cwd, dir)
+			}
+			c.Cwd = dir
+		}
+	case slices.Contains(openCodeRead, p.Tool):
+		c.Tool, c.Paths = policy.Read, paths
+		if pat := str(in, "pattern"); p.Tool == "glob" && (strings.HasPrefix(pat, "/") || strings.HasPrefix(pat, "~")) {
+			prefix, _, _ := strings.Cut(pat, "*")
+			c.Paths = append(c.Paths, prefix)
+		}
+	case slices.Contains(openCodeWrite, p.Tool):
+		c.Tool, c.Paths = policy.Write, paths
+		if len(paths) == 0 {
+			return p, &UnknownPayloadError{"opencode", "a " + p.Tool + " call that names no file"}
+		}
+	case slices.Contains(openCodePatch, p.Tool):
+		c.Tool, c.Paths = policy.Write, PatchFiles(str(in, "patchText"))
+		if len(c.Paths) == 0 {
+			return p, &UnknownPayloadError{"opencode", "a patch that names no file"}
+		}
+	default:
+		// Web, task and question tools have no path; any path an unknown tool names is checked as a write.
+		c.Tool = policy.Other
+		if len(paths) > 0 {
+			c.Tool, c.Paths = policy.Write, paths
+		}
+	}
+	p.Call = c
+	return p, nil
 }
 
 func replyPlain(p Payload, d policy.Decision, stdout, stderr io.Writer) int {
