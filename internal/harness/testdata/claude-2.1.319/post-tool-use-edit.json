@@ -1,0 +1,21 @@
+{
+ "cwd": "/WORKSPACE",
+ "duration_ms": 3,
+ "effort": {
+  "level": "medium"
+ },
+ "hook_event_name": "PostToolUse",
+ "permission_mode": "default",
+ "prompt_id": "PROMPT",
+ "session_id": "SESSION",
+ "tool_input": {
+  "file_path": "/WORKSPACE/out.txt",
+  "new_string": "hello",
+  "old_string": "hi",
+  "replace_all": false
+ },
+ "tool_name": "Edit",
+ "tool_response": "(omitted)",
+ "tool_use_id": "toolu_01TpGBFYLUNmPqmUApmmUqsk",
+ "transcript_path": "/HOME/.claude/projects/WORKSPACE/SESSION.jsonl"
+}

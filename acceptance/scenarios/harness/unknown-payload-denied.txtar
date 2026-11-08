@@ -1,6 +1,24 @@
-# harness/unknown-payload-denied: to be written (plan §3.5).
+# A payload the adapter does not recognize is denied, never allowed: not JSON, missing fields, an
+# unknown event, or a tool call with nothing to check.
 # req: R56
 # source: spec (no candidate source)
 # milestone: M3
 
-unwritten
+workspace shop --init
+exec sh $WORK/send.sh 'not json'
+stdout '^status=2$'
+stderr 'aw does not recognize this claude hook payload'
+exec sh $WORK/send.sh '{}'
+stdout '^status=2$'
+exec sh $WORK/send.sh '{"session_id":"s","cwd":"/","hook_event_name":"Mystery"}'
+stdout '^status=2$'
+stderr 'the event "Mystery"'
+exec sh $WORK/send.sh '{"session_id":"s","cwd":"/","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{}}'
+stdout '^status=2$'
+stderr 'a Bash call with no command'
+! exec aw hook nosuchharness pre-tool-use
+stderr 'is not a supported harness'
+
+-- send.sh --
+printf '%s' "$1" | aw hook claude pre-tool-use
+echo "status=$?"

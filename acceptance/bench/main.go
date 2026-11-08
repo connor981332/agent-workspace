@@ -471,7 +471,9 @@ func newFixture(tmp, awBin string) (*fixture, error) {
 
 	payload, _ := json.Marshal(map[string]any{
 		"session_id": "bench-session", "cwd": owner, "hook_event_name": "PreToolUse", "tool_name": "Bash",
-		"tool_input": map[string]string{"command": `cd web && npm run test -- --grep "checkout tax" 2>&1 | tee /tmp/out.log; git status --porcelain`},
+		// A compound read-only command, which a session in the owner checkout may run: the guard
+		// parses it, checks every command and redirect, and allows it.
+		"tool_input": map[string]string{"command": `cd web && rg -n "checkout tax" src 2>/dev/null | head -20; git status --porcelain; git log --oneline -5`},
 	})
 	fx := &fixture{owner: owner, env: measured, laneEnv: laneEnv, stubLog: stubLog}
 	timed := func(env []string, stdin []byte, args ...string) func() time.Duration {

@@ -1,6 +1,20 @@
-# policy/container-commands-denied: to be written (plan §3.5).
+# Agents do not create, start, restart, stop or remove containers: shared containers keep the
+# ports and mounts they were created with. Reading their state and running commands in them is
+# allowed.
 # req: R49
 # source: C2 F5 Agents created containers
 # milestone: M3
 
-unwritten
+workspace shop --init
+exec aw attach 'add feature flag'
+cd .worktrees/01
+! exec awtest-hook bash 'docker run --rm -p 5432:5432 postgres'
+stderr 'docker run changes shared containers'
+! exec awtest-hook bash 'docker compose up -d db'
+! exec awtest-hook bash 'devcontainer up --workspace-folder .'
+! exec awtest-hook bash 'docker rm -f shop-db'
+! exec awtest-hook bash 'docker stop shop-db'
+! exec awtest-hook bash 'sudo docker container restart shop-db'
+exec awtest-hook bash 'docker ps'
+exec awtest-hook bash 'docker compose logs db'
+exec awtest-hook bash 'docker exec shop-db psql -c "select 1"'

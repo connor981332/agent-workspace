@@ -1,6 +1,15 @@
-# policy/invalid-config-denies: to be written (plan §3.5).
+# A guard that cannot decide refuses: with the configuration broken (and so its cache stale) every
+# tool call is denied, reads too, with a message naming the problem.
 # req: R55
 # source: C1 LauncherTests.test_broken_tool_blocks_with_exit_2; C1 test_guard_hook_fails_closed_and_ignores_the_gate
 # milestone: M3
 
-unwritten
+workspace shop --init
+owner-may-change
+exec aw attach 'add feature flag'
+cd .worktrees/01
+exec awtest-hook bash 'ls'
+exec sh -c 'printf "not [valid toml\n" > "$OWNER/workspace.toml"'
+! exec awtest-hook bash 'ls'
+stderr 'the workspace configuration is invalid, so guards cannot decide'
+! exec awtest-hook read README.md

@@ -1,0 +1,15 @@
+{
+ "background_tasks": [],
+ "cwd": "/WORKSPACE",
+ "effort": {
+  "level": "medium"
+ },
+ "hook_event_name": "Stop",
+ "last_assistant_message": "done",
+ "permission_mode": "default",
+ "prompt_id": "PROMPT",
+ "session_crons": [],
+ "session_id": "SESSION",
+ "stop_hook_active": false,
+ "transcript_path": "/HOME/.claude/projects/WORKSPACE/SESSION.jsonl"
+}

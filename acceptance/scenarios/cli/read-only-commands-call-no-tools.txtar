@@ -13,7 +13,7 @@ owner-snapshot
 exec sh $WORK/forbid.sh
 env PATH=$WORK/forbid:$PATH
 
-exec sh -c 'printf "{\"cwd\":\"%s\"}" "$OWNER" | aw hook claude pre-tool-use'
+exec sh -c 'printf "{\"session_id\":\"s\",\"cwd\":\"%s\",\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git status && ls\"}}" "$OWNER" | aw hook claude pre-tool-use'
 exec aw whoami
 exec aw whoami --json
 exec aw config get lanes.max
