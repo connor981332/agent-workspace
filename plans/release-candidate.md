@@ -18,7 +18,8 @@ milestone named in its row.
 [PR #6](https://github.com/connor981332/agent-workspace/pull/6) (the settled questions, merged),
 [PR #7](https://github.com/connor981332/agent-workspace/pull/7) (T1, `m0/skeleton`, merged),
 [PR #8](https://github.com/connor981332/agent-workspace/pull/8) (T2, `m0/acceptance`, merged).
-`m0/goreleaser` (GoReleaser, open). `spike/hot-path` (T3 and the ref-hook spike, never merged).
+[PR #9](https://github.com/connor981332/agent-workspace/pull/9) (GoReleaser, merged).
+`m0/spikes` (spike results, open). `spike/hot-path` (T3 and the ref-hook spike, never merged).
 
 **Done:** Read the spec and both candidates. Wrote this plan: milestones M0 to M12, v0.1 defined at
 the end of M7, R1 to R94 assigned, the acceptance suite design and its inventory, the module layout,
@@ -32,13 +33,17 @@ command tree (cobra's flag library imports `net`) and so cannot meet the transit
 acceptance module, runner, owner check, stubs, the M0 scenarios, the M1 scenarios as pending files,
 the coverage check and the `acceptance` CI job.
 
-**In progress:** GoReleaser configuration and the `release-snapshot` job (§6) on `m0/goreleaser`.
-[T3](#t3-hot-path-latency-spike) and the ref-hook spike on `spike/hot-path`.
+GoReleaser configuration and the `release-snapshot` job (§6). T3 and the ref-hook spike, recorded
+in [docs/dev/spikes.md](../docs/dev/spikes.md).
 
-**Next step:** Record the T3 and ref-hook results in `docs/dev/spikes.md` and check them against
-the M0 exit criterion.
+**In progress:** Blocked. **T3 is a no-go against the M0 exit criterion's 3 ms target**: the
+prototype hot path measured 5.58 ms p99 on ubuntu-24.04 and 22.3 ms p99 on macos-15, and risk 1's
+snapshot fallback alone does not reach 3 ms. As the exit criterion requires, the fallback options
+(listed in docs/dev/spikes.md) are with the spec owner. M1 does not start until they decide.
 
-**Pending manual checks:** none yet.
+**Next step:** Apply the spec owner's decision on the hot path, then finish M0's exit criterion.
+
+**Pending manual checks:** hot-path benchmark on an Apple Silicon laptop (T3).
 
 ## How to use this plan
 
