@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/connor981332/agent-workspace/internal/compose"
 	"github.com/connor981332/agent-workspace/internal/config"
 	"github.com/connor981332/agent-workspace/internal/launcher"
 	"github.com/connor981332/agent-workspace/internal/state"
@@ -132,6 +133,8 @@ func Run(dir, version string, withTimings bool) *Report {
 		t.Mark("open state")
 	}
 	checkIgnored(ws.Owner, c, add)
+	checkHooksPath(ws.Owner, c, add)
+	checkInstructions(ws.Owner, add)
 	addMachine(add)
 	if withTimings {
 		r.Timings = t.Phases()
@@ -247,6 +250,68 @@ func checkLauncher(owner string, add func(Check)) {
 		}
 	}
 	add(Check{Name: "launcher", Status: Warn, Message: ".aw/managed does not list bin/aw", Fix: "restore .aw/managed from Git"})
+}
+
+// checkHooksPath reports a repository whose core.hooksPath no longer reaches aw's dispatcher, which
+// turns off the protection of its refs (owner-checkout.md). A repository aw setup has not reached
+// yet is only noted.
+func checkHooksPath(owner string, c *config.Config, add func(Check)) {
+	repos := []string{"."}
+	if c != nil {
+		for _, name := range sortedKeys(c.Projects) {
+			if d := c.Projects[name].Directory; d != "." && d != "" {
+				repos = append(repos, d)
+			}
+		}
+	}
+	configured := func(dir, key string) string {
+		out, err := exec.Command("git", "-C", dir, "config", "--local", "--get", key).Output()
+		if err != nil {
+			return ""
+		}
+		return strings.TrimSpace(string(out))
+	}
+	notSet, changed := []string{}, []string{}
+	for _, rel := range repos {
+		dir := filepath.Join(owner, rel)
+		if _, err := os.Stat(filepath.Join(dir, ".git")); err != nil {
+			continue
+		}
+		common, err := workspace.GitCommonDir(dir)
+		if err != nil {
+			continue
+		}
+		switch {
+		case configured(dir, "core.hooksPath") == filepath.Join(common, "aw", "hooks"):
+		case configured(dir, "aw.teamHooksPath") == "":
+			notSet = append(notSet, rel)
+		default:
+			changed = append(changed, rel)
+		}
+	}
+	switch {
+	case len(changed) > 0:
+		add(Check{Name: "git hooks", Status: Warn, Message: "core.hooksPath was changed in " + strings.Join(changed, " ") + ", so aw's ref protection is off there", Fix: "run aw setup"})
+	case len(notSet) > 0:
+		add(Check{Name: "git hooks", Status: Info, Message: "aw's hooks are not installed in " + strings.Join(notSet, " ") + " yet", Fix: "run aw setup"})
+	default:
+		add(Check{Name: "git hooks", Status: OK, Message: "every repository runs aw's hooks dispatcher"})
+	}
+}
+
+func checkInstructions(owner string, add func(Check)) {
+	switch d := compose.Drift(owner); d {
+	case "":
+		add(Check{Name: "instructions", Status: OK, Message: "the generated block in AGENTS.md is current"})
+	case "missing":
+		add(Check{Name: "instructions", Status: Info, Message: "AGENTS.md has no generated block yet", Fix: "run aw setup"})
+	case "stale":
+		add(Check{Name: "instructions", Status: Warn, Message: "the generated block in AGENTS.md is out of date", Fix: "run aw setup, and commit the result"})
+	case "edited":
+		add(Check{Name: "instructions", Status: Warn, Message: "the generated block in AGENTS.md was edited by hand", Fix: "move the change to .aw/instructions.md, delete the block, and run aw setup"})
+	default:
+		add(Check{Name: "instructions", Status: Warn, Message: "the generated block in AGENTS.md is " + d, Fix: "restore its marker lines, or delete the block, and run aw setup"})
+	}
 }
 
 func checkState(dir string, add func(Check)) {

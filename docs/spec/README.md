@@ -37,8 +37,8 @@ individuals specialize it in layers. It never loses work, and it is never what a
 | Level | Lives in | Holds |
 |---|---|---|
 | **Framework** | this repository, shipped as the `aw` binary and its modules | Generic machinery. Knows nothing about any product. |
-| **Team** | the team's workspace repository | Projects, resources, lane hooks, commands, guards, instructions, shared docs and plans. |
-| **Individual** | `~/.config/agent-workspace/` and gitignored files | Personal overrides, default harness, plans, notes, skills. |
+| **Team** | the team's workspace repository | Projects, resources, lane hooks, commands, guards, instructions (`.aw/instructions.md`), shared docs and plans. |
+| **Individual** | `~/.config/agent-workspace/` and gitignored files | Personal overrides, default harness, instructions (`<namespace>.md`), plans, notes, skills. |
 
 Individual settings override team settings, except where the team locks them. `aw config explain`
 shows where any value came from.

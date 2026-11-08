@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/connor981332/agent-workspace/internal/compose"
 	"github.com/connor981332/agent-workspace/internal/config"
 	"github.com/connor981332/agent-workspace/internal/forge"
 	"github.com/connor981332/agent-workspace/internal/gitx/run"
@@ -175,6 +176,7 @@ func (m *Manager) Claim(ctx context.Context, req ClaimRequest) (*Claimed, error)
 	if err != nil {
 		return nil, err
 	}
+	compose.CopyPersonal(m.WS.Owner, m.Root(lane.Number))
 	return &Claimed{Lane: lane, Dir: Dir(lane.Number, m.Cfg.Lanes.Max), Root: m.Root(lane.Number), Repos: repos, FromPool: fromPool}, nil
 }
 

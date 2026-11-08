@@ -71,16 +71,16 @@ Now (`m3/pair`): `aw pair`, granting a running session with `--session`, state s
 commands refusing in agent context (S10, recorded in owner-checkout.md), and pair sessions' shell
 commands checked for self-modification (PR #33). Now (`m3/opencode`): OpenCode's adapter and managed
 plugin, from payloads the maintainer recorded with 2.2.6, in which a plugin's throw cancelled the call.
-Known limit: OpenCode's background server does not inherit `AW_SESSION`, so `aw new` and `aw pair` with
+(PR #34.) Now (`m3/compose`): the generated `AGENTS.md` block, `CLAUDE.md`'s import and personal
+instructions (R52, R53, S13), decided with the spec owner on 2026-11-08: team text is in
+`.aw/instructions.md`, personal text in `~/.config/agent-workspace/<namespace>.md`, and the committed
+block holds the framework and team layers only. `aw doctor` checks the hooks path and the block. Known limit
+of S13: OpenCode has neither a personal file nor a session-start hook here, so it does not receive
+personal instructions yet. Known limit: OpenCode's background server does not inherit `AW_SESSION`, so `aw new` and `aw pair` with
 OpenCode are not tied to the session they launch. A lane is still confined by its directory, and a
 pair session is granted with the `--session` command its first refusal prints.
 
-**Next step:** purpose capture from the first prompt, `aw doctor`'s hooks-path check,
-`compose`, team guards, terminal multiplexers, `aw resume` and `aw open`, `docs/safety.md`.
-
-**Open question for the spec owner:** C1's `policy/before-setup-diagnosis-only` allows only a few
-diagnostic commands in a workspace that has not been set up. The spec does not define that state, and
-its lazy claiming lets any session read from the start.
+**Next step:** purpose capture from the first prompt, team guards, terminal multiplexers, `aw resume` and `aw open`, `docs/safety.md`.
 
 **Pending manual checks:** the hot-path and budget benchmarks on an Apple Silicon laptop (T3, M1, M2;
 docs/dev/benchmarks.md).
@@ -724,7 +724,7 @@ Scenario areas: `cli`, `config`, `state`, `launcher`, `init`, `doctor`, `whoami`
 |---|---|---|---|
 | `test_codex_read_only_gate_names_the_writable_root_setting` | `harness/codex-sandbox-names-writable-root` | R14 | M3 |
 | `test_observers_tolerate_a_never_created_gate` | `doctor/before-setup-writes-nothing`, `whoami/before-setup` | R14 | M1 |
-| `test_inactive_guard_allows_only_read_only_diagnosis` | `policy/before-setup-diagnosis-only`: the C1 table, including compound commands, redirects, substitutions and newlines | R55 | M3 |
+| `test_inactive_guard_allows_only_read_only_diagnosis` | Dropped by the spec owner (2026-11-08): the spec has no "before setup" state, and lazy claiming lets any session read from the start. | R55 | |
 | `test_inactive_hook_wrapper_end_to_end_and_broken_import_exits_2` | `launcher/broken-binary-denies` | R55 | M3 |
 | `test_fresh_checkout_bootstraps_then_attaches_without_manual_repair` | `setup/fresh-clone-then-attach`, `setup/rerun-is-noop` | R11, R12 | M7 |
 | `test_delegation_lets_owner_checkout_run_only_in_scope_maintenance` | `policy/owner-only-in-substitutions` (M3); `owner/delegation-scope`, `owner/agents-cannot-grant`, `owner/expired-or-tampered-ignored`, `owner/ttl-bounds` (M9) | R64 | M3, M9 |

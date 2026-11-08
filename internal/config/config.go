@@ -226,6 +226,12 @@ func IndividualFile(namespace string) string {
 	return filepath.Join(base, "agent-workspace", namespace+".toml")
 }
 
+// PersonalInstructions returns the individual layer's instructions file for a namespace, next to
+// its configuration.
+func PersonalInstructions(namespace string) string {
+	return strings.TrimSuffix(IndividualFile(namespace), ".toml") + ".md"
+}
+
 // Load reads and validates the configuration of the workspace whose owner checkout is owner.
 // A configuration error is returned as Errors.
 func Load(owner string) (*Config, error) {

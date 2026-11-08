@@ -1,6 +1,45 @@
-# compose/personal-content-untracked: to be written (plan §3.5).
+# Personal instructions reach the session, and nothing about them appears in the team repository.
 # req: R53
 # source: spec (no candidate source)
 # milestone: M3
 
-unwritten
+workspace solo --single --init
+owner-may-change
+exec aw setup
+exec git add -A
+exec git commit -qm setup
+exec git status --porcelain
+! stdout .
+
+mkdir $XDG_CONFIG_HOME/agent-workspace
+cp $WORK/personal $XDG_CONFIG_HOME/agent-workspace/solo.md
+exec aw setup
+stdout 'CLAUDE.local.md: wrote your personal instructions'
+grep 'Call me Sam' CLAUDE.local.md
+! grep 'Call me Sam' AGENTS.md
+exec git status --porcelain
+! stdout .
+
+# A lane has it too, and is not dirtied by it.
+exec aw attach 'add feature flag'
+grep 'Call me Sam' .worktrees/01/CLAUDE.local.md
+exec git -C .worktrees/01 status --porcelain
+! stdout CLAUDE
+
+# A harness with no personal file gets it when the session starts; one with a file does not.
+exec awtest-hook -harness codex session-start -
+stdout 'Call me Sam'
+exec awtest-hook -harness grok session-start -
+stdout 'Call me Sam'
+exec awtest-hook session-start -
+! stdout 'Call me Sam'
+
+# With the personal file gone, its block goes, and the rest of the file stays.
+exec sh -c 'echo "my own note" >> CLAUDE.local.md'
+rm $XDG_CONFIG_HOME/agent-workspace/solo.md
+exec aw setup
+! grep 'Call me Sam' CLAUDE.local.md
+grep 'my own note' CLAUDE.local.md
+
+-- personal --
+Call me Sam.
