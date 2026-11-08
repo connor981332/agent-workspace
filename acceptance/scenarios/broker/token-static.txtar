@@ -1,0 +1,44 @@
+# A token resource hands each lane its own handle, exposed to its commands.
+# req: R36
+# source: spec (no candidate source)
+# milestone: M4
+
+workspace shop --init
+exec aw attach one
+exec aw attach two
+exec aw attach three
+cd .worktrees/01
+exec aw serve android
+stdout 'token emulator-5554 \(AW_TOKEN_ANDROID\)'
+exec aw run web sh -c 'echo "got=$AW_TOKEN_ANDROID seat=$AW_SEAT_ANDROID"'
+stdout 'got=emulator-5554 seat=1'
+cd ../02
+exec aw serve android
+stdout 'token emulator-5556'
+cd ../03
+! exec aw serve android
+stderr 'position 1'
+cd ../01
+exec aw stop android
+cd ../03
+exec aw serve android
+stdout 'token emulator-5554'
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[projects.web]
+directory = "web"
+
+[projects.api]
+directory = "api"
+
+[resources.android]
+kind = "token"
+tokens = ["emulator-5554", "emulator-5556"]

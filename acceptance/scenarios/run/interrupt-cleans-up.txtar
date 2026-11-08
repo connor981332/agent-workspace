@@ -1,6 +1,45 @@
-# run/interrupt-cleans-up: to be written (plan §3.5).
+# Interrupting a team command stops it and gives its seats back.
 # req: R51
 # source: C1 test_env_and_command_forwarding_exit_and_busy_cleanup
 # milestone: M4
 
-unwritten
+workspace shop --init
+exec aw attach one
+cd .worktrees/01
+exec sh $WORK/interrupt.sh
+stdout 'status=1[34][0-9]'
+exec aw queue --json
+! stdout 'lane_name'
+
+-- interrupt.sh --
+aw slow >/dev/null 2>&1 </dev/null &
+pid=$!
+i=0
+while [ $i -lt 100 ] && ! aw queue --json | grep -q '"lane_name": "one"'; do sleep 0.05; i=$((i + 1)); done
+sleep 0.2
+kill -TERM $pid
+wait $pid
+echo "status=$?"
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[projects.web]
+directory = "web"
+
+[projects.api]
+directory = "api"
+
+[resources.db]
+kind = "token"
+tokens = ["d1"]
+
+[commands.slow]
+project = "web"
+run = "exec sleep 30"
+needs = ["db"]

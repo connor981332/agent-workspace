@@ -15,6 +15,13 @@ import (
 // Main runs the command line in args (without the program name) and returns the exit code.
 func Main(args []string, stdout, stderr io.Writer) int {
 	root := newRoot(stdout, stderr)
+	if c, ok := teamCommandNamed(root, args); ok {
+		code, err := runTeamCommand(args[0], c, args[1:], stdout, stderr)
+		if err != nil {
+			fmt.Fprintf(stderr, "aw: %v\n", err)
+		}
+		return code
+	}
 	root.SetArgs(args)
 
 	cmd, err := root.ExecuteC()

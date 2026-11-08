@@ -14,6 +14,7 @@ import (
 	"github.com/connor981332/agent-workspace/internal/lanes"
 	"github.com/connor981332/agent-workspace/internal/mux"
 	"github.com/connor981332/agent-workspace/internal/runners"
+	"github.com/connor981332/agent-workspace/internal/state"
 	"github.com/connor981332/agent-workspace/internal/timing"
 )
 
@@ -53,6 +54,9 @@ runs the project's [projects.<p>] run.`,
 					return fmt.Errorf("give a command to run, or set [projects.%s] run", args[0])
 				}
 				argv = []string{"sh", "-c", p.Run}
+			}
+			if leases, err := state.Leases(w.store.DB()); err == nil {
+				where.Env = append(where.Env, seatEnv(w.cfg, newBroker(w).Resources(), leases, m.CallerLane())...)
 			}
 			w.Close() // the command may run for hours; hold nothing open
 			code, err := runners.RunHost(where.Dir, where.Env, argv)

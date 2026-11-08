@@ -2,12 +2,17 @@ package cli
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
 
+	"github.com/connor981332/agent-workspace/internal/broker"
+	"github.com/connor981332/agent-workspace/internal/config"
 	"github.com/connor981332/agent-workspace/internal/lanes"
 	"github.com/connor981332/agent-workspace/internal/launcher"
 	"github.com/connor981332/agent-workspace/internal/state"
@@ -30,9 +35,11 @@ type whoamiInfo struct {
 	Pair bool `json:"pair"`
 	// Attached is the lane the environment's session is attached to, when that is certain.
 	Attached *attachedInfo `json:"attached"`
-	Warnings []string      `json:"warnings"`
-	Version  string        `json:"version"`
-	Pinned   string        `json:"pinned"`
+	// Seats are what this lane holds, with its URLs and tokens.
+	Seats    []served `json:"seats"`
+	Warnings []string `json:"warnings"`
+	Version  string   `json:"version"`
+	Pinned   string   `json:"pinned"`
 }
 
 type attachedInfo struct {
@@ -89,6 +96,46 @@ func findAttachment(stateDir string, max int) (*attachedInfo, bool, []string) {
 	return nil, pair, warnings
 }
 
+// seatsOf reports a lane's seats. It only reads: a holder that looks dead is mentioned, and left for
+// the next command that changes something to recover.
+func seatsOf(stateDir string, c *config.Config, lane int) ([]served, []string) {
+	out, warnings := []served{}, []string{}
+	store, err := state.Open(stateDir, state.ReadOnly)
+	if err != nil {
+		return out, warnings
+	}
+	defer store.Close()
+	leases, err := state.Leases(store.DB())
+	if err != nil {
+		return out, warnings
+	}
+	b := &broker.Broker{Cfg: c}
+	for _, l := range leases {
+		if l.Lane != lane {
+			continue
+		}
+		r, err := b.Lookup(l.Resource)
+		if err != nil {
+			warnings = append(warnings, fmt.Sprintf("this lane holds a seat on %s, which the configuration no longer has → run aw stop %s", l.Resource, l.Resource))
+			continue
+		}
+		ps, _ := state.LeaseProcs(store.DB(), l.ID)
+		if b.Dead(l, ps) {
+			warnings = append(warnings, fmt.Sprintf("the processes behind this lane's seat on %s have gone, so its URLs may not answer → run aw serve %s", l.Resource, l.Resource))
+		}
+		if l.State == state.LeaseReserved {
+			warnings = append(warnings, fmt.Sprintf("a seat on %s is reserved for this lane, and not taken up yet → run aw serve %s", l.Resource, l.Resource))
+			continue
+		}
+		s := served{Resource: l.Resource, Seat: l.Seat, Token: l.Token}
+		if r.Kind == "process" {
+			s.URLs = urlsOf(c, r, l)
+		}
+		out = append(out, s)
+	}
+	return out, warnings
+}
+
 func newWhoamiCmd() *cobra.Command {
 	var asJSON bool
 	cmd := &cobra.Command{
@@ -119,6 +166,16 @@ session, and the aw version. It only reads, and it works before setup.`,
 			}
 			if dir, err := ws.StateDir(); err == nil {
 				info.Attached, info.Pair, info.Warnings = findAttachment(dir, c.Lanes.Max)
+			}
+			info.Seats = []served{}
+			if ws.LaneRoot != "" {
+				if dir, err := ws.StateDir(); err == nil {
+					if n, err := strconv.Atoi(filepath.Base(ws.LaneRoot)); err == nil {
+						var more []string
+						info.Seats, more = seatsOf(dir, c, n)
+						info.Warnings = append(info.Warnings, more...)
+					}
+				}
 			}
 			info.Version = frameworkVersion()
 			if data, err := os.ReadFile(filepath.Join(ws.Owner, launcher.VersionPath)); err == nil {
@@ -156,6 +213,16 @@ session, and the aw version. It only reads, and it works before setup.`,
 				pin = fmt.Sprintf(" (the workspace pins %s → run bin/aw)", ui.Clean(info.Pinned))
 			}
 			fmt.Fprintf(out, "aw         %s%s\n", info.Version, pin)
+			for _, s := range info.Seats {
+				fmt.Fprintf(out, "seat       %d on %s", s.Seat, s.Resource)
+				if s.Token != "" {
+					fmt.Fprintf(out, ", token %s", ui.Clean(s.Token))
+				}
+				for _, name := range slices.Sorted(maps.Keys(s.URLs)) {
+					fmt.Fprintf(out, ", %s %s", name, s.URLs[name])
+				}
+				fmt.Fprintln(out)
+			}
 			for _, w := range info.Warnings {
 				fmt.Fprintf(out, "warning    %s\n", w)
 			}

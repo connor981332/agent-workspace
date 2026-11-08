@@ -1,0 +1,42 @@
+# A lease with no activity for its idle expiry is released and its servers stopped, and output in a server's log counts as activity.
+# req: R41 R46
+# source: spec (no candidate source)
+# milestone: M4
+
+workspace shop --init
+exec aw attach one
+cd .worktrees/01
+exec aw serve stack
+exec sh -c 'sleep 1.3'
+exec aw attach two
+exec aw queue --json
+! stdout 'lane_name'
+exec sh -c 'for p in $(cat "$WORK/pids"); do if kill -0 "$p" 2>/dev/null; then exit 1; fi; done'
+exec awtest-hook bash 'ls'
+stdout 'was idle'
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[projects.web]
+directory = "web"
+
+[projects.api]
+directory = "api"
+
+[projects.web.servers.app]
+command = "echo $$ >> $WORK/pids; exec sleep 60 # {port}"
+port = 3000
+
+[resources.stack]
+kind = "process"
+capacity = 1
+servers = ["web.app"]
+evict_grace = "1s"
+idle_expiry = "1s"

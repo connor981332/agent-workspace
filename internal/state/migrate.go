@@ -140,6 +140,9 @@ var migrations = []string{
 		delivered TEXT NOT NULL DEFAULT ''
 	) STRICT;
 	CREATE INDEX notifications_pending ON notifications (lane, delivered)`,
+
+	// 8: when a holder over its maximum hold was warned.
+	`ALTER TABLE leases ADD COLUMN warned TEXT NOT NULL DEFAULT ''`,
 }
 
 // BackupPath is where the database is copied before migrating from schema version v.

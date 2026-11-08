@@ -1,7 +1,46 @@
-# finish/release-failure-keeps-handoff: to be written (plan §3.5).
+# If a seat cannot be given back, aw finish says so and the handoff is kept; running it again retries.
 # req: R78
 # source: C1 test_finish_open_draft_mr_and_release_failure
 # milestone: M4
-# changed: `finish` no longer requires a pushed branch; the handoff records push state instead.
 
-unwritten
+workspace shop --init
+owner-may-change
+cp $WORK/sim bin/sim
+chmod 755 bin/sim
+exec aw attach one
+cd .worktrees/01
+exec aw serve ios
+env SIM_FAIL=1
+! exec aw finish --summary 'ready to look at'
+stderr 'handoff is written'
+stderr 'run aw finish again'
+exec aw recap --json
+stdout 'ready to look at'
+exec aw queue --json
+json stdout .resources[0].holders[0].lane_name one
+
+-- sim --
+#!/bin/sh
+cat >/dev/null
+if [ "$1" = release ] && [ -n "${SIM_FAIL:-}" ]; then echo '{"ok":false,"error":"device busy"}'; exit 0; fi
+if [ "$1" = acquire ]; then echo '{"ok":true,"token":"SIM-1"}'; else echo '{"ok":true}'; fi
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[projects.web]
+directory = "web"
+
+[projects.api]
+directory = "api"
+
+[resources.ios]
+kind = "token"
+capacity = 1
+acquire = "bin/sim"
+release = "bin/sim"

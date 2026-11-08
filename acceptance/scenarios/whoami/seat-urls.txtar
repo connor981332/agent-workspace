@@ -1,6 +1,38 @@
-# whoami/seat-urls: to be written (plan §3.5).
-# req: R21 R25 R30 R36
+# aw whoami shows the lane's seats and URLs, reserves are mentioned, and it only reads.
+# req: R21 R25 R30 R36 R93
 # source: C1 HostLaneTests.test_single_repo_lane_from_init_to_cleanup
 # milestone: M4
 
-unwritten
+workspace shop --init
+exec aw attach one
+cd .worktrees/01
+exec aw whoami --json
+json stdout .seats '[]'
+exec aw serve stack
+exec aw whoami --json
+json stdout .seats[0].urls.app http://lane-01.localhost:3100
+exec aw stop stack
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[projects.web]
+directory = "web"
+
+[projects.api]
+directory = "api"
+
+[projects.web.servers.app]
+command = "echo $$ >> $WORK/pids; exec sleep 60 # {port}"
+port = 3000
+
+[resources.stack]
+kind = "process"
+capacity = 1
+servers = ["web.app"]

@@ -1,0 +1,54 @@
+# A command needing several resources gets them all or none, and nobody overtakes a request that is waiting.
+# req: R44 R45 R51
+# source: spec (no candidate source)
+# milestone: M4
+
+workspace shop --init
+exec aw attach one
+exec aw attach two
+cd .worktrees/01
+exec aw serve db
+cd ../02
+exec sh $WORK/both.sh
+stdout 'position-while-waiting'
+exec aw queue --json
+json stdout .resources[0].resource cache
+json stdout .resources[0].holders '[]'
+cd ../01
+exec aw stop db
+cd ../02
+exec sh -c 'i=0; while [ ! -f "$WORK/ran" ] && [ $i -lt 100 ]; do sleep 0.05; i=$((i + 1)); done; cat "$WORK/ran"'
+stdout 'db=1 cache=1'
+
+-- both.sh --
+aw e2e > "$WORK/e2e.out" 2>&1 &
+i=0
+while [ $i -lt 100 ] && ! aw queue --json | grep -q '"lane_name": "two"'; do sleep 0.05; i=$((i + 1)); done
+echo position-while-waiting
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[projects.web]
+directory = "web"
+
+[projects.api]
+directory = "api"
+
+[resources.db]
+kind = "token"
+tokens = ["d1"]
+
+[resources.cache]
+kind = "token"
+tokens = ["c1"]
+
+[commands.e2e]
+project = "web"
+run = "echo db=$AW_SEAT_DB cache=$AW_SEAT_CACHE > $WORK/ran"
+needs = ["db", "cache"]

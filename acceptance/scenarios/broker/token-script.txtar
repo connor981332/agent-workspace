@@ -1,0 +1,55 @@
+# A scripted token comes from the extension protocol, is given back when the seat is released, and a failing script leaves no seat behind.
+# req: R36
+# source: spec (no candidate source)
+# milestone: M4
+
+workspace shop --init
+owner-may-change
+cp $WORK/sim bin/sim
+chmod 755 bin/sim
+exec aw attach one
+exec aw attach two
+cd .worktrees/01
+exec aw serve ios --json
+json stdout .token SIM-1
+exec cat $WORK/log
+stdout '^acquire .*"protocol":1'
+exec aw whoami --json
+json stdout .seats[0].token SIM-1
+exec aw stop ios
+exec cat $WORK/log
+stdout '^release .*"token":"SIM-1"'
+
+env SIM_FAIL=1
+! exec aw serve ios
+stderr 'no simulators left → boot one'
+env SIM_FAIL=
+exec aw queue --json
+! stdout 'lane_name'
+
+-- sim --
+#!/bin/sh
+input=$(cat)
+echo "$1 $input" >> "$WORK/log"
+if [ "$1" = acquire ] && [ -n "${SIM_FAIL:-}" ]; then echo '{"ok":false,"error":"no simulators left","fix":"boot one"}'; exit 0; fi
+if [ "$1" = acquire ]; then echo '{"ok":true,"token":"SIM-1"}'; else echo '{"ok":true}'; fi
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[projects.web]
+directory = "web"
+
+[projects.api]
+directory = "api"
+
+[resources.ios]
+kind = "token"
+capacity = 2
+acquire = "bin/sim"
+release = "bin/sim"

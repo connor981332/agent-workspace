@@ -1,0 +1,51 @@
+# The owner's own server, started without aw, takes a seat: agents cannot overcommit the machine, and the seat comes back when it stops.
+# req: R38
+# source: spec (no candidate source)
+# milestone: M4
+
+workspace shop --init
+exec aw attach one
+exec sh $WORK/start.sh
+cd .worktrees/01
+! exec aw serve stack
+stderr 'position 1'
+exec sh $WORK/stop.sh
+exec aw attach two
+cd ../01
+exec aw serve stack
+stdout 'Holding seat 1'
+exec aw stop stack
+
+-- start.sh --
+awtest-server -port 41731 -started "$WORK/up" >/dev/null 2>&1 &
+echo $! > "$WORK/server.pid"
+i=0
+while [ ! -f "$WORK/up" ] && [ $i -lt 100 ]; do sleep 0.05; i=$((i + 1)); done
+-- stop.sh --
+kill "$(cat "$WORK/server.pid")"
+sleep 0.1
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[projects.web]
+directory = "web"
+
+[projects.api]
+directory = "api"
+
+[projects.web.servers.app]
+command = "echo $$ >> $WORK/pids; exec sleep 60 # {port}"
+port = 41731
+owner_port = 41731
+
+[resources.stack]
+kind = "process"
+capacity = 1
+servers = ["web.app"]
+owner_counts = true

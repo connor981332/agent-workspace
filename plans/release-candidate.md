@@ -92,7 +92,9 @@ Speed enforcement changed at the M3 exit, by the spec owner (§5.2): CI checks r
 
 **In progress:** M4 (`m4/broker`): state schema 7, seats, the FIFO queue with reservations (S1, S2), owner preemption, recovery of dead holders, `internal/procs`, `aw serve`, `aw stop`, `aw queue`, notifications through the next tool call, and seats released by `aw finish`, `aw park` and `aw discard`. Known limit: Grok and OpenCode do not yet show a notification, because their way of adding context to an allowed call is unrecorded; the message stays pending.
 
-**Next step:** rest of M4: maximum hold and idle expiry, token scripts, team commands, seat URLs, the owner's port check scenario, port collisions (S15), benchmarks.
+(PR #40.) Now (`m4/limits`): maximum hold and idle expiry, token scripts through `internal/extproto`, team commands with `needs`, seats and URLs in `aw whoami`, seat variables in `aw run`.
+
+**Next step:** rest of M4: port collisions and machine capacity in `aw doctor` (S15), the three M4 benchmarks, the M4 exit.
 
 **Pending manual checks:** the hot-path and budget benchmarks on an Apple Silicon laptop (T3, M1, M2;
 docs/dev/benchmarks.md).

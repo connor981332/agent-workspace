@@ -15,6 +15,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/connor981332/agent-workspace/internal/config"
 	"github.com/connor981332/agent-workspace/internal/platform"
@@ -102,6 +103,9 @@ func hook(args []string, version string, stdin io.Reader, stdout, stderr io.Writ
 		a.notify(strings.Join(text, "\n"), stdout)
 		_ = state.MarkDelivered(notes.stateDir, ids) // an undelivered message is sent again (S6)
 	}
+	if notes.touch > 0 {
+		_ = state.TouchLeases(notes.stateDir, notes.touch) // best effort: the next call tries again
+	}
 	return code
 }
 
@@ -109,7 +113,11 @@ func hook(args []string, version string, stdin io.Reader, stdout, stderr io.Writ
 type pendingNotes struct {
 	pending  []state.Notification
 	stateDir string
+	touch    int // the lane whose leases to mark active, or 0
 }
+
+// activityEvery is how often a tool call records activity on the lane's leases.
+const activityEvery = 30 * time.Second
 
 // resolveScope builds the policy's scope from the workspace around the call's directory: its
 // configuration (from the cache when it is current) and its state, read-only.
@@ -234,6 +242,11 @@ func resolveScope(p Payload, version string, t *timing.Recorder) (*policy.Scope,
 	notes := pendingNotes{stateDir: stateDir}
 	if notes.pending, err = state.PendingNotifications(s.DB(), n); err != nil {
 		return nil, pendingNotes{}, err
+	}
+	if oldest, err := state.OldestActivity(s.DB(), n); err == nil && oldest != "" {
+		if t, err := time.Parse(time.RFC3339Nano, oldest); err == nil && time.Since(t) > activityEvery {
+			notes.touch = n
+		}
 	}
 	return scope, notes, nil
 }
