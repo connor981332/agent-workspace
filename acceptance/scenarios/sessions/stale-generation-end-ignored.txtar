@@ -1,6 +1,17 @@
-# sessions/stale-generation-end-ignored: to be written (plan §3.5).
-# req: R19 R23
-# source: C1 test_attachment_records
+# A session whose lane has since been recycled and claimed by someone else does not affect the new
+# owner: its process dying ends nothing of theirs.
+# req: R23
+# source: C1 test_lanes.py::test_attachment_records
 # milestone: M2
 
-unwritten
+workspace solo --single --init
+session old claude
+exec aw attach 'first thing'
+end-session old
+exec aw sweep --apply
+session new codex
+exec aw attach 'second thing' --json
+json stdout .lane 01
+json stdout .name second-thing
+exec aw sweep --json
+json stdout .lanes[0].reason 'session new (codex) is attached'

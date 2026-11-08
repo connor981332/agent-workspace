@@ -1,6 +1,15 @@
-# lanes/survive-session-end: to be written (plan §3.5).
+# A lane belongs to its work, not to a session: when the session ends, the lane and its work stay,
+# and unmerged work keeps it.
 # req: R23 R78
 # source: C2 finding F8
 # milestone: M2
 
-unwritten
+workspace solo --single --init
+session s-1 claude
+exec aw attach 'add feature flag'
+lane-commit 01 file.txt 'work'
+end-session s-1
+exec aw sweep --apply --json
+json stdout .lanes[0].action keep
+stdout 'not proven merged'
+exists .worktrees/01/file.txt

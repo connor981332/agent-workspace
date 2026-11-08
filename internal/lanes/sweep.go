@@ -164,7 +164,7 @@ func (m *Manager) decide(ctx context.Context, d *Decision, sessions []state.Sess
 		return
 	}
 	for _, s := range sessions {
-		if s.Lane == l.Number && s.LaneGeneration == l.Generation && s.State == state.SessionActive {
+		if s.Lane == l.Number && s.LaneGeneration == l.Generation && s.State == state.SessionActive && Live(s) {
 			keep("session %s (%s) is attached", s.HarnessSession, s.Harness)
 			return
 		}

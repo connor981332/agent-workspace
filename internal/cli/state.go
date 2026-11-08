@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 
@@ -49,5 +50,11 @@ func openForWrite() (*writeContext, error) {
 		store.Close()
 		return nil, ro
 	}
-	return &writeContext{ws: ws, cfg: cfg, store: store}, nil
+	w := &writeContext{ws: ws, cfg: cfg, store: store}
+	// Every state-changing command first recovers sessions whose process has gone (R80).
+	if err := manager(w).Recover(context.Background()); err != nil {
+		store.Close()
+		return nil, err
+	}
+	return w, nil
 }

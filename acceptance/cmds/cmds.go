@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/rogpeppe/go-internal/testscript"
@@ -35,8 +36,9 @@ type state struct {
 	repos     []string // repositories in the owner checkout, relative to it ("." is the owner itself)
 	snap      snapshot
 	mayChange bool
-	pathDirs  map[string]bool // directories already put on PATH
-	gitFail   string          // file of git-fail patterns
+	pathDirs  map[string]bool      // directories already put on PATH
+	gitFail   string               // file of git-fail patterns
+	sessions  map[string]*exec.Cmd // fake harness processes, by session id
 	// ownerBranches are the branches each repository had when the workspace was built, keyed by
 	// "<repo>\x00<branch>".
 	ownerBranches map[string]bool
@@ -117,6 +119,8 @@ func Commands() map[string]func(ts *testscript.TestScript, neg bool, args []stri
 		"git-squash":       mergeCmd("squash"),
 		"git-cherry-pick":  mergeCmd("cherry-pick"),
 		"forge-reply":      cmdForgeReply,
+		"session":          cmdSession,
+		"end-session":      cmdEndSession,
 		FinalCheck:         cmdOwnerCheckFinal,
 	}
 }
@@ -377,4 +381,49 @@ func cmdForgeReply(ts *testscript.TestScript, neg bool, args []string) {
 	_, err = fmt.Fprintf(f, "%s\t%s\n", args[1], ts.MkAbs(args[2]))
 	ts.Check(err)
 	ts.Check(f.Close())
+}
+
+// session <id> <harness>
+//
+// Starts a fake harness process for a session and sets AW_SESSION=<harness>:<id> and
+// AW_SESSION_PID, as aw new would, so that what runs next acts as that session. The process lives
+// until end-session or the end of the scenario.
+func cmdSession(ts *testscript.TestScript, neg bool, args []string) {
+	if neg || len(args) != 2 {
+		ts.Fatalf("usage: session <id> <harness>")
+	}
+	st := get(ts)
+	if st.sessions == nil {
+		st.sessions = map[string]*exec.Cmd{}
+	}
+	if _, ok := st.sessions[args[0]]; ok {
+		ts.Fatalf("session %s is already running", args[0])
+	}
+	cmd := exec.Command("sleep", "3600")
+	ts.Check(cmd.Start())
+	st.sessions[args[0]] = cmd
+	ts.Defer(func() {
+		cmd.Process.Kill()
+		cmd.Wait()
+	})
+	ts.Setenv("AW_SESSION", args[1]+":"+args[0])
+	ts.Setenv("AW_SESSION_PID", strconv.Itoa(cmd.Process.Pid))
+}
+
+// end-session <id>: the session's process dies, as when a terminal is closed or a harness crashes.
+// AW_SESSION and AW_SESSION_PID are cleared.
+func cmdEndSession(ts *testscript.TestScript, neg bool, args []string) {
+	if neg || len(args) != 1 {
+		ts.Fatalf("usage: end-session <id>")
+	}
+	st := get(ts)
+	cmd, ok := st.sessions[args[0]]
+	if !ok {
+		ts.Fatalf("no session %s", args[0])
+	}
+	cmd.Process.Kill()
+	cmd.Wait()
+	delete(st.sessions, args[0])
+	ts.Setenv("AW_SESSION", "")
+	ts.Setenv("AW_SESSION_PID", "")
 }

@@ -1,6 +1,21 @@
-# sessions/process-death-ends-attachment-keeps-lane: to be written (plan §3.5).
+# When a session's process dies, its attachment no longer holds the lane, but the lane stays; the
+# next state-changing command records the session as interrupted.
 # req: R23 R46
-# source: C1 test_attach_exhaustion_and_process_death
+# source: C1 test_lanes.py::test_attach_exhaustion_and_process_death
 # milestone: M2
 
-unwritten
+workspace solo --single --init
+session s-1 claude
+exec aw attach 'add feature flag'
+exec aw sweep --json
+json stdout .lanes[0].action keep
+json stdout .lanes[0].reason 'session s-1 (claude) is attached'
+end-session s-1
+exec aw sweep --json
+json stdout .lanes[0].action recycle
+exists .worktrees/01
+
+# The same session id, alive again (a resumed harness), gets a new claim: its old attachment ended.
+session s-1 claude
+exec aw attach 'add feature flag' --json
+json stdout .reused true

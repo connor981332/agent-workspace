@@ -1,6 +1,38 @@
-# run/stdin-and-signals: to be written (plan §3.5).
+# aw run forwards standard input, and signals to the command: SIGTERM gives 143, SIGINT 130, and the
+# command is gone afterwards.
 # req: R93
-# source: C1 test_real_forwarded_stdin_arguments_exit_and_signal
+# source: C1 test_tooling.py::test_real_forwarded_stdin_arguments_exit_and_signal
 # milestone: M2
 
-unwritten
+workspace solo --single --init
+exec aw attach 'add feature flag'
+cd .worktrees/01
+stdin $WORK/input.txt
+exec aw run solo sh -c 'cat; echo done'
+stdout '^line one$'
+stdout '^line two$'
+stdout '^done$'
+
+exec sh $WORK/signal.sh TERM
+stdout '^status=143$'
+stdout '^child gone$'
+exec sh $WORK/signal.sh INT
+stdout '^status=130$'
+stdout '^child gone$'
+
+-- input.txt --
+line one
+line two
+-- signal.sh --
+# Start a long command under aw run, signal aw, and check the exit status and that the child died.
+# The command runs in the foreground, as a server under aw run would. (A shell's own background job
+# would ignore SIGINT, as POSIX requires of non-interactive shells.)
+aw run solo sh -c 'echo $$ > "$WORK/child.pid"; exec sleep 30' </dev/null &
+aw=$!
+i=0; while [ ! -s "$WORK/child.pid" ] && [ $i -lt 100 ]; do sleep 0.05; i=$((i + 1)); done
+kill -s "$1" $aw
+wait $aw
+echo "status=$?"
+child=$(cat "$WORK/child.pid"); rm -f "$WORK/child.pid"
+i=0; while kill -0 "$child" 2>/dev/null && [ $i -lt 100 ]; do sleep 0.05; i=$((i + 1)); done
+kill -0 "$child" 2>/dev/null && echo "child alive" || echo "child gone"

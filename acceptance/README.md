@@ -81,10 +81,11 @@ root, which can write where the scenario expects a permission error.
 | `git-fail <args-regexp>` | Fault injection: a `git` wrapper first on `PATH` fails, with `git-fail: injected failure for: git …` on stderr, when its arguments match the extended regexp, and runs the real Git otherwise. Patterns accumulate. |
 | `unwritten` | Fails. The body of a pending scenario not yet written. |
 | `forge-reply <gh\|glab> <path-regexp> <file>` | Makes the `gh` or `glab` stub answer an API path matching the extended regexp with the file's contents. Without a matching rule the stub fails like an API that cannot be reached. |
+| `session <id> <harness>` / `end-session <id>` | Starts a fake harness process (it sleeps) and sets `AW_SESSION=<harness>:<id>` and `AW_SESSION_PID`, as `aw new` would, so that the commands after it act as that session; `end-session` kills the process, as a closed terminal or a crash would, and clears both. |
 | `lane-commit <NN> [<project>/]<file> <message>` | As the lane's agent: appends the message to the file in lane NN's worktree (the lane root, or the project's), then adds and commits it. |
 | `git-merge <repo> <branch>`, `git-squash …`, `git-cherry-pick …` | As the human, in the owner checkout's repository (`.` or a project directory): merge the branch into the current branch (a merge commit, one squashed commit, or the commits cherry-picked), then push. The owner snapshot is taken again afterwards. |
 
-The custom commands still to come (`session`, `hook`, `decision`, …)
+The custom commands still to come (`hook`, `decision`, …)
 are listed in plan §3.3 and are added with the milestones that need them.
 
 ## Test tools
@@ -97,7 +98,11 @@ are listed in plan §3.3 and are added with the milestones that need them.
 
 ## Stubs
 
-`stubs/` holds POSIX `sh` test doubles, ported from
+`claude`, `codex`, `grok` and `opencode` are one harness stub under four names: it records its
+arguments, working directory and `AW_SESSION` in `$STUB_LOG`, waits `$STUB_HARNESS_SLEEP` seconds
+if set, and exits with `$STUB_HARNESS_EXIT`. `gh` and `glab` answer from `forge-reply` rules.
+
+`stubs/` also holds POSIX `sh` test doubles, ported from
 [candidate 2](../workspace-candidate-2/tests/stubs/). Each appends its argv to `$STUB_LOG` and
 answers from files under `$STUB_STATE`; the comment at the top of each stub lists those files.
 

@@ -6,6 +6,8 @@ import (
 	"os"
 	"strings"
 	"unicode"
+
+	"golang.org/x/term"
 )
 
 // Color reports whether output to f may use color: f is a terminal and NO_COLOR is not set
@@ -17,9 +19,11 @@ func Color(f *os.File) bool {
 	if os.Getenv("TERM") == "dumb" {
 		return false
 	}
-	info, err := f.Stat()
-	return err == nil && info.Mode()&os.ModeCharDevice != 0
+	return IsTerminal(f)
 }
+
+// IsTerminal reports whether f is a terminal. (A character device is not enough: /dev/null is one.)
+func IsTerminal(f *os.File) bool { return term.IsTerminal(int(f.Fd())) }
 
 // Clean removes control characters (C0, DEL and C1), so that text from configuration or the file
 // system cannot move the cursor, change colors or hide output. Tabs become spaces.

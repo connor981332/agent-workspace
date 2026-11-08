@@ -135,7 +135,7 @@ with uncommitted work is refused. It asks for confirmation on a terminal; elsewh
 				return err
 			}
 			if !yes {
-				if !isTerminal(os.Stdin) {
+				if !ui.IsTerminal(os.Stdin) {
 					return fmt.Errorf("aw discard removes lane %s; confirm with --yes", l.Name)
 				}
 				fmt.Fprintf(cmd.ErrOrStderr(), "Discard lane %s (%q)? Its branches are archived first. [y/N] ", l.Name, l.Purpose)
@@ -161,11 +161,6 @@ with uncommitted work is refused. It asks for confirmation on a terminal; elsewh
 	cmd.Flags().BoolVar(&yes, "yes", false, "do not ask for confirmation")
 	cmd.Flags().BoolVar(&asJSON, "json", false, "print what was archived as JSON")
 	return cmd
-}
-
-func isTerminal(f *os.File) bool {
-	info, err := f.Stat()
-	return err == nil && info.Mode()&os.ModeCharDevice != 0
 }
 
 func newParkCmd(unpark bool) *cobra.Command {
