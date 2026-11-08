@@ -10,6 +10,9 @@
 # The recording hook saves each payload and allows the call; it changes nothing else. The
 # throwaway repository is under your home directory, because Grok loads no project hooks in a
 # shared temporary directory. Remove it afterwards with: rm -rf ~/aw-payload-recording
+#
+# For OpenCode, the recording is also a test: the plugin refuses to read blocked.txt by throwing from
+# its execute.before hook, and collect reports whether the read ran anyway.
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 box=$HOME/aw-payload-recording
@@ -48,11 +51,37 @@ PY
 	claude) mkdir -p .claude && printf '%s\n' "$hooks" > .claude/settings.json ;;
 	codex) mkdir -p .codex && printf '%s\n' "$hooks" > .codex/hooks.json ;;
 	grok) mkdir -p .grok/hooks && printf '%s\n' "$hooks" > .grok/hooks/record.json ;;
+	opencode)
+		mkdir -p .opencode/plugins
+		printf 'CANARY-the-read-ran\n' > blocked.txt
+		cat > .opencode/plugins/record.js <<EOF
+import { readdirSync, writeFileSync } from "node:fs"
+const dir = "$box/.recorded"
+const save = (name, event) => {
+  const n = readdirSync(dir).filter((f) => f.endsWith(".json")).length
+  const data = { hook_event_name: name, keys: Object.keys(event), tool: event.tool, input: event.input, status: event.status, sessionID: event.sessionID, callID: event.callID }
+  writeFileSync(dir + "/" + String(n).padStart(3, "0") + "-" + name + ".json", JSON.stringify(data))
+}
+export default {
+  id: "aw-record",
+  async setup(ctx) {
+    await ctx.tool.hook("execute.before", (event) => {
+      save("pre-tool-use", event)
+      if (JSON.stringify(event.input ?? {}).includes("blocked.txt")) throw new Error("aw: this call is refused (recording test)")
+    })
+    await ctx.tool.hook("execute.after", (event) => save("post-tool-use", event))
+  },
+}
+EOF
+		prompt="$prompt Before replying done, also read the file blocked.txt and repeat its contents; if that fails, say so and carry on."
+		;;
 	*) echo "record.sh: no recording setup for $harness yet" >&2; exit 2 ;;
 	esac
+	run=$harness
+	if [ "$harness" = opencode ] && [ -x "$HOME/.opencode/bin/opencode" ]; then run=$HOME/.opencode/bin/opencode; fi
 	echo "Ready. Now run, in another terminal:"
 	echo
-	echo "  cd $box && $harness"
+	echo "  cd $box && $run"
 	echo
 	echo "Approve the hooks or folder trust when it asks (Codex: trust the hooks; Grok: /hooks-trust),"
 	echo "approve each tool call, and give it this prompt:"
@@ -62,7 +91,9 @@ PY
 	echo "Then quit the harness, and run: sh $0 collect $harness"
 	;;
 collect)
-	version=$("$harness" --version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+	run=$harness
+	if [ "$harness" = opencode ] && [ -x "$HOME/.opencode/bin/opencode" ]; then run=$HOME/.opencode/bin/opencode; fi
+	version=$("$run" --version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
 	dst=$here/$harness-$version
 	mkdir -p "$dst"
 	python3 - "$box" "$dst" "$HOME" <<'PY'
@@ -72,14 +103,18 @@ box, dst, home = sys.argv[1:]
 files = sorted(glob.glob(f"{box}/.recorded/*.json"))
 if not files:
     sys.exit("no payloads were recorded: check that the harness ran its hooks")
+tried, ran = False, False
 for f in files:
     event = os.path.basename(f)[4:-5]
     # Grok percent-encodes the workspace path inside its transcript path.
     text = (open(f).read().replace(box, "/WORKSPACE").replace(home, "/HOME")
             .replace(quote(box, safe=""), "%2FWORKSPACE").replace(quote(home, safe=""), "%2FHOME"))
     data = json.loads(text)
-    tool = data.get("tool_name") or data.get("toolName") or ""
-    for key in ("session_id", "sessionId", "prompt_id", "turn_id"):
+    tool = data.get("tool_name") or data.get("toolName") or data.get("tool") or ""
+    if "blocked.txt" in json.dumps(data.get("input") or {}):
+        tried = tried or event == "pre-tool-use"
+        ran = ran or (event == "post-tool-use" and data.get("status") == "completed")
+    for key in ("session_id", "sessionId", "sessionID", "prompt_id", "turn_id"):
         if isinstance(data.get(key), str):
             text = text.replace(data[key], key.upper())
     data = json.loads(text)
@@ -94,6 +129,13 @@ for f in files:
         i += 1
     json.dump(data, open(out, "w"), indent=1, sort_keys=True)
 print(f"wrote {len(files)} payloads to {dst}")
+if tried:
+    if ran:
+        print("the plugin's refusal did NOT stop the read")
+    elif not any(f.endswith("post-tool-use.json") for f in files):
+        print("no after-hook fired, so this cannot tell whether the refusal stopped the read: did the harness repeat CANARY?")
+    else:
+        print("the plugin's refusal stopped the read")
 PY
 	;;
 *) echo "usage: sh record.sh setup|collect <harness>" >&2; exit 2 ;;
