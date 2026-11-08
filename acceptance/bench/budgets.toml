@@ -1,0 +1,69 @@
+# Latency budgets (plans/release-candidate.md §5.1). spec names the row of the budget table in
+# docs/spec/speed.md; budgets_test.go fails if a budget here differs from the spec's. Operations
+# whose milestone has not been reached are listed but not run.
+
+[[op]]
+name = "hook"
+spec = "Guard decision for one tool call"
+budget_ms = 8
+iterations = 1000
+from = "M1"
+about = "aw hook claude pre-tool-use through bin/aw, with a Claude Code payload"
+
+[[op]]
+name = "whoami"
+spec = "`aw whoami`, `aw config get`"
+budget_ms = 10
+iterations = 500
+from = "M1"
+about = "aw whoami through bin/aw"
+
+[[op]]
+name = "config-get"
+spec = "`aw whoami`, `aw config get`"
+budget_ms = 10
+iterations = 500
+from = "M1"
+about = "aw config get lanes.max through bin/aw"
+
+[[op]]
+name = "dashboard"
+spec = "`aw` dashboard and `aw recap` (local only)"
+budget_ms = 100
+iterations = 200
+from = "M2"
+
+[[op]]
+name = "attach-from-pool"
+spec = "`aw attach` from the warm pool"
+budget_ms = 100
+iterations = 100
+from = "M2"
+
+[[op]]
+name = "new-until-harness"
+spec = "`aw new` until the harness launches"
+budget_ms = 150
+iterations = 100
+from = "M2"
+
+[[op]]
+name = "serve-free-seat"
+spec = "`aw serve` until the server command starts, with a free seat"
+budget_ms = 50
+iterations = 100
+from = "M4"
+
+[[op]]
+name = "grant-next"
+spec = "Granting a seat to the next queued lane after a release"
+budget_ms = 50
+iterations = 100
+from = "M4"
+
+[[op]]
+name = "preempt"
+spec = "Owner preemption, until the evicted processes receive SIGTERM"
+budget_ms = 50
+iterations = 100
+from = "M4"

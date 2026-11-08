@@ -1,0 +1,22 @@
+# A lane always runs the owner checkout's pin, never the version on the lane's own branch.
+# req: R17
+# source: spec (distribution.md, "The launcher")
+# milestone: M1
+
+workspace shop
+exec aw init
+owner-snapshot
+
+# A lane root, as M2 creates one: its own copy of the workspace files, possibly an older pin, and a
+# gitignored .aw/owner naming the owner checkout.
+exec mkdir -p .worktrees/03/.aw .worktrees/03/bin
+exec sh -c 'cp bin/aw .worktrees/03/bin/aw && echo 0.0.1 > .worktrees/03/.aw/version && : > .worktrees/03/.aw/lock'
+exec sh -c 'printf "%s\n" "$OWNER" > .worktrees/03/.aw/owner'
+
+cd .worktrees/03
+exec bin/aw version
+stdout '^aw '$AW_VERSION' '
+exec bin/aw whoami
+stdout '^location   lane root '
+stdout '^aw         '$AW_VERSION'$'
+! exists $XDG_CACHE_HOME/agent-workspace/bin/0.0.1

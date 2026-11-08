@@ -1,0 +1,37 @@
+# The configuration carries a schema version. A missing one names the line to add; a newer one
+# names the upgrade.
+# req: R10
+# source: spec (no candidate source)
+# milestone: M1
+
+workspace shop
+owner-may-change
+
+exec aw config get workspace.schema
+stdout '^1$'
+
+exec cp $WORK/missing.toml workspace.toml
+! exec aw config validate
+stdout 'workspace\.toml:1:2: workspace\.schema: is missing → add schema = 1 under \[workspace\]'
+
+exec cp $WORK/newer.toml workspace.toml
+! exec aw config validate
+stdout 'workspace\.toml:4:1: workspace\.schema: is 2, but this aw reads schema 1 → upgrade the workspace''s pinned aw'
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+[projects.web]
+-- missing.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+[projects.web]
+-- newer.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 2
+[projects.web]

@@ -157,3 +157,55 @@ jobs:
             echo
             echo "Skipped scenarios are pending: their milestone is later than \`current\` in acceptance/requirements.toml."
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # Latency budgets (§5.2): absolute on ubuntu-24.04, regressions against master on macos-15, whose
+  # virtual machines cannot hold an absolute budget (docs/dev/spikes.md). Results from master are
+  # kept as artifacts; each run compares with master's last.
+  bench:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            mode: absolute
+          - os: macos-15
+            mode: relative
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            acceptance/go.sum
+      - name: Master's last results
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          id=$(gh run list -R "$GITHUB_REPOSITORY" --workflow go.yml --branch master --event push --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+          if [ -n "$id" ] && gh run download "$id" -R "$GITHUB_REPOSITORY" -n "bench-${{ matrix.os }}" -D "$RUNNER_TEMP/baseline"; then
+            echo "Baseline from run $id"
+          else
+            echo "No baseline from master yet"
+          fi
+      - name: Bench
+        working-directory: acceptance
+        shell: bash
+        env:
+          AW_BENCH_HOST: ${{ matrix.os }}
+        run: |
+          args=(-mode "${{ matrix.mode }}" -out "$RUNNER_TEMP/bench.json")
+          if [ -f "$RUNNER_TEMP/baseline/bench.json" ]; then args+=(-baseline "$RUNNER_TEMP/baseline/bench.json"); fi
+          go run ./bench "${args[@]}" | tee -a "$GITHUB_STEP_SUMMARY"
+          exit "${PIPESTATUS[0]}"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: bench-${{ matrix.os }}
+          path: ${{ runner.temp }}/bench.json
+          if-no-files-found: ignore
