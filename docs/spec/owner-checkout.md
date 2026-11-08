@@ -23,11 +23,25 @@ human, outside any agent session, or by a session holding a delegation.
 On the host runner, agents run as the human's user account. These protections stop accidents by
 cooperative agents. They do not stop an agent determined to get around them.
 
+### What a lane may change
+
+The `reference-transaction` hook decides at `prepared`, and only for a lane. **Allowed:** the lane's
+own branches, refs private to a worktree (`HEAD`, `ORIG_HEAD`, `FETCH_HEAD`, `REBASE_HEAD`,
+`AUTO_MERGE` and the like, and `refs/bisect/*`), `refs/remotes/*`, and updates that leave a ref's
+resolved value unchanged, as `git pack-refs` and `git gc` do. **Refused:** other branches, tags,
+`refs/notes/*`, `refs/aw/*` and `refs/stash`, which every worktree shares, so a lane commits to its
+own branch instead. `aw`'s own updates from a lane carry a short-lived token recorded in state. A
+push into the repository (`git push . a:b`) runs inside its Git directory and cannot be traced to a
+checkout, so it is refused from anywhere; update such a branch from the owner checkout with `git
+merge` or `git branch`.
+
 ### The Git hooks dispatcher
 
 Teams often have their own Git hooks (`core.hooksPath`, for example `.githooks/`). `aw setup` points
 every repository's `core.hooksPath` at a small dispatcher that runs `aw`'s own checks first and then
-the team's hook of the same name. `aw doctor` reports a repository whose hooks path has been changed.
+the team's hook of the same name. In the owner checkout the dispatcher runs the team's hook without
+starting `aw`, so plain Git there keeps working even if `aw` cannot run. `aw doctor` reports a
+repository whose hooks path has been changed.
 
 ## Pair sessions
 

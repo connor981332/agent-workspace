@@ -1,6 +1,51 @@
-# policy/ref-hook-refuses-foreign-ref: to be written (plan §3.5).
+# Inside Git itself, a lane may change only its own branches, worktree-private refs and remote-
+# tracking refs. Moving or deleting another branch, tags, notes and the shared stash are refused,
+# whatever command did it, and the owner's refs are untouched. The owner checkout is not limited.
 # req: R59
 # source: spec (no candidate source)
 # milestone: M3
 
-unwritten
+workspace shop --init
+exec aw setup
+stdout '^\.: installed the hooks dispatcher$'
+stdout '^web: installed the hooks dispatcher$'
+exec aw setup
+stdout '^\.: already set up$'
+exec git -C web branch keep
+exec git -C web tag v1
+owner-snapshot
+exec aw attach 'add feature flag'
+cd web/.worktrees/01
+
+# Its own work goes through.
+exec git commit -q --allow-empty -m 'lane work'
+exec git commit -q --amend --allow-empty -m 'lane work, amended'
+exec git switch -q --detach
+exec git switch -q aw/feature-flag
+exec git pack-refs --all
+exec git gc -q
+exec git fetch -q origin
+exec git rev-parse --verify refs/heads/keep
+
+# Everything else is refused.
+! exec git branch -f keep HEAD
+stderr 'a lane may change only its own branches, so this ref update is refused: refs/heads/keep'
+! exec git branch -D keep
+! exec git branch new-one
+stderr 'refs/heads/new-one'
+! exec git switch -q -c another
+! exec git tag lane-tag
+stderr 'refs/tags/lane-tag'
+! exec git tag -d v1
+! exec git notes add -m x
+stderr 'refs/notes/commits'
+! exec git update-ref refs/heads/main HEAD
+! exec git update-ref refs/aw/archive/x HEAD
+exec sh -c 'echo x > f.txt && git add f.txt'
+! exec git stash
+stderr 'the stash is shared by every worktree'
+exec git reset -q
+
+cd $OWNER/web
+exec git rev-parse --verify refs/heads/keep
+exec git rev-parse --verify refs/tags/v1

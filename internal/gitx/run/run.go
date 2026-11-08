@@ -13,6 +13,10 @@ import (
 	"time"
 )
 
+// ExtraEnv is added to every Git command's environment. aw sets its ref token here, once, before it
+// starts work (lanes.Manager.authorizeRefs).
+var ExtraEnv []string
+
 // DefaultTimeout bounds one Git command.
 const DefaultTimeout = 2 * time.Minute
 
@@ -72,6 +76,7 @@ func (g Git) RunInput(ctx context.Context, stdin []byte, args ...string) (string
 	cmd.Dir = g.Dir
 	// Never prompt, never page, and read plain output.
 	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_PAGER=cat", "LC_ALL=C", "GIT_OPTIONAL_LOCKS=0")
+	cmd.Env = append(cmd.Env, ExtraEnv...)
 	cmd.Env = append(cmd.Env, g.Env...)
 	if stdin != nil {
 		cmd.Stdin = bytes.NewReader(stdin)

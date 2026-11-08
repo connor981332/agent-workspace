@@ -56,6 +56,9 @@ func (m *Manager) setState(ctx context.Context, l state.Lane, s string) (state.L
 // refs/aw/archive/<name>/<time> first, then the lane is destroyed. Uncommitted work is never lost:
 // a lane with any is refused.
 func (m *Manager) Discard(ctx context.Context, l state.Lane, now time.Time) ([]string, error) {
+	if err := m.authorizeRefs(ctx); err != nil {
+		return nil, err
+	}
 	if l.State == state.LanePool || l.State == state.LaneClaiming {
 		return nil, fmt.Errorf("lane %s has no work to discard", Dir(l.Number, m.Cfg.Lanes.Max))
 	}

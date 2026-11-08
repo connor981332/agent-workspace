@@ -77,7 +77,7 @@ func newRoot(stdout, stderr io.Writer) *cobra.Command {
 	root.SetErr(stderr)
 	root.CompletionOptions.HiddenDefaultCmd = true
 
-	root.AddCommand(newVersionCmd(), newConfigCmd(), newInitCmd(), newDoctorCmd(), newWhoamiCmd(), newAttachCmd(),
+	root.AddCommand(newVersionCmd(), newConfigCmd(), newInitCmd(), newSetupCmd(), newDoctorCmd(), newWhoamiCmd(), newAttachCmd(),
 		newSweepCmd(), newDiscardCmd(), newParkCmd(false), newParkCmd(true), newFinishCmd(), newRunCmd(), newNewCmd(), newRecapCmd())
 	return root
 }

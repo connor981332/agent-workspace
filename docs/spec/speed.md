@@ -18,6 +18,7 @@ including the `bin/aw` launcher. Time spent in the project's own commands is exc
 | Operation | Budget (p99) |
 |---|---|
 | Guard decision for one tool call | 8 ms |
+| `reference-transaction` hook, deciding one ref update from a lane | 8 ms |
 | `aw whoami`, `aw config get` | 10 ms |
 | `aw` dashboard and `aw recap` (local only) | 100 ms for 10 lanes across 4 repositories |
 | `aw attach` from the warm pool | 100 ms |

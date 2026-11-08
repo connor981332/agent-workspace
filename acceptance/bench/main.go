@@ -390,7 +390,17 @@ func newFixture(tmp, awBin string) (*fixture, error) {
 
 	home := filepath.Join(tmp, "home")
 	owner := filepath.Join(tmp, "bench workspace")
-	env := append(os.Environ(),
+	// Not this process's harness identity: run from inside a harness, every aw attach would be one
+	// session, and would get the same lane.
+	inherited := slices.DeleteFunc(os.Environ(), func(e string) bool {
+		for _, p := range []string{"AW_SESSION", "CLAUDE_CODE_SESSION_ID=", "CODEX_THREAD_ID=", "GROK_SESSION_ID="} {
+			if strings.HasPrefix(e, p) {
+				return true
+			}
+		}
+		return false
+	})
+	env := append(inherited,
 		"HOME="+home, "XDG_CONFIG_HOME="+filepath.Join(home, ".config"), "XDG_CACHE_HOME="+filepath.Join(home, ".cache"),
 		"GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL="+filepath.Join(home, ".gitconfig"), "AW_MIRROR="+mirror)
 	if err := os.MkdirAll(owner, 0o755); err != nil {
@@ -554,7 +564,7 @@ func (fx *fixture) addLaneOps(tmp, launcher string) error {
 	if err != nil {
 		return err
 	}
-	settings := fmt.Sprintf("\n[lanes]\nmax = %d\npool = %d\n", laneCount+poolSize+1, poolSize)
+	settings := fmt.Sprintf("\n[lanes]\nmax = %d\npool = %d\n", laneCount+poolSize+2, poolSize)
 	if strings.Contains(string(data), "\n[lanes]\n") {
 		return fmt.Errorf("aw init wrote a [lanes] table; the bench must merge into it")
 	}
@@ -649,6 +659,34 @@ func (fx *fixture) addLaneOps(tmp, launcher string) error {
 		fx.aw(env, nil)
 		return time.Since(start)
 	}}
+	// The ref hook, in a lane of its own. A binary that predates it refuses every state.
+	if fx.try(fx.env, []byte{}, "git-hook", "reference-transaction", "committed") == nil {
+		var laneDir, update string
+		fx.ops["ref-hook"] = &benchOp{prepare: func() {
+			out, err := fx.output(env, "attach", "bench ref hook", "--json")
+			if err != nil {
+				fatalf("%v", err)
+			}
+			var claimed struct{ Root, Name string }
+			if err := json.Unmarshal(out, &claimed); err != nil || claimed.Root == "" {
+				fatalf("aw attach --json: no root in %s", out)
+			}
+			laneDir = claimed.Root
+			zero, next := strings.Repeat("0", 40), strings.Repeat("a", 40)
+			update = zero + " " + next + " refs/heads/aw/" + claimed.Name + "\n"
+		}, run: func() time.Duration {
+			c := exec.Command(launcher, "git-hook", "reference-transaction", "prepared")
+			c.Dir, c.Env = laneDir, fx.env // every tool stubbed: the hook may not run one
+			c.Stdin = strings.NewReader(update)
+			var errOut bytes.Buffer
+			c.Stderr = &errOut
+			start := time.Now()
+			if err := c.Run(); err != nil {
+				fatalf("aw git-hook: %v\n%s", err, errOut.String())
+			}
+			return time.Since(start)
+		}}
+	}
 	fx.ops["attach-from-pool"] = &benchOp{run: func() time.Duration {
 		n++
 		start := time.Now()

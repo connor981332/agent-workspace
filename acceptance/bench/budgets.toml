@@ -52,6 +52,14 @@ from = "M2"
 about = "aw (the dashboard) through bin/aw: 10 lanes across 4 repositories, half with uncommitted work, half clean with unmerged commits"
 
 [[op]]
+name = "ref-hook"
+spec = "`reference-transaction` hook, deciding one ref update from a lane"
+budget_ms = 8
+iterations = 1000
+from = "M3"
+about = "aw git-hook reference-transaction prepared through bin/aw, in a lane, for a commit to the lane's own branch"
+
+[[op]]
 name = "serve-free-seat"
 spec = "`aw serve` until the server command starts, with a free seat"
 budget_ms = 50
