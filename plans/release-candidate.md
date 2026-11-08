@@ -16,8 +16,9 @@ milestone named in its row.
 
 **Branches / MRs:** [PR #5](https://github.com/connor981332/agent-workspace/pull/5) (this plan, merged),
 [PR #6](https://github.com/connor981332/agent-workspace/pull/6) (the settled questions, merged),
-[PR #7](https://github.com/connor981332/agent-workspace/pull/7) (T1, `m0/skeleton`, merged).
-`m0/acceptance` (T2, open).
+[PR #7](https://github.com/connor981332/agent-workspace/pull/7) (T1, `m0/skeleton`, merged),
+[PR #8](https://github.com/connor981332/agent-workspace/pull/8) (T2, `m0/acceptance`, merged).
+`m0/goreleaser` (GoReleaser, open). `spike/hot-path` (T3 and the ref-hook spike, never merged).
 
 **Done:** Read the spec and both candidates. Wrote this plan: milestones M0 to M12, v0.1 defined at
 the end of M7, R1 to R94 assigned, the acceptance suite design and its inventory, the module layout,
@@ -27,14 +28,15 @@ questions" in its README. The spec owner accepted every proposed answer in
 [Spec issues](#spec-issues) (S1 to S19) on 2026-11-07; each is recorded in the spec by the PR of the
 milestone that needs it. T1: the Go module, `aw version`, the exit codes, the `lint` and `unit` CI
 jobs on all four runners, and the PR template. T1 reworded §4.3 rule 3, because `cmd/aw` links the
-command tree (cobra's flag library imports `net`) and so cannot meet the transitive rule.
+command tree (cobra's flag library imports `net`) and so cannot meet the transitive rule. T2: the
+acceptance module, runner, owner check, stubs, the M0 scenarios, the M1 scenarios as pending files,
+the coverage check and the `acceptance` CI job.
 
-**In progress:** [T2](#t2-acceptance-harness-skeleton) on `m0/acceptance`: the acceptance module,
-runner, owner check, stubs, the M0 scenarios, the M1 scenarios as pending files, the coverage check
-and the `acceptance` CI job.
+**In progress:** GoReleaser configuration and the `release-snapshot` job (§6) on `m0/goreleaser`.
+[T3](#t3-hot-path-latency-spike) and the ref-hook spike on `spike/hot-path`.
 
-**Next step:** [T3](#t3-hot-path-latency-spike), then the ref-hook spike, GoReleaser and the
-remaining M0 items.
+**Next step:** Record the T3 and ref-hook results in `docs/dev/spikes.md` and check them against
+the M0 exit criterion.
 
 **Pending manual checks:** none yet.
 

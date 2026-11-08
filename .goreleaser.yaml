@@ -1,0 +1,40 @@
+# GoReleaser configuration (plans/release-candidate.md §6). CI runs `goreleaser check` and a
+# snapshot build on every PR; tag releases come with the release workflow (M2).
+version: 2
+
+project_name: aw
+
+builds:
+  - id: aw
+    main: ./cmd/aw
+    binary: aw
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X github.com/connor981332/agent-workspace/internal/cli.version={{ .Version }}
+    # Reproducible: the binaries' timestamps come from the commit, not the build machine.
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  # Raw binaries, so the launcher needs no tar: aw_<version>_<os>_<arch>.
+  - id: aw
+    formats: [binary]
+    name_template: "aw_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-snapshot+{{ .ShortCommit }}"
+
+changelog:
+  disable: true
+
+release:
+  disable: true
