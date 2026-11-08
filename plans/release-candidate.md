@@ -88,7 +88,9 @@ Now (`m3/resume`): `aw resume [name]` with each harness's resume flag and the fa
 
 Speed enforcement changed at the M3 exit, by the spec owner (§5.2): CI checks regressions against master on the median and holds only the guard and ref-hook budgets absolutely; all budgets are checked on a laptop before each release, and the release workflow requires that result.
 
-**Next step:** the M3 pre-release, then M4.
+**M3 complete (v0.0.4).** v0.0.3 is a tag with no release: the new release check left a file in the checkout, so GoReleaser refused to run, and nothing was published.
+
+**Next step:** M4.
 
 **Pending manual checks:** the hot-path and budget benchmarks on an Apple Silicon laptop (T3, M1, M2;
 docs/dev/benchmarks.md).
@@ -305,7 +307,7 @@ data; the owner's servers always count against capacity and always win the queue
 cannot be read is treated as held.
 
 **Exit criterion:** the M4 scenarios pass, with real processes on the host runner on both operating
-systems. CI enforces these budgets: `aw serve` with a free seat under 50 ms until the server command
+systems. The laptop benchmarks (§5.2) meet these budgets: `aw serve` with a free seat under 50 ms until the server command
 starts, a grant to the next queued lane under 50 ms after a release, and owner preemption under
 50 ms until the evicted processes receive SIGTERM.
 
