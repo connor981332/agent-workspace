@@ -1,0 +1,43 @@
+# A process whose identity does not match what was recorded is never signalled, and the seat is still freed.
+# req: R42
+# source: C1 test_start_failure_and_stale_pid_are_protected
+# milestone: M4
+
+workspace shop --init
+exec aw attach one
+cd .worktrees/01
+exec sh $WORK/decoy.sh
+exec aw serve stack
+exec sh $WORK/point-at-decoy.sh
+exec aw stop stack
+exec sh -c 'kill -0 "$(cat "$WORK/decoy.pid")"'
+exec sh -c 'kill "$(cat "$WORK/decoy.pid")"; for p in $(cat "$WORK/pids"); do kill "$p" 2>/dev/null; done; true'
+
+-- decoy.sh --
+sleep 30 >/dev/null 2>&1 &
+echo $! > "$WORK/decoy.pid"
+-- point-at-decoy.sh --
+awtest-sqlite "$OWNER/.git/aw/state.db" "update lease_procs set pid = $(cat "$WORK/decoy.pid"), pid_start = 'not-its-identity'"
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[projects.web]
+directory = "web"
+
+[projects.api]
+directory = "api"
+
+[projects.web.servers.app]
+command = "echo $$ >> $WORK/pids; exec sleep 60 # {port}"
+port = 3000
+
+[resources.stack]
+kind = "process"
+capacity = 1
+servers = ["web.app"]

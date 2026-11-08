@@ -1,0 +1,52 @@
+# A team command with no needs runs at once in the lane's project, with its arguments and exit status; one with needs releases its seats when it exits.
+# req: R44 R51
+# source: C1 test_env_and_command_forwarding_exit_and_busy_cleanup
+# milestone: M4
+
+workspace shop --init
+exec aw attach one
+cd .worktrees/01
+exec aw hello 'a b' c
+stdout 'project=web'
+stdout 'lane=01'
+stdout '^args=a b,c$'
+exec sh -c 'aw fails; echo "status=$?"'
+stdout 'status=7'
+exec aw needy
+stdout 'seat=1'
+exec aw queue --json
+! stdout 'lane_name'
+! exec aw nosuch
+stderr 'unknown command'
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[projects.web]
+directory = "web"
+
+[projects.api]
+directory = "api"
+
+[resources.db]
+kind = "token"
+tokens = ["d1"]
+
+[commands.hello]
+project = "web"
+run = 'echo project=$AW_PROJECT; echo lane=$AW_LANE; printf "args=%s,%s\n"'
+
+[commands.fails]
+project = "web"
+run = "exit 7"
+
+[commands.needy]
+project = "web"
+run = "echo seat=$AW_SEAT_DB"
+needs = ["db"]

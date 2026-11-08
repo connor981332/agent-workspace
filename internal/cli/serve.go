@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"os/signal"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/connor981332/agent-workspace/internal/broker"
 	"github.com/connor981332/agent-workspace/internal/config"
+	"github.com/connor981332/agent-workspace/internal/extproto"
 	"github.com/connor981332/agent-workspace/internal/lanes"
 	"github.com/connor981332/agent-workspace/internal/procs"
 	"github.com/connor981332/agent-workspace/internal/state"
@@ -31,7 +33,12 @@ var envWord = regexp.MustCompile(`[^A-Z0-9]+`)
 
 func envName(s string) string { return envWord.ReplaceAllString(strings.ToUpper(s), "_") }
 
-func newBroker(w *writeContext) *broker.Broker { return &broker.Broker{Store: w.store, Cfg: w.cfg} }
+func newBroker(w *writeContext) *broker.Broker {
+	return &broker.Broker{Store: w.store, Cfg: w.cfg, ReleaseToken: func(ctx context.Context, r broker.Resource, l state.Lease) error {
+		_, err := extproto.Call(ctx, w.ws.Owner, r.Release, "release", map[string]any{"resource": r.Name, "token": l.Token, "lane": l.Lane})
+		return err
+	}}
+}
 
 // pairSession reports whether this process belongs to a live pair session.
 func pairSession(w *writeContext) bool {
@@ -110,18 +117,43 @@ type served struct {
 	URLs     map[string]string `json:"urls,omitempty"`
 }
 
-func hostname(w *writeContext, m *lanes.Manager, lane int) string {
+func hostname(c *config.Config, lane int) string {
 	if lane == 0 {
 		return "localhost"
 	}
-	return strings.NewReplacer("{lane}", lanes.Dir(lane, w.cfg.Lanes.Max), "{namespace}", w.cfg.Workspace.Namespace).Replace(w.cfg.Lanes.Hostname)
+	return strings.NewReplacer("{lane}", lanes.Dir(lane, c.Lanes.Max), "{namespace}", c.Workspace.Namespace).Replace(c.Lanes.Hostname)
 }
 
-func urlsOf(w *writeContext, m *lanes.Manager, r broker.Resource, l state.Lease) map[string]string {
+// seatEnv is the environment a lane's commands get from its seats (lifecycle.md).
+func seatEnv(c *config.Config, resources []broker.Resource, leases []state.Lease, lane int) []string {
+	var env []string
+	for _, l := range leases {
+		if l.Lane != lane || l.State != state.LeaseHeld {
+			continue
+		}
+		env = append(env, fmt.Sprintf("AW_SEAT_%s=%d", envName(l.Resource), l.Seat))
+		if l.Token != "" {
+			env = append(env, fmt.Sprintf("AW_TOKEN_%s=%s", envName(l.Resource), l.Token))
+		}
+		for _, r := range resources {
+			if r.Name != l.Resource {
+				continue
+			}
+			for _, full := range r.Servers {
+				if _, name, s := serverOf(c, full); s != nil {
+					env = append(env, fmt.Sprintf("AW_PORT_%s=%d", envName(name), port(c, s, l.Seat)))
+				}
+			}
+		}
+	}
+	return env
+}
+
+func urlsOf(c *config.Config, r broker.Resource, l state.Lease) map[string]string {
 	urls := map[string]string{}
 	for _, full := range r.Servers {
-		if _, name, s := serverOf(w.cfg, full); s != nil {
-			urls[name] = fmt.Sprintf("http://%s:%d", hostname(w, m, l.Lane), port(w.cfg, s, l.Seat))
+		if _, name, s := serverOf(c, full); s != nil {
+			urls[name] = fmt.Sprintf("http://%s:%d", hostname(c, l.Lane), port(c, s, l.Seat))
 		}
 	}
 	return urls
@@ -174,19 +206,41 @@ func startServers(ctx context.Context, w *writeContext, m *lanes.Manager, r brok
 	return started, nil
 }
 
-// stopEvicted signals every evicted group first, so that the owner waits only for the grace period.
-func stopEvicted(evicted []broker.Evicted, errOut interface{ Write([]byte) (int, error) }) {
-	for _, e := range evicted {
-		fmt.Fprintf(errOut, "aw: stopping %s, held by lane %s\n", e.Resource, ui.Clean(e.Lane))
-		for _, p := range e.Procs {
-			procs.Signal(p)
+// provision makes a granted seat real: a process resource's servers, or a scripted token. On failure
+// the caller gives the seat back.
+func provision(ctx context.Context, w *writeContext, m *lanes.Manager, b *broker.Broker, r broker.Resource, l *state.Lease) error {
+	if r.Kind == "process" {
+		running, err := state.LeaseProcs(w.store.DB(), l.ID)
+		if err != nil || len(running) > 0 {
+			return err
 		}
-	}
-	for _, e := range evicted {
-		for _, p := range e.Procs {
-			procs.Finish(p, e.Grace)
+		started, err := startServers(ctx, w, m, r, *l)
+		if err != nil {
+			return err
 		}
+		return b.RecordProcs(ctx, l.ID, started)
 	}
+	if l.Token != "" || r.Acquire == "" {
+		return nil
+	}
+	reply, err := extproto.Call(ctx, w.ws.Owner, r.Acquire, "acquire", map[string]any{"resource": r.Name, "lane": l.Lane, "seat": l.Seat})
+	if err != nil {
+		return err
+	}
+	token, _ := reply["token"].(string)
+	if token == "" {
+		return fmt.Errorf("%s acquire returned no token → it must write {\"ok\": true, \"token\": \"…\"}", r.Acquire)
+	}
+	l.Token = token
+	return w.store.Write(ctx, func(tx *sql.Tx) error { return state.UpdateLease(tx, *l) })
+}
+
+// giveBack releases a seat whose provisioning failed.
+func giveBack(b *broker.Broker, lane int, name string, cause error) error {
+	if _, _, err := b.Release(context.Background(), lane, name); err != nil && !errors.Is(err, broker.ErrNotHeld) {
+		return fmt.Errorf("%w; giving the seat back also failed (%v)", cause, err)
+	}
+	return cause
 }
 
 func newServeCmd() *cobra.Command {
@@ -241,7 +295,10 @@ With --wait it waits in the foreground instead. The owner goes to the front of t
 					return err
 				}
 			}
-			stopEvicted(out.Evicted, cmd.ErrOrStderr())
+			for _, e := range out.Evicted {
+				fmt.Fprintf(cmd.ErrOrStderr(), "aw: stopping %s, held by lane %s\n", e.Resource, ui.Clean(e.Lane))
+			}
+			broker.Stop(ctx, out.Evicted)
 			if !out.Granted {
 				msg := fmt.Sprintf("position %d in line for %s → you will be told when a seat is yours; or wait with bin/aw serve %s --wait", out.Positions[r.Name], r.Name, r.Name)
 				if asJSON {
@@ -250,25 +307,12 @@ With --wait it waits in the foreground instead. The owner goes to the front of t
 				return &queuedError{msg}
 			}
 			l := out.Leases[0]
+			if err := provision(ctx, w, m, b, r, &l); err != nil {
+				return giveBack(b, h.Lane, r.Name, err)
+			}
 			res := served{Resource: r.Name, Seat: l.Seat, Token: l.Token}
 			if r.Kind == "process" {
-				res.URLs = urlsOf(w, m, r, l)
-				running, err := state.LeaseProcs(w.store.DB(), l.ID)
-				if err != nil {
-					return err
-				}
-				if len(running) == 0 {
-					started, err := startServers(ctx, w, m, r, l)
-					if err != nil {
-						if _, _, rerr := b.Release(context.Background(), h.Lane, r.Name); rerr != nil && !errors.Is(rerr, broker.ErrNotHeld) {
-							return fmt.Errorf("%w; giving the seat back also failed (%v)", err, rerr)
-						}
-						return err
-					}
-					if err := b.RecordProcs(ctx, l.ID, started); err != nil {
-						return err
-					}
-				}
+				res.URLs = urlsOf(w.cfg, r, l)
 			}
 			stdout := cmd.OutOrStdout()
 			if asJSON {

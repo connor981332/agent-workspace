@@ -1,0 +1,57 @@
+# Servers start in dependency order, each on its seat's port, with the lane's environment, and can be reached; readiness is waited for.
+# req: R21 R36 R74
+# source: C1 ManifestTests.test_defaults_and_fixture, HostLaneTests.test_single_repo_lane_from_init_to_cleanup
+# milestone: M4
+
+workspace shop --init
+exec aw attach one
+cd .worktrees/01
+exec aw serve stack --json
+json stdout .urls.app http://lane-01.localhost:41832
+exec cat $WORK/order
+cmp stdout $WORK/want
+exec awtest-http 127.0.0.1:41832
+stdout 'lane=01'
+exec aw whoami --json
+json stdout .seats[0].resource stack
+json stdout .seats[0].seat 1
+json stdout .seats[0].urls.db http://lane-01.localhost:41835
+exec aw whoami
+stdout 'seat       1 on stack, app http://lane-01.localhost:41832, db http://lane-01.localhost:41835'
+exec aw stop stack
+! exec awtest-http 127.0.0.1:41832
+
+-- want --
+db
+app
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+port_stride = 100
+
+[projects.web]
+directory = "web"
+
+[projects.api]
+directory = "api"
+
+[projects.web.servers.db]
+command = "echo db >> $WORK/order; exec awtest-server -port {port}"
+port = 41735
+ready = "awtest-http 127.0.0.1:{port}"
+
+[projects.web.servers.app]
+command = "echo app >> $WORK/order; exec awtest-server -port {port}"
+port = 41732
+ready = "awtest-http 127.0.0.1:{port}"
+after = ["db"]
+
+[resources.stack]
+kind = "process"
+capacity = 1
+servers = ["web.app", "web.db"]

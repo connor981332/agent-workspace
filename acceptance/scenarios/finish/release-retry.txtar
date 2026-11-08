@@ -1,6 +1,51 @@
-# finish/release-retry: to be written (plan §3.5).
+# A failed release is finished by running aw finish again.
 # req: R78
 # source: C1 test_local_delivery_validation_concurrency_and_release_retry
 # milestone: M4
 
-unwritten
+workspace shop --init
+owner-may-change
+cp $WORK/sim bin/sim
+chmod 755 bin/sim
+exec aw attach one
+cd .worktrees/01
+exec aw serve ios
+env SIM_FAIL=1
+! exec aw finish --summary 'ready to look at'
+stderr 'handoff is written'
+stderr 'run aw finish again'
+exec aw recap --json
+stdout 'ready to look at'
+exec aw queue --json
+json stdout .resources[0].holders[0].lane_name one
+
+env SIM_FAIL=
+exec aw finish --summary 'ready to look at'
+exec aw queue --json
+! stdout 'lane_name'
+
+-- sim --
+#!/bin/sh
+cat >/dev/null
+if [ "$1" = release ] && [ -n "${SIM_FAIL:-}" ]; then echo '{"ok":false,"error":"device busy"}'; exit 0; fi
+if [ "$1" = acquire ]; then echo '{"ok":true,"token":"SIM-1"}'; else echo '{"ok":true}'; fi
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[projects.web]
+directory = "web"
+
+[projects.api]
+directory = "api"
+
+[resources.ios]
+kind = "token"
+capacity = 1
+acquire = "bin/sim"
+release = "bin/sim"

@@ -34,6 +34,7 @@ type Lease struct {
 	LastActivity string `json:"last_activity"`
 	PID          int    `json:"pid,omitempty"`
 	PIDStart     string `json:"pid_start,omitempty"`
+	Warned       string `json:"warned,omitempty"`
 }
 
 // LeaseProc is one process a lease started.
@@ -64,11 +65,11 @@ type Notification struct {
 	Message string
 }
 
-const leaseColumns = `id, resource, lane, generation, lane_name, seat, state, token, granted, claim_by, last_activity, pid, pid_start`
+const leaseColumns = `id, resource, lane, generation, lane_name, seat, state, token, granted, claim_by, last_activity, pid, pid_start, warned`
 
 func scanLease(row interface{ Scan(...any) error }) (Lease, error) {
 	var l Lease
-	err := row.Scan(&l.ID, &l.Resource, &l.Lane, &l.Generation, &l.LaneName, &l.Seat, &l.State, &l.Token, &l.Granted, &l.ClaimBy, &l.LastActivity, &l.PID, &l.PIDStart)
+	err := row.Scan(&l.ID, &l.Resource, &l.Lane, &l.Generation, &l.LaneName, &l.Seat, &l.State, &l.Token, &l.Granted, &l.ClaimBy, &l.LastActivity, &l.PID, &l.PIDStart, &l.Warned)
 	return l, err
 }
 
@@ -110,7 +111,7 @@ func InsertLease(tx *sql.Tx, l Lease) (int, error) {
 
 // UpdateLease saves a lease's state.
 func UpdateLease(tx *sql.Tx, l Lease) error {
-	_, err := tx.Exec(`UPDATE leases SET state = ?, pid = ?, pid_start = ?, last_activity = ? WHERE id = ?`, l.State, l.PID, l.PIDStart, l.LastActivity, l.ID)
+	_, err := tx.Exec(`UPDATE leases SET state = ?, token = ?, pid = ?, pid_start = ?, last_activity = ?, warned = ? WHERE id = ?`, l.State, l.Token, l.PID, l.PIDStart, l.LastActivity, l.Warned, l.ID)
 	return err
 }
 
@@ -194,6 +195,25 @@ func RemoveFromQueue(tx *sql.Tx, lane int, resource string) (bool, error) {
 		return false, err
 	}
 	return true, RemoveRequest(tx, request)
+}
+
+// OldestActivity is the longest a lane's leases have gone without activity: their oldest
+// last_activity, or "" when it holds none.
+func OldestActivity(q Querier, lane int) (string, error) {
+	var oldest sql.NullString
+	err := q.QueryRow(`SELECT min(last_activity) FROM leases WHERE lane = ?`, lane).Scan(&oldest)
+	return oldest.String, err
+}
+
+// TouchLeases is the hook's activity write (speed.md, "The hot path"). It never waits for a lock.
+func TouchLeases(dir string, lane int) error {
+	db, err := sql.Open("sqlite", "file:"+filepath.Join(dir, File)+"?_pragma=busy_timeout(0)")
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	_, err = db.Exec(`UPDATE leases SET last_activity = ? WHERE lane = ?`, now(), lane)
+	return err
 }
 
 // AddNotification queues a message for a lane's next tool call. The owner has none to receive it.

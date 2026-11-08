@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -35,6 +36,9 @@ type Holder struct {
 type Broker struct {
 	Store *state.Store
 	Cfg   *config.Config
+	// ReleaseToken runs a token resource's release script. A failure while a lane gives a seat back
+	// keeps the lease, so that the release can be retried.
+	ReleaseToken func(ctx context.Context, r Resource, l state.Lease) error
 }
 
 // Resource is a resource as the queue sees it, including the implicit "servers".
@@ -47,6 +51,10 @@ type Resource struct {
 	OwnerCounts   bool
 	OwnerPreempts bool
 	EvictGrace    time.Duration
+	MaxHold       time.Duration
+	IdleExpiry    time.Duration
+	Acquire       string
+	Release       string
 }
 
 // Resources are every resource, in the fixed order requests are evaluated in.
@@ -62,7 +70,8 @@ func (b *Broker) Resources() []Resource {
 			capacity = len(r.Tokens)
 		}
 		out = append(out, Resource{Name: name, Kind: r.Kind, Capacity: capacity, Servers: r.Servers, Tokens: r.Tokens,
-			OwnerCounts: r.OwnerCounts, OwnerPreempts: r.OwnerPreempts, EvictGrace: time.Duration(r.EvictGrace)})
+			OwnerCounts: r.OwnerCounts, OwnerPreempts: r.OwnerPreempts, EvictGrace: time.Duration(r.EvictGrace),
+			MaxHold: time.Duration(r.MaxHold), IdleExpiry: time.Duration(r.IdleExpiry), Acquire: r.Acquire, Release: r.Release})
 	}
 	var implicit []string
 	for pname, p := range b.Cfg.Projects {
@@ -136,6 +145,7 @@ type Evicted struct {
 	Lane     string
 	Grace    time.Duration
 	Procs    []procs.Proc
+	Token    func(context.Context) // releases the seat's token, if it has a script to
 }
 
 type snapshot struct {
@@ -297,9 +307,11 @@ func (b *Broker) Request(ctx context.Context, h Holder, names []string) (*Outcom
 	err := b.Store.Write(ctx, func(tx *sql.Tx) error {
 		*out = Outcome{Positions: map[string]int{}}
 		now := time.Now()
-		if err := b.expire(tx, snap, now); err != nil {
+		limited, err := b.expire(tx, snap, now)
+		if err != nil {
 			return err
 		}
+		out.Evicted = limited
 		leases, err := state.Leases(tx)
 		if err != nil {
 			return err
@@ -434,7 +446,7 @@ func (b *Broker) evict(tx *sql.Tx, r Resource, l state.Lease, priority int, mess
 	if err := state.AddNotification(tx, l.Lane, "evicted", message); err != nil {
 		return Evicted{}, err
 	}
-	return Evicted{Resource: r.Name, Lane: l.LaneName, Grace: r.EvictGrace, Procs: toProcs(ps)}, nil
+	return Evicted{Resource: r.Name, Lane: l.LaneName, Grace: r.EvictGrace, Procs: toProcs(ps), Token: b.tokenRelease(r, l)}, nil
 }
 
 func toProcs(ps []state.LeaseProc) []procs.Proc {
@@ -445,32 +457,123 @@ func toProcs(ps []state.LeaseProc) []procs.Proc {
 	return out
 }
 
-// expire passes on reservations whose claim window has closed. Only the seat is lost.
-func (b *Broker) expire(tx *sql.Tx, snap snapshot, now time.Time) error {
+// lastActive is the later of a lease's recorded activity and its servers' output (resources.md).
+func lastActive(l state.Lease, ps []state.LeaseProc) time.Time {
+	last := parse(l.LastActivity)
+	for _, p := range ps {
+		if info, err := os.Stat(p.Log); err == nil && info.ModTime().After(last) {
+			last = info.ModTime()
+		}
+	}
+	return last
+}
+
+// expire applies the time limits: an unclaimed reservation passes on, a holder over its maximum
+// hold while others wait is warned and then sent to the tail of the queue, and an idle lease is let
+// go. It returns the holders displaced, whose processes the caller stops outside the transaction.
+func (b *Broker) expire(tx *sql.Tx, snap snapshot, now time.Time) ([]Evicted, error) {
 	leases, err := state.Leases(tx)
 	if err != nil {
-		return err
+		return nil, err
 	}
+	queue, err := state.QueueEntries(tx)
+	if err != nil {
+		return nil, err
+	}
+	var out []Evicted
 	changed := false
 	for _, l := range leases {
-		if l.State == state.LeaseReserved && l.ClaimBy != "" && now.After(parse(l.ClaimBy)) {
+		r, known := snap.byName[l.Resource]
+		if !known {
+			continue
+		}
+		if l.State == state.LeaseReserved {
+			if l.ClaimBy != "" && now.After(parse(l.ClaimBy)) {
+				if err := state.DeleteLease(tx, l.ID); err != nil {
+					return nil, err
+				}
+				if err := state.AddNotification(tx, l.Lane, "expired", fmt.Sprintf("The seat reserved on %s was not taken up in time, and has passed on → run bin/aw serve %s to queue again", l.Resource, l.Resource)); err != nil {
+					return nil, err
+				}
+				changed = true
+			}
+			continue
+		}
+		if l.Lane == 0 {
+			continue // the owner's seat has no limits: the owner always wins
+		}
+		ps, err := state.LeaseProcs(tx, l.ID)
+		if err != nil {
+			return nil, err
+		}
+		if r.IdleExpiry > 0 && now.Sub(lastActive(l, ps)) > r.IdleExpiry {
 			if err := state.DeleteLease(tx, l.ID); err != nil {
-				return err
+				return nil, err
 			}
-			if err := state.AddNotification(tx, l.Lane, "expired", fmt.Sprintf("The seat reserved on %s was not taken up in time, and has passed on → run bin/aw serve %s to queue again", l.Resource, l.Resource)); err != nil {
-				return err
+			if err := state.AddNotification(tx, l.Lane, "expired", fmt.Sprintf("The seat on %s was idle for %s, so it was released and its servers stopped → run bin/aw serve %s to take a seat again", l.Resource, r.IdleExpiry, l.Resource)); err != nil {
+				return nil, err
 			}
+			out = append(out, Evicted{Resource: r.Name, Lane: l.LaneName, Grace: r.EvictGrace, Procs: toProcs(ps), Token: b.tokenRelease(r, l)})
+			changed = true
+			continue
+		}
+		waiting := slices.ContainsFunc(queue, func(e state.QueueEntry) bool { return e.Resource == l.Resource && e.Lane != l.Lane })
+		if r.MaxHold <= 0 || !waiting || now.Sub(parse(l.Granted)) <= r.MaxHold {
+			continue
+		}
+		if l.Warned == "" {
+			l.Warned = stamp(now)
+			if err := state.UpdateLease(tx, l); err != nil {
+				return nil, err
+			}
+			if err := state.AddNotification(tx, l.Lane, "expiring", fmt.Sprintf("Others are waiting for %s and this lane has held it for over %s: the seat will be taken in %s → finish up, or run bin/aw stop %s", l.Resource, r.MaxHold, r.EvictGrace, l.Resource)); err != nil {
+				return nil, err
+			}
+			continue
+		}
+		if now.Sub(parse(l.Warned)) > r.EvictGrace {
+			ev, err := b.evict(tx, r, l, state.QueueNormal, fmt.Sprintf("This lane held %s for over %s while others waited, so its seat was given up and its servers are being stopped. It is back in line, at the end. Files, branches and data are untouched.", l.Resource, r.MaxHold))
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, ev)
 			changed = true
 		}
 	}
 	if !changed {
-		return nil
+		return out, nil
 	}
 	granted, err := b.advance(tx, snap, now)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return notifyGrants(tx, granted, -1)
+	return out, notifyGrants(tx, granted, -1)
+}
+
+// tokenRelease returns the best-effort release of a seat that has already been taken away.
+func (b *Broker) tokenRelease(r Resource, l state.Lease) func(context.Context) {
+	if r.Release == "" || l.Token == "" || b.ReleaseToken == nil {
+		return nil
+	}
+	return func(ctx context.Context) { _ = b.ReleaseToken(ctx, r, l) }
+}
+
+// Stop stops what a displaced lease left running: every group is signalled first, so that nobody
+// waits on one holder's grace period before the next is told.
+func Stop(ctx context.Context, evicted []Evicted) {
+	for _, e := range evicted {
+		for _, p := range e.Procs {
+			procs.Signal(p)
+		}
+	}
+	for _, e := range evicted {
+		for _, p := range e.Procs {
+			procs.Finish(p, e.Grace)
+		}
+		if e.Token != nil {
+			e.Token(ctx)
+		}
+	}
 }
 
 // RecordProcs stores a lease's started processes.
@@ -486,6 +589,12 @@ var ErrNotHeld = errors.New("not held")
 func (b *Broker) Release(ctx context.Context, lane int, name string) ([]procs.Proc, time.Duration, error) {
 	snap := b.snapshot()
 	r := snap.byName[name]
+	// A token is given back first: if its script fails, the lease stays, and this can be retried.
+	if held, err := state.LeaseOf(b.Store.DB(), lane, name); err == nil && r.Release != "" && held.Token != "" && b.ReleaseToken != nil {
+		if err := b.ReleaseToken(ctx, r, held); err != nil {
+			return nil, 0, err
+		}
+	}
 	var stop []procs.Proc
 	err := b.Store.Write(ctx, func(tx *sql.Tx) error {
 		stop = nil
@@ -577,8 +686,8 @@ func (b *Broker) Recover(ctx context.Context) error {
 	}
 	var gone []state.Lease
 	var orphans []procs.Proc
-	expired := false
-	now := time.Now()
+	limits := false
+	snap := b.snapshot()
 	for _, l := range leases {
 		ps, err := state.LeaseProcs(b.Store.DB(), l.ID)
 		if err != nil {
@@ -588,19 +697,22 @@ func (b *Broker) Recover(ctx context.Context) error {
 			gone = append(gone, l)
 			orphans = append(orphans, toProcs(ps)...)
 		}
-		expired = expired || (l.State == state.LeaseReserved && now.After(parse(l.ClaimBy)))
+		r := snap.byName[l.Resource]
+		limits = limits || l.State == state.LeaseReserved || r.MaxHold > 0 || r.IdleExpiry > 0
 	}
-	if len(gone) == 0 && !expired {
+	if len(gone) == 0 && !limits {
 		return nil
 	}
-	snap := b.snapshot()
+	now := time.Now()
+	var displaced []Evicted
 	err = b.Store.Write(ctx, func(tx *sql.Tx) error {
 		for _, l := range gone {
 			if err := state.DeleteLease(tx, l.ID); err != nil {
 				return err
 			}
 		}
-		if err := b.expire(tx, snap, now); err != nil {
+		var err error
+		if displaced, err = b.expire(tx, snap, now); err != nil {
 			return err
 		}
 		granted, err := b.advance(tx, snap, now)
@@ -615,5 +727,14 @@ func (b *Broker) Recover(ctx context.Context) error {
 	for _, p := range orphans {
 		procs.Stop(p, 2*time.Second)
 	}
+	for _, l := range gone {
+		if release := b.tokenRelease(snap.byName[l.Resource], l); release != nil {
+			release(ctx)
+		}
+	}
+	Stop(ctx, displaced)
 	return nil
 }
+
+// Dead reports whether a lease's holder has gone, for read-only views.
+func (b *Broker) Dead(l state.Lease, ps []state.LeaseProc) bool { return dead(l, ps) }
