@@ -84,8 +84,8 @@ type Report struct {
 func main() {
 	awBin := flag.String("aw", "", "the aw binary (default: build it from the repository)")
 	milestone := flag.String("milestone", "", "measure every operation from this milestone and earlier (default: acceptance/requirements.toml's current); operations of the milestone in progress run when the bench can run them")
-	mode := flag.String("mode", "absolute", "absolute (fail over budget) or relative (fail on a 25 % regression over -baseline)")
-	baseline := flag.String("baseline", "", "a previous run's JSON, for relative mode")
+	mode := flag.String("mode", "absolute", "absolute (fail when p99 is over budget) or relative (fail when p50 is 25 % over -baseline-aw's)")
+	baselineAW := flag.String("baseline-aw", "", "a baseline aw binary (master's), measured interleaved with -aw on this machine")
 	out := flag.String("out", "", "write the JSON report here")
 	scale := flag.Float64("scale", 1, "multiply every operation's iterations, e.g. 0.1 for a quick run")
 	flag.Parse()
@@ -101,10 +101,15 @@ func main() {
 	fx, err := newFixture(tmp, *awBin)
 	check(err)
 
-	var base map[string]*Result
-	if *baseline != "" {
-		base, err = loadBaseline(*baseline)
+	var baseFx *fixture
+	if *baselineAW != "" {
+		dir := filepath.Join(tmp, "baseline")
+		check(os.MkdirAll(dir, 0o755))
+		baseFx, err = newFixture(dir, *baselineAW)
 		check(err)
+	}
+	if *mode == "relative" && baseFx == nil {
+		fatalf("relative mode needs -baseline-aw")
 	}
 
 	rep := &Report{GOOS: runtime.GOOS, GOARCH: runtime.GOARCH, Host: host(), Mode: *mode, Pass: true}
@@ -118,28 +123,22 @@ func main() {
 		case m > upTo && (m != inProgress || !ok):
 			continue
 		}
+		var baseRun runner
+		if baseFx != nil {
+			baseRun = baseFx.ops[o.Name] // nil when the baseline predates the operation
+		}
 		n := max(10, int(float64(o.Iterations)**scale))
-		r := measure(o, n, run, fx)
-		limit, note := limitFor(o, r, *mode, base)
-		r.Limit, r.Note = limit, note
-		r.Pass = limit == 0 || r.P99 <= limit
+		r, b := measure(o, n, run, baseRun)
+		judge(o, r, b, *mode)
 		if !r.Pass {
 			// One noisy run on a shared runner cannot fail CI on its own (§5.2).
-			again := measure(o, n, run, fx)
-			again.Limit, again.Note, again.Runs = limit, note, 2
-			again.Pass = again.P99 <= limit
-			if !again.Pass {
-				again.Note = strings.TrimSpace(fmt.Sprintf("%s; first run p99 %.2f ms", note, r.P99))
+			r2, b2 := measure(o, n, run, baseRun)
+			judge(o, r2, b2, *mode)
+			r2.Runs = 2
+			if !r2.Pass {
+				r2.Note += fmt.Sprintf("; failed twice (first run p50 %.2f, p99 %.2f ms)", r.P50, r.P99)
 			}
-			r = again
-		}
-		if b, ok := base[o.Name]; ok && *mode == "absolute" && b.P99 > 0 {
-			change := (r.P99/b.P99 - 1) * 100
-			flag := ""
-			if change > 25 {
-				flag = "; flagged: more than 25 % over master"
-			}
-			r.Note = strings.TrimPrefix(fmt.Sprintf("%s; p99 %+.0f %% vs master's %.2f ms%s", r.Note, change, b.P99, flag), "; ")
+			r = r2
 		}
 		if !r.Pass {
 			rep.Pass = false
@@ -161,49 +160,65 @@ func main() {
 	}
 }
 
-func limitFor(o op, r *Result, mode string, base map[string]*Result) (float64, string) {
+// judge decides one result. Absolute: p99 within the budget, with growth of more than 25 % over
+// the baseline flagged. Relative: p50 within 25 % of the baseline's, measured in the same run; the
+// median is used because the tail of a shared virtual machine is mostly noise from its neighbours.
+func judge(o op, r, b *Result, mode string) {
 	switch mode {
 	case "absolute":
-		return float64(o.BudgetMS), ""
-	case "relative":
-		b, ok := base[o.Name]
-		if !ok || b.P99 == 0 {
-			return 0, "no baseline from master yet; reported only"
+		r.Limit = float64(o.BudgetMS)
+		r.Pass = r.P99 <= r.Limit
+		if b != nil && b.P99 > 0 {
+			change := (r.P99/b.P99 - 1) * 100
+			r.Note = fmt.Sprintf("p99 %+.0f %% vs master's %.2f ms", change, b.P99)
+			if change > 25 {
+				r.Note += "; flagged: more than 25 % over master"
+			}
 		}
-		return b.P99 * 1.25, fmt.Sprintf("master's p99 %.2f ms + 25 %%", b.P99)
+	case "relative":
+		if b == nil {
+			r.Pass, r.Note = true, "master has no such operation yet; reported only"
+			return
+		}
+		r.Limit = b.P50 * 1.25
+		r.Pass = r.P50 <= r.Limit
+		r.Note = fmt.Sprintf("p50 vs master's %.2f ms + 25 %%", b.P50)
+	default:
+		fatalf("unknown mode %q", mode)
 	}
-	fatalf("unknown mode %q", mode)
-	return 0, ""
 }
 
-func loadBaseline(path string) (map[string]*Result, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	var rep Report
-	if err := json.Unmarshal(data, &rep); err != nil {
-		return nil, fmt.Errorf("%s: %w", path, err)
-	}
-	out := map[string]*Result{}
-	for _, r := range rep.Results {
-		out[r.Name] = r
-	}
-	return out, nil
-}
-
-func measure(o op, n int, run runner, fx *fixture) *Result {
+// measure runs an operation n times, after a warm-up. With a baseline, the two alternate, so that
+// drift on a shared runner affects both alike.
+func measure(o op, n int, run, base runner) (*Result, *Result) {
 	for range min(50, n/5) {
-		run() // warm-up
-	}
-	samples := make([]float64, 0, n)
-	for range n {
-		start := time.Now()
 		run()
-		samples = append(samples, float64(time.Since(start).Microseconds())/1000)
+		if base != nil {
+			base()
+		}
 	}
+	var mine, theirs []float64
+	timeIt := func(f runner, into *[]float64) {
+		start := time.Now()
+		f()
+		*into = append(*into, float64(time.Since(start).Microseconds())/1000)
+	}
+	for range n {
+		timeIt(run, &mine)
+		if base != nil {
+			timeIt(base, &theirs)
+		}
+	}
+	r := summarize(o, mine)
+	if base == nil {
+		return r, nil
+	}
+	return r, summarize(o, theirs)
+}
+
+func summarize(o op, samples []float64) *Result {
 	slices.Sort(samples)
-	return &Result{Name: o.Name, N: n, P50: percentile(samples, 50), P95: percentile(samples, 95),
+	return &Result{Name: o.Name, N: len(samples), P50: percentile(samples, 50), P95: percentile(samples, 95),
 		P99: percentile(samples, 99), Max: samples[len(samples)-1], BudgetMS: o.BudgetMS, Runs: 1}
 }
 

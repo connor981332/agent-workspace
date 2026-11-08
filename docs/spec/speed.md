@@ -70,8 +70,8 @@ recognizable.
 - A benchmark suite runs each budgeted operation against a fixture workspace. CI fails when a
   budget is exceeded at p99 on the Linux reference runner, GitHub-hosted `ubuntu-24.04` (amd64).
   The macOS reference runner, `macos-15` (arm64), is a virtual machine whose process start alone
-  takes several milliseconds, so there CI fails on a regression against the last run on the main
-  branch instead of on the budget itself.
+  takes several milliseconds, so there CI fails on a regression against the main branch instead of
+  on the budget itself: the main branch's binary is measured in the same run, interleaved.
 - A maintainer measures every budget twice per milestone on a Linux laptop and on an Apple Silicon
   laptop. Those measurements are the budgets' real test, since the budgets are defined on a
   developer laptop.

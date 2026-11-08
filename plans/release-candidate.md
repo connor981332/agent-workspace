@@ -949,7 +949,9 @@ summary for the CI job page.
 - **Reference runners:** GitHub-hosted `ubuntu-24.04` (amd64) and `macos-15` (arm64). See S5. The
   budgets are enforced absolutely on `ubuntu-24.04` only. `macos-15` is a virtual machine whose
   process start alone costs 8 ms p99 (docs/dev/spikes.md), so there an operation fails when its p99
-  grows more than 25 % over master's last run, with the same rerun rule.
+  grows more than 25 % over master's, with the same rerun rule. (Implemented in M1 as an A/B run:
+  the job builds master's binary and measures it interleaved with the PR's on the same machine,
+  comparing medians, because separate macOS runs differed by more than 2× at p99.)
 - A `bench` job runs on every pull request and on every push to master, from M1 on (M0 runs the
   spike prototype only).
 - An operation fails when its p99 exceeds its budget. A failing operation is measured once more in
