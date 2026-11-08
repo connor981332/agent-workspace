@@ -557,6 +557,24 @@ const (
 	poolSize  = 2
 )
 
+// slowSample is how long a lane operation may take before the bench says where the time went, so a
+// CI failure can be told apart from a slow runner.
+const slowSample = 100 * time.Millisecond
+
+func reportSlow(op string, d time.Duration, stderr string) {
+	if d < slowSample {
+		return
+	}
+	load, _ := os.ReadFile("/proc/loadavg")
+	var lines []string
+	for _, l := range strings.Split(stderr, "\n") {
+		if strings.Contains(l, "timings:") {
+			lines = append(lines, strings.TrimPrefix(l, "aw: timings: "))
+		}
+	}
+	fmt.Fprintf(os.Stderr, "slow %s %.1fms load=%s %s\n", op, float64(d.Microseconds())/1000, strings.TrimSpace(string(load)), strings.Join(lines, " | "))
+}
+
 // addLaneOps builds the lanes and adds the dashboard, attach-from-pool and new-until-harness
 // operations. Each lane operation's reset returns the claimed lane to the pool with aw sweep.
 func (fx *fixture) addLaneOps(tmp, launcher string) error {
@@ -690,14 +708,22 @@ func (fx *fixture) addLaneOps(tmp, launcher string) error {
 	}
 	fx.ops["attach-from-pool"] = &benchOp{run: func() time.Duration {
 		n++
+		c := exec.Command(filepath.Join(fx.owner, "bin", "aw"), "attach", fmt.Sprintf("bench attach %d", n))
+		c.Dir, c.Env = fx.owner, append(slices.Clone(env), "AW_DEBUG=1")
+		var errOut bytes.Buffer
+		c.Stderr = &errOut
 		start := time.Now()
-		fx.aw(env, nil, "attach", fmt.Sprintf("bench attach %d", n))
-		return time.Since(start)
+		if err := c.Run(); err != nil {
+			fatalf("aw attach: %v\n%s", err, errOut.String())
+		}
+		d := time.Since(start)
+		reportSlow("attach-from-pool", d, errOut.String())
+		return d
 	}, reset: refill}
 	fx.ops["new-until-harness"] = &benchOp{run: func() time.Duration {
 		n++
 		c := exec.Command(launcher, "new", fmt.Sprintf("bench new %d", n), "--harness", "benchharness")
-		c.Dir, c.Env = fx.owner, newEnv
+		c.Dir, c.Env = fx.owner, append(slices.Clone(newEnv), "AW_DEBUG=1")
 		var errOut bytes.Buffer
 		c.Stderr = &errOut
 		start := time.Now()
@@ -719,12 +745,14 @@ func (fx *fixture) addLaneOps(tmp, launcher string) error {
 			if err := <-done; err != nil {
 				fatalf("aw new: %v\n%s", err, errOut.String())
 			}
+			reportSlow("new-until-harness", d, errOut.String())
 			return d
 		case err := <-done:
 			// The harness writes and exits at once, so both may be ready together.
 			select {
 			case d := <-started:
 				if err == nil {
+					reportSlow("new-until-harness", d, errOut.String())
 					return d
 				}
 			case <-time.After(10 * time.Second):
