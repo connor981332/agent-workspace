@@ -33,6 +33,15 @@ var (
 // forbiddenOnHotPath may not be imported by a hot-path package, directly or transitively.
 var forbiddenOnHotPath = []string{"os/exec", "net", "net/http"}
 
+// hotPathAllowlist are third-party packages the hot path may depend on although they import a
+// forbidden package (§4.3, rule 3). The walk does not descend into them. Each entry is reviewed:
+//
+//   - modernc.org/libc: the C library under modernc.org/sqlite. It imports os/exec for system() and
+//     popen(), which SQLite never calls.
+//   - github.com/google/uuid: used by modernc.org/libc. It imports net for node IDs from network
+//     interfaces, which the library's version-4 UUIDs do not use.
+var hotPathAllowlist = []string{"modernc.org/libc", "github.com/google/uuid"}
+
 // entryPoint is cmd/aw. It links the whole command tree (cobra's flag library imports net, and the
 // CLI will reach os/exec through app), so rule 3 holds for its own imports only. Its dispatch keeps
 // the command tree off the hot path at run time (rule 4).
@@ -42,11 +51,12 @@ type pkg struct {
 	ImportPath string
 	Imports    []string
 	Deps       []string
+	Standard   bool
 }
 
 func listPackages(t *testing.T) []pkg {
 	t.Helper()
-	cmd := exec.Command("go", "list", "-json", module+"/...")
+	cmd := exec.Command("go", "list", "-deps", "-json", module+"/...")
 	out, err := cmd.Output()
 	if err != nil {
 		var exitErr *exec.ExitError
@@ -90,8 +100,19 @@ func under(p string, roots []string) bool {
 
 func isHotPath(p string) bool { return under(p, hotPath) && !under(p, hotPathExcluded) }
 
+// modulePackages are the module's own packages from the full dependency list.
+func modulePackages(all []pkg) []pkg {
+	var out []pkg
+	for _, p := range all {
+		if rel(p.ImportPath) != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
 func TestLeavesImportOnlyLeaves(t *testing.T) {
-	for _, p := range listPackages(t) {
+	for _, p := range modulePackages(listPackages(t)) {
 		from := rel(p.ImportPath)
 		if !under(from, leaves) {
 			continue
@@ -105,7 +126,7 @@ func TestLeavesImportOnlyLeaves(t *testing.T) {
 }
 
 func TestComponentsDoNotImportAppOrCLI(t *testing.T) {
-	for _, p := range listPackages(t) {
+	for _, p := range modulePackages(listPackages(t)) {
 		from := rel(p.ImportPath)
 		if from == entryPoint || under(from, []string{"internal/cli"}) {
 			continue
@@ -120,7 +141,12 @@ func TestComponentsDoNotImportAppOrCLI(t *testing.T) {
 }
 
 func TestHotPathHasNoSubprocessOrNetwork(t *testing.T) {
-	for _, p := range listPackages(t) {
+	all := listPackages(t)
+	byPath := map[string]pkg{}
+	for _, p := range all {
+		byPath[p.ImportPath] = p
+	}
+	for _, p := range modulePackages(all) {
 		from := rel(p.ImportPath)
 		switch {
 		case from == entryPoint:
@@ -130,11 +156,49 @@ func TestHotPathHasNoSubprocessOrNetwork(t *testing.T) {
 				}
 			}
 		case isHotPath(from):
-			for _, bad := range forbiddenOnHotPath {
-				if slices.Contains(p.Deps, bad) {
-					t.Errorf("hot-path package %s depends on %s (directly or transitively)", from, bad)
-				}
+			for _, chain := range forbiddenChains(p.ImportPath, byPath) {
+				t.Errorf("hot-path package %s reaches %s", from, strings.Join(chain, " → "))
 			}
+		}
+	}
+}
+
+// forbiddenChains walks the imports from start, not descending into allowlisted packages, and
+// returns one import chain to each forbidden package it reaches.
+func forbiddenChains(start string, byPath map[string]pkg) [][]string {
+	var chains [][]string
+	seen := map[string]bool{}
+	var walk func(path string, chain []string)
+	walk = func(path string, chain []string) {
+		if seen[path] {
+			return
+		}
+		seen[path] = true
+		chain = append(chain, path)
+		if slices.Contains(forbiddenOnHotPath, path) {
+			chains = append(chains, slices.Clone(chain))
+			return
+		}
+		if slices.Contains(hotPathAllowlist, path) {
+			return
+		}
+		for _, imp := range byPath[path].Imports {
+			walk(imp, chain)
+		}
+	}
+	walk(start, nil)
+	return chains
+}
+
+func TestAllowlistIsStillNeeded(t *testing.T) {
+	all := listPackages(t)
+	used := map[string]bool{}
+	for _, p := range all {
+		used[p.ImportPath] = true
+	}
+	for _, a := range hotPathAllowlist {
+		if !used[a] {
+			t.Errorf("%s is allowlisted for the hot path but nothing depends on it any more: remove it from hotPathAllowlist", a)
 		}
 	}
 }

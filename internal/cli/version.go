@@ -6,18 +6,14 @@ import (
 	"runtime/debug"
 
 	"github.com/spf13/cobra"
+
+	"github.com/connor981332/agent-workspace/internal/config"
+	"github.com/connor981332/agent-workspace/internal/state"
 )
 
 // version is the framework version. Release builds set it with
 // -ldflags "-X github.com/connor981332/agent-workspace/internal/cli.version=v1.2.3".
 var version string
-
-// The configuration and state schema versions. They are 0 until the config and state packages
-// define their schemas (M1), and those packages will own them from then on.
-const (
-	configSchema = 0
-	stateSchema  = 0
-)
 
 // versionInfo is the --json output of aw version. Its field names are part of the interface.
 type versionInfo struct {
@@ -27,7 +23,7 @@ type versionInfo struct {
 }
 
 func currentVersion() versionInfo {
-	return versionInfo{Version: frameworkVersion(), ConfigSchema: configSchema, StateSchema: stateSchema}
+	return versionInfo{Version: frameworkVersion(), ConfigSchema: config.SchemaVersion, StateSchema: state.SchemaVersion}
 }
 
 // frameworkVersion is the version set at link time, else the module version recorded by
