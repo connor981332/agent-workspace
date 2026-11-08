@@ -92,6 +92,54 @@ var migrations = []string{
 
 	// 6: when a handoff was picked up by aw open. It stays on record, but no longer describes the lane.
 	`ALTER TABLE handoffs ADD COLUMN archived TEXT NOT NULL DEFAULT ''`,
+
+	// 7: resources (M4): seats held or reserved, the processes behind them, the queue, and
+	// notifications waiting for an agent's next tool call. Lane 0 is the owner.
+	`CREATE TABLE leases (
+		id            INTEGER PRIMARY KEY,
+		resource      TEXT NOT NULL,
+		lane          INTEGER NOT NULL,
+		generation    INTEGER NOT NULL DEFAULT 0,
+		lane_name     TEXT NOT NULL DEFAULT '',
+		seat          INTEGER NOT NULL,
+		state         TEXT NOT NULL,
+		token         TEXT NOT NULL DEFAULT '',
+		granted       TEXT NOT NULL,
+		claim_by      TEXT NOT NULL DEFAULT '',
+		last_activity TEXT NOT NULL,
+		pid           INTEGER NOT NULL DEFAULT 0,
+		pid_start     TEXT NOT NULL DEFAULT '',
+		UNIQUE (resource, lane),
+		UNIQUE (resource, seat)
+	) STRICT;
+	CREATE TABLE lease_procs (
+		lease     INTEGER NOT NULL REFERENCES leases (id) ON DELETE CASCADE,
+		server    TEXT NOT NULL,
+		pid       INTEGER NOT NULL,
+		pid_start TEXT NOT NULL,
+		log       TEXT NOT NULL,
+		PRIMARY KEY (lease, server)
+	) STRICT;
+	CREATE TABLE queue (
+		id         INTEGER PRIMARY KEY,
+		request    TEXT NOT NULL,
+		resource   TEXT NOT NULL,
+		lane       INTEGER NOT NULL,
+		generation INTEGER NOT NULL DEFAULT 0,
+		lane_name  TEXT NOT NULL DEFAULT '',
+		priority   INTEGER NOT NULL,
+		enqueued   TEXT NOT NULL,
+		UNIQUE (resource, lane)
+	) STRICT;
+	CREATE TABLE notifications (
+		id        INTEGER PRIMARY KEY,
+		lane      INTEGER NOT NULL,
+		kind      TEXT NOT NULL,
+		message   TEXT NOT NULL,
+		created   TEXT NOT NULL,
+		delivered TEXT NOT NULL DEFAULT ''
+	) STRICT;
+	CREATE INDEX notifications_pending ON notifications (lane, delivered)`,
 }
 
 // BackupPath is where the database is copied before migrating from schema version v.

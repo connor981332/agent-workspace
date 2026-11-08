@@ -90,7 +90,9 @@ Speed enforcement changed at the M3 exit, by the spec owner (§5.2): CI checks r
 
 **M3 complete (v0.0.4).** v0.0.3 is a tag with no release: the new release check left a file in the checkout, so GoReleaser refused to run, and nothing was published.
 
-**Next step:** M4.
+**In progress:** M4 (`m4/broker`): state schema 7, seats, the FIFO queue with reservations (S1, S2), owner preemption, recovery of dead holders, `internal/procs`, `aw serve`, `aw stop`, `aw queue`, notifications through the next tool call, and seats released by `aw finish`, `aw park` and `aw discard`. Known limit: Grok and OpenCode do not yet show a notification, because their way of adding context to an allowed call is unrecorded; the message stays pending.
+
+**Next step:** rest of M4: maximum hold and idle expiry, token scripts, team commands, seat URLs, the owner's port check scenario, port collisions (S15), benchmarks.
 
 **Pending manual checks:** the hot-path and budget benchmarks on an Apple Silicon laptop (T3, M1, M2;
 docs/dev/benchmarks.md).

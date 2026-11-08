@@ -1,0 +1,56 @@
+# A holder that has died is noticed by the next command that changes state: its seat is freed and
+# given to the next lane, with no daemon.
+# req: R42 R80
+# source: C1 ProcessIdentityTests
+# milestone: M4
+
+workspace shop --init
+exec aw attach one
+exec aw attach two
+cd .worktrees/01
+exec aw serve stack
+cd ../02
+! exec aw serve stack
+exec sh $WORK/kill.sh
+exec aw queue --json
+json stdout .resources[0].holders[0].lane_name one
+exec aw attach three
+exec aw queue --json
+json stdout .resources[0].holders[0].lane_name two
+json stdout .resources[0].holders[0].state reserved
+
+-- kill.sh --
+for pid in $(cat "$WORK/pids"); do kill -9 "$pid"; done
+sleep 0.1
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+port_stride = 100
+
+[projects.web]
+directory = "web"
+
+[projects.web.servers.app]
+command = "echo $$ >> $WORK/pids; exec sleep 60 # {port}"
+port = 3000
+
+[projects.web.servers.db]
+command = "echo $$ >> $WORK/pids; exec sleep 61 # {port}"
+port = 5000
+
+[projects.api]
+directory = "api"
+
+[resources.stack]
+kind = "process"
+capacity = 1
+servers = ["web.app", "web.db"]
+owner_counts = true
+owner_preempts = true
+evict_grace = "2s"
+

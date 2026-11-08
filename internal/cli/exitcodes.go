@@ -12,4 +12,7 @@ const (
 	// ExitUsage means the command line itself was wrong: an unknown command, an unknown flag, or a
 	// missing or extra argument. Nothing was done.
 	ExitUsage = 2
+
+	// ExitQueued: the request joined a queue, and the caller does not have the seat yet.
+	ExitQueued = 3
 )

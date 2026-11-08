@@ -1,0 +1,40 @@
+# A server that will not start gives its seat back, stops what did start, and points at its log.
+# req: R42
+# source: C1 test_start_failure_and_stale_pid_are_protected
+# milestone: M4
+
+workspace shop --init
+exec aw attach one
+cd .worktrees/01
+! exec aw serve stack
+stderr 'did not start'
+stderr 'its log is'
+exec aw queue --json
+! stdout 'lane_name'
+exec sh -c 'for p in $(cat "$WORK/pids"); do if kill -0 "$p" 2>/dev/null; then exit 1; fi; done'
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[projects.web]
+directory = "web"
+
+[projects.web.servers.db]
+command = "echo $$ >> $WORK/pids; exec sleep 61 # {port}"
+port = 5000
+
+[projects.web.servers.app]
+command = "echo failing; exit 3"
+port = 3000
+after = ["db"]
+
+[resources.stack]
+kind = "process"
+capacity = 1
+servers = ["web.app", "web.db"]

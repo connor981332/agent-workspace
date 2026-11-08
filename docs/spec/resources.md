@@ -63,7 +63,9 @@ needs = ["web-stack"]
 
 ## Seats and ports
 
-Seat 0 of every process resource is the owner's. Agent seats are numbered from 1. A server in seat
+Capacity counts concurrent holders, including the owner when `owner_counts = true`. The seat number
+only chooses ports: the owner always uses seat 0, the base ports, and agents use seats 1 to
+`capacity`. So the ports for seats 0 to `capacity` are the ones containers publish. A server in seat
 `k` listens on `port + port_stride * k` (`port_stride` defaults to 100), and its URL uses the lane's
 hostname, so browser cookies never collide across lanes even when ports are reused.
 
@@ -78,6 +80,11 @@ advance and is published by every container when it is created (requirement R50)
   evaluated in a fixed resource order, so two multi-resource requests cannot deadlock each other.
 - A waiting agent sees its position (`aw serve rails` reports "position 2 in line for rails"). It can
   wait in the foreground (`--wait`) or return and be notified.
+- A seat freed for a lane that is not waiting in the foreground is a reservation with a two-minute
+  claim window. The agent is told on its next tool call and runs `aw serve` to start its servers, so
+  the command that freed the seat never starts another lane's servers. An unclaimed reservation
+  passes to the next lane. A `--wait` caller takes up its seat itself. A request that joins the queue
+  exits with status 3.
 - Notifications are attached to the agent's next tool call: granted, evicted, expiring soon, expired.
   The optional supervisor can also send desktop notifications to the human.
 
