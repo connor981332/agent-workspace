@@ -33,7 +33,7 @@ runtime install), shell (C2's own decisions say queues, leases and merge proof w
 
 ## The tool is never the bottleneck
 
-Latency budgets are requirements, enforced in CI ([speed.md](speed.md)). This shapes other decisions:
+Latency budgets are requirements, enforced on a developer laptop before each release, with regressions caught in CI ([speed.md](speed.md)). This shapes other decisions:
 no daemon on the hot path, a compiled configuration cache, a launcher made of shell builtins, the
 warm pool and lazy lane claiming.
 

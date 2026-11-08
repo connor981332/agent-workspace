@@ -10,8 +10,11 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/connor981332/agent-workspace/internal/config"
 	"github.com/connor981332/agent-workspace/internal/lanes"
+	"github.com/connor981332/agent-workspace/internal/mux"
 	"github.com/connor981332/agent-workspace/internal/runners"
+	"github.com/connor981332/agent-workspace/internal/timing"
 )
 
 // exitStatus makes Main exit with a command's own status, printing nothing more.
@@ -68,8 +71,9 @@ runs the project's [projects.<p>] run.`,
 
 func newNewCmd() *cobra.Command {
 	var harness, branch string
+	var useMux bool
 	cmd := &cobra.Command{
-		Use:   `new "<purpose>" [--harness h] [--branch b] [-- harness arguments…]`,
+		Use:   `new "<purpose>" [--harness h] [--mux] [--branch b] [-- harness arguments…]`,
 		Short: "Claim a lane and launch a harness in it",
 		Long: `Claim a lane for the purpose (from the warm pool when there is one), then launch the harness in the
 lane root: the individual layer's [user] harness, or --harness. Arguments after -- go to the harness
@@ -86,11 +90,13 @@ against the lane.`,
 			} else if len(args) > 1 {
 				return &usageError{fmt.Errorf(`aw new takes one purpose; quote it, and put harness arguments after --`)}
 			}
+			t := timing.Start()
 			w, err := openForWrite()
 			if err != nil {
 				return err
 			}
 			defer w.Close()
+			t.Mark("open")
 			if harness == "" {
 				harness = w.cfg.User.Harness
 			}
@@ -101,15 +107,33 @@ against the lane.`,
 			if err != nil {
 				return fmt.Errorf("the harness %s is not installed (not on PATH) → install it, or choose another with --harness or [user] harness", harness)
 			}
+			if useMux {
+				if err := mux.Check(w.cfg.User.Multiplexer); err != nil {
+					return err
+				}
+			}
 			id := "new-" + randomHex(8)
 			m := manager(w)
+			pid := os.Getpid()
+			if useMux {
+				pid = 0 // the harness's own process is recorded by its first hook call
+			}
 			c, err := m.Claim(cmd.Context(), lanes.ClaimRequest{Purpose: purpose, Branch: branch,
-				Who: lanes.Identity{Harness: harness, Session: id, PID: os.Getpid()}})
+				Who: lanes.Identity{Harness: harness, Session: id, PID: pid}})
 			if err != nil {
 				return err
 			}
 			fmt.Fprintf(cmd.ErrOrStderr(), "aw: lane %s %s, starting %s\n", c.Dir, c.Lane.Name, harness)
+			mx := w.cfg.User.Multiplexer
+			t.Mark("claim")
 			w.Close()
+			t.Mark("close")
+			if timing.Debug() {
+				t.Report(cmd.ErrOrStderr(), "new")
+			}
+			if useMux {
+				return openInMux(cmd, mx, c.Lane.Name, c.Root, harness, id, append([]string{harness}, extra...))
+			}
 			if err := os.Chdir(c.Root); err != nil {
 				return err
 			}
@@ -121,7 +145,18 @@ against the lane.`,
 	}
 	cmd.Flags().StringVar(&harness, "harness", "", "the harness to launch (default: [user] harness)")
 	cmd.Flags().StringVar(&branch, "branch", "", "start the lane on this existing branch")
+	cmd.Flags().BoolVar(&useMux, "mux", false, "open it in your terminal multiplexer")
 	return cmd
+}
+
+// openInMux starts a session in the multiplexer and says where it went.
+func openInMux(cmd *cobra.Command, m config.Multiplexer, name, dir, harness, id string, argv []string) error {
+	where, err := mux.Open(cmd.Context(), m, mux.Launch{Name: name, Dir: dir, Env: []string{"AW_SESSION=" + harness + ":" + id}, Argv: argv}, false)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(cmd.ErrOrStderr(), "aw: opened %s in %s\n", harness, where)
+	return nil
 }
 
 // usageError is a usage mistake found after cobra parsed the command line.

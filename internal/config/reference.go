@@ -109,6 +109,8 @@ func leafType(n *node) string {
 		return "duration"
 	case kStringList:
 		return "array of strings"
+	case kMux:
+		return "`none`, `herdr`, `tmux`, or `{ command }`"
 	case kHook:
 		return "command string, or `{ run, timeout, needs }`"
 	case kMap:

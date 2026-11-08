@@ -285,6 +285,6 @@ webhook forwarding, browser MCP, implementer role, plans.
   `devcontainer` executables. It is seeded from candidate 1's tests and candidate 2's findings, and
   it is the main definition of correct behavior.
 - The harness parity suite and recorded payload fixtures.
-- Latency benchmarks with budgets enforced in CI.
+- Latency benchmarks: regressions and the guard budgets enforced in CI, all budgets on a developer laptop before each release.
 - An end-to-end suite with real Docker, run on Linux.
 - CI on Linux and macOS, amd64 and arm64.

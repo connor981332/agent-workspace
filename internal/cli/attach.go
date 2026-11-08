@@ -12,6 +12,7 @@ import (
 
 	"github.com/connor981332/agent-workspace/internal/lanes"
 	"github.com/connor981332/agent-workspace/internal/platform"
+	"github.com/connor981332/agent-workspace/internal/timing"
 	"github.com/connor981332/agent-workspace/internal/ui"
 )
 
@@ -98,15 +99,23 @@ The same session attaching again gets the same lane. Work in the lane root aw pr
 			if err != nil {
 				return err
 			}
+			t := timing.Start()
 			w, err := openForWrite()
 			if err != nil {
 				return err
 			}
 			defer w.Close()
+			t.Mark("open")
 			m := &lanes.Manager{WS: w.ws, Cfg: w.cfg, Store: w.store}
 			c, err := m.Claim(cmd.Context(), lanes.ClaimRequest{Purpose: args[0], Branch: branch, Who: who})
 			if err != nil {
 				return err
+			}
+			t.Mark("claim")
+			w.Close()
+			t.Mark("close")
+			if timing.Debug() {
+				t.Report(cmd.ErrOrStderr(), "attach")
 			}
 			out := cmd.OutOrStdout()
 			if asJSON {

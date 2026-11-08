@@ -1,6 +1,36 @@
-# harness/mux-command-template: to be written (plan §3.5).
+# Any other multiplexer is a command template. The default is none, and --mux then says what to set.
+# A template that could not start the session is a configuration error.
 # req: R77
 # source: spec (no candidate source)
 # milestone: M3
 
-unwritten
+workspace shop --init
+stubs claude
+exec aw config get user.multiplexer
+stdout none
+! exec aw new 'fix checkout tax' --mux
+stderr '--mux needs a multiplexer'
+
+exec sh $WORK/use.sh 'multiplexer = { command = "sh $WORK/open.sh {name} -- {cmd}" }'
+exec aw new 'fix checkout tax' --mux
+stderr 'opened claude in your multiplexer'
+exec cat $WORK/opened
+stdout '^name=checkout-tax$'
+exec cat $STUB_LOG
+stdout '^claude cwd .*/\.worktrees/0[12]$'
+stdout '^claude AW_SESSION=claude:new-'
+
+exec sh $WORK/use.sh 'multiplexer = { command = "zellij run" }'
+! exec aw config validate
+stdout 'has no \{cmd\}'
+exec sh $WORK/use.sh 'multiplexer = "wezterm"'
+! exec aw config validate
+stdout 'not a built-in multiplexer'
+
+-- use.sh --
+mkdir -p "$XDG_CONFIG_HOME/agent-workspace"
+printf '[user]\n%s\n' "$(printf %s "$1" | sed "s|\$WORK|$WORK|")" > "$XDG_CONFIG_HOME/agent-workspace/shop.toml"
+-- open.sh --
+echo "name=$1" > "$WORK/opened"
+shift 2
+"$@"

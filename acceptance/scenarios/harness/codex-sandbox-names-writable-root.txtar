@@ -1,6 +1,17 @@
-# harness/codex-sandbox-names-writable-root: to be written (plan §3.5).
+# Codex's sandbox keeps .git read-only by default, and aw's state is under it. aw says which setting
+# to change, rather than passing on SQLite's error.
 # req: R14
 # source: C1 test_codex_read_only_gate_names_the_writable_root_setting
 # milestone: M3
 
-unwritten
+workspace solo --single --init
+owner-may-change
+exec aw attach 'first'
+chmod 555 $OWNER/.git/aw
+env CODEX_THREAD_ID=thread-1
+! exec aw attach 'add feature flag'
+stderr 'sandbox_workspace_write.writable_roots'
+stderr '\.git"'
+chmod 755 $OWNER/.git/aw
+exec aw attach 'add feature flag'
+stdout 'Claimed lane 02'

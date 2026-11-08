@@ -84,7 +84,11 @@ Now (`m3/resume`): `aw resume [name]` with each harness's resume flag and the fa
 
 (PR #36.) Now (`m3/team-guards`): team guards (R54, S9) and a session's purpose from its first prompt, with the schema and the extra hook write the spec owner approved on 2026-11-08. Executable guards are left out of the first release.
 
-**Next step:** terminal multiplexers, `docs/safety.md`.
+(PR #37.) Now (`m3/mux`): `--mux` on `aw new`, `aw pair` and `aw resume`, with herdr, tmux and command templates, following architecture.md's form of the setting as the spec owner decided on 2026-11-08 (the default is `none`); a lane agent may not start or type into panes; `docs/safety.md` (R94, checked as a document); the `git-versions` CI job; and `requirements.toml` moved to `current = "M3"`. Real herdr and tmux have not been driven by the suite, only stand-ins. herdr's reply format was read from its bundled documentation.
+
+Speed enforcement changed at the M3 exit, by the spec owner (§5.2): CI checks regressions against master on the median and holds only the guard and ref-hook budgets absolutely; all budgets are checked on a laptop before each release, and the release workflow requires that result.
+
+**Next step:** the M3 pre-release, then M4.
 
 **Pending manual checks:** the hot-path and budget benchmarks on an Apple Silicon laptop (T3, M1, M2;
 docs/dev/benchmarks.md).
@@ -986,28 +990,24 @@ summary for the CI job page.
 
 ### 5.2 CI enforcement
 
-- **Reference runners:** GitHub-hosted `ubuntu-24.04` (amd64) and `macos-15` (arm64). See S5. The
-  budgets are enforced absolutely on `ubuntu-24.04` only. `macos-15` is a virtual machine whose
-  process start alone costs 8 ms p99 (docs/dev/spikes.md), so there an operation fails when its p99
-  grows more than 25 % over master's, with the same rerun rule. (Implemented in M1 as an A/B run:
-  the job builds master's binary and measures it interleaved with the PR's on the same machine,
-  comparing medians, because separate macOS runs differed by more than 2× at p99. It runs at 0.3 of
-  each operation's iterations: medians need fewer samples, and at full scale the job took over 15
-  minutes once the lane operations were measured on both binaries.)
-- **One CI ceiling differs from its budget:** the dashboard and `aw recap` fail on `ubuntu-24.04`
-  above 200 ms p99, while their 100 ms budget is checked on the laptops (speed.md, "Enforcement").
-  `budgets.toml` records it as `ci_budget_ms`, and CI runs the bench with `-on ci`.
-- A `bench` job runs on every pull request and on every push to master, from M1 on (M0 runs the
-  spike prototype only).
-- An operation fails when its p99 exceeds its budget. A failing operation is measured once more in
-  the same job. Two failures in a row fail CI, and both runs are reported. One noisy run on a shared
-  runner cannot fail CI on its own, while a consistent regression still does.
-- Results from master are kept as artifacts, and the PR summary shows the change from master's last
-  run. On `ubuntu-24.04`, a p99 that grows more than 25 % is flagged in the summary
-but does not fail CI.
-- Twice per milestone, a maintainer runs `bench` on a real laptop (one Linux, one Apple Silicon Mac)
-  and records the results in `docs/dev/benchmarks.md`, because the budgets are defined on developer
-  laptops.
+Changed by the spec owner at the M3 exit (2026-11-08). Absolute budgets on shared runners measured
+the runner: at `attach-from-pool`, the median stayed at 44 to 57 ms while the p99 ranged from 61 to
+456 ms, with the time spent in SQLite's sync on close on the runner's disk.
+
+- **The budgets are enforced on a developer laptop.** At each milestone exit and before each release,
+  a maintainer runs `bench` on a Linux laptop and on an Apple Silicon Mac and records the results in
+  `docs/dev/benchmarks.md`. The release workflow refuses a tag whose milestone has no Linux laptop
+  result.
+- **CI detects regressions.** A `bench` job runs on every pull request and every push to master, on
+  `ubuntu-24.04` and `macos-15`. It builds master's binary and measures it interleaved with the PR's
+  on the same machine. An operation fails when its median grows more than 25 % over master's.
+  Medians need fewer samples, so the job runs at 0.5 of each operation's iterations on Linux and 0.3
+  on macOS.
+- **Two budgets also hold on `ubuntu-24.04`:** the guard decision and the ref hook, which barely
+  touch the disk (`ci_absolute` in `budgets.toml`, and `-guard-budgets`).
+- A failing operation is measured once more in the same job. Two failures in a row fail CI, and both
+  runs are reported.
+- Each run's results are kept as artifacts.
 
 ### 5.3 Deterministic checks
 
@@ -1142,7 +1142,7 @@ needs. Each row has a proposed answer. None is adopted without the spec owner's 
 | S2 | **Who starts a granted lane's servers?** When a seat is released and the next lane is not waiting in the foreground, there is no daemon to start its servers, and the releasing command (perhaps the owner's `aw stop`) should not start them under its own session. | resources.md | A grant to a lane that is not waiting is a reservation with a claim window (`claim_window`, default 2 minutes). The agent is told on its next tool call and runs `aw serve` to start its servers. An unclaimed reservation passes to the next lane. A `--wait` caller is granted and starts its servers itself. | M4 |
 | S3 | **The ref hook's allowed refs are not defined, and it has no budget.** Fetches update `refs/remotes/*`; `refs/stash` is shared by every worktree, so refusing stash rewrites means lanes cannot use `git stash`; `aw`'s own operations from a lane (finish, recycle) must pass. | owner-checkout.md, speed.md | Allowed from a lane: its own branches, worktree-private refs (`HEAD`, `ORIG_HEAD`, `FETCH_HEAD`, bisect refs), and `refs/remotes/*` from fetch. Refused: other branches, tags, `refs/aw/*`, and `refs/stash` (lanes are told to commit to a work-in-progress branch instead). `aw` authorizes its own updates with a short-lived token recorded in state. Budget: 8 ms p99, like a guard. Final rules follow the M0 spike, whose refinements are in docs/dev/spikes.md: decide at `prepared` only, allow all worktree-private pseudo-refs and `refs/bisect/*`, allow updates that leave a ref's resolved value unchanged (`pack-refs`, `gc`), and refuse `refs/notes/*`. | M3 |
 | S4 | **"Plus the project's reset hooks"** in the `aw attach` and `aw new` budgets contradicts lifecycle.md, where those hooks run in the background after the command returns. | speed.md, lifecycle.md | The budgets end when the command returns or the harness launches, and they exclude every hook, which runs in the background. **Recorded in speed.md.** | M2 |
-| S5 | **"Reference runners" and "developer laptop" are not defined**, so a budget cannot be enforced exactly as written. | speed.md | CI enforces the budgets on GitHub-hosted `ubuntu-24.04` (amd64), and checks `macos-15` (arm64) for regressions against master, with the rerun rule in §5.2 (amended after the M0 spike: an empty Go process costs 8 ms p99 on `macos-15`). Laptop measurements are recorded twice per milestone. **Recorded in speed.md.** | M1 |
+| S5 | **"Reference runners" and "developer laptop" are not defined**, so a budget cannot be enforced exactly as written. | speed.md | CI enforces the budgets on GitHub-hosted `ubuntu-24.04` (amd64), and checks `macos-15` (arm64) for regressions against master, with the rerun rule in §5.2 (amended after the M0 spike: an empty Go process costs 8 ms p99 on `macos-15`). Laptop measurements are recorded twice per milestone. **Recorded in speed.md.** Changed by the spec owner at the M3 exit: see §5.2. | M1 |
 | S6 | **The hot path must write.** **Recorded in speed.md.** Recording a session ID from its first hook call, and marking a notification delivered, are writes, but speed.md allows only activity writes. | speed.md, ux.md | Allow these two writes on the hot path, with the same rule as activity: never wait for a lock. If the write cannot be made at once, it is retried on the next call, and notifications are delivered at least once (each carries an ID, so a repeat is recognizable). | M1 |
 | S7 | **Same paths inside and outside the container** (R47) conflicts with C2's template, which mounts a project at `/<directory>`. The spec takes C2's container model, but does not say how the project's committed `devcontainer.json`, which the whole team shares, gets a same-path mount and the seat ports. | requirements.md, architecture.md | The project's devcontainer uses `${localWorkspaceFolder}` as both the mount source and target, and as `workspaceFolder`. `aw` supplies the seat ports through a managed Compose fragment. `aw doctor` and the runner's mount check refuse anything else, with the fix. | M6 |
 | S8 | **Lease liveness for servers inside a container**: the spec records a holder's PID and start time, but on macOS the container's processes run in a VM and are invisible from the host. | resources.md | Each container server is started by a host-side keeper (`aw` itself, detached) that runs `docker exec` and stays attached. The keeper's host PID is the lease holder. Stopping the keeper stops the server's process group in the container. If the keeper dies uncleanly, recovery stops the recorded process group through `docker exec` on the next state-changing command. | M6 |

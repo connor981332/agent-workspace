@@ -75,18 +75,19 @@ recognizable.
 
 ## Enforcement
 
-- A benchmark suite runs each budgeted operation against a fixture workspace. CI fails when a
-  budget is exceeded at p99 on the Linux reference runner, GitHub-hosted `ubuntu-24.04` (amd64).
-  The macOS reference runner, `macos-15` (arm64), is a virtual machine whose process start alone
-  takes several milliseconds, so there CI fails on a regression against the main branch instead of
-  on the budget itself: the main branch's binary is measured in the same run, interleaved.
-- One budget has a separate ceiling on `ubuntu-24.04`: the dashboard and `aw recap` fail CI above
-  200 ms p99. They run one `git status` per worktree (50 for 10 lanes across 4 repositories plus
-  the workspace repository), and on the runner's four cores that takes 86 to 130 ms where a laptop
-  takes 45. The 100 ms budget stands and is checked on the laptops. (Decided at the M2 exit.)
-- A maintainer measures every budget twice per milestone on a Linux laptop and on an Apple Silicon
-  laptop. Those measurements are the budgets' real test, since the budgets are defined on a
-  developer laptop.
+- A benchmark suite runs each budgeted operation against a fixture workspace.
+- **The budgets are enforced on a developer laptop,** where they are defined. A maintainer measures
+  every budget on a Linux laptop and on an Apple Silicon laptop at each milestone exit and before each
+  release, and records the result in `docs/dev/benchmarks.md`. The release workflow refuses a tag
+  whose milestone has no Linux laptop result.
+- **CI checks for regressions.** On every pull request, on `ubuntu-24.04` and `macos-15`, the main
+  branch's binary is measured in the same run, interleaved, and an operation fails when its median
+  grows more than 25 %. The median is used because the tail on a shared runner comes mostly from the
+  runner: a claim that takes 45 ms can take 200 ms when SQLite's sync on close meets a slow disk.
+- Two budgets also hold absolutely on `ubuntu-24.04`, because they barely touch the disk:
+  absolute on CI: Guard decision for one tool call; absolute on CI: `reference-transaction` hook,
+  deciding one ref update from a lane. (Decided at the M3 exit, replacing absolute budgets for every
+  operation on CI.)
 - Commands log their own duration and phase timings at debug level, so a slow report from a user can
   be diagnosed with `aw doctor --timings`.
 - A pull request that adds work to the hot path must say why in its description.

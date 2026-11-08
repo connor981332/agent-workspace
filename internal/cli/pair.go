@@ -15,6 +15,7 @@ import (
 
 	"github.com/connor981332/agent-workspace/internal/harness"
 	"github.com/connor981332/agent-workspace/internal/lanes"
+	"github.com/connor981332/agent-workspace/internal/mux"
 	"github.com/connor981332/agent-workspace/internal/platform"
 	"github.com/connor981332/agent-workspace/internal/policy"
 	"github.com/connor981332/agent-workspace/internal/state"
@@ -64,8 +65,9 @@ func refuseAgent(cmd *cobra.Command) error {
 
 func newPairCmd() *cobra.Command {
 	var harnessName, session string
+	var useMux bool
 	cmd := &cobra.Command{
-		Use:   "pair [--harness h] [--session harness:id] [-- harness arguments…]",
+		Use:   "pair [--harness h] [--mux] [--session harness:id] [-- harness arguments…]",
 		Short: "Invite an agent to work with you in the owner checkout",
 		Long: `Start a harness in the owner checkout as a pair session: it may edit there, and no lane is claimed.
 Destructive Git, publication beyond the policy, and changes to the workspace's own configuration
@@ -91,8 +93,8 @@ session that is refused a write prints the exact command. Only you can grant pai
 				fmt.Fprintf(cmd.ErrOrStderr(), "aw: warning: %d other pair session%s running in the owner checkout; agents editing one tree can collide, which is what lanes prevent\n", n, plural(n))
 			}
 			if session != "" {
-				if harnessName != "" || len(args) > 0 {
-					return &usageError{errors.New("--session grants a running session, so it takes no --harness or harness arguments")}
+				if harnessName != "" || len(args) > 0 || useMux {
+					return &usageError{errors.New("--session grants a running session, so it takes no --harness, --mux or harness arguments")}
 				}
 				return grantPair(cmd.Context(), w.store, session, cmd)
 			}
@@ -106,17 +108,26 @@ session that is refused a write prints the exact command. Only you can grant pai
 			if err != nil {
 				return fmt.Errorf("the harness %s is not installed (not on PATH) → install it, or choose another with --harness or [user] harness", harnessName)
 			}
+			if useMux {
+				if err := mux.Check(w.cfg.User.Multiplexer); err != nil {
+					return err
+				}
+			}
 			id := "pair-" + randomHex(8)
-			pid := os.Getpid()
-			start, err := platform.ProcessIdentity(pid)
-			if err != nil {
+			pid, start := os.Getpid(), ""
+			if useMux {
+				pid = 0 // the harness's own process is recorded by its first hook call
+			} else if start, err = platform.ProcessIdentity(pid); err != nil {
 				return err
 			}
 			if err := savePair(cmd.Context(), w.store, state.Session{Harness: harnessName, HarnessSession: id, PID: pid, PIDStart: start}); err != nil {
 				return err
 			}
-			owner := w.ws.Owner
+			owner, mx := w.ws.Owner, w.cfg.User.Multiplexer
 			w.Close()
+			if useMux {
+				return openInMux(cmd, mx, "pair", owner, harnessName, id, append([]string{harnessName}, args...))
+			}
 			if err := os.Chdir(owner); err != nil {
 				return err
 			}
@@ -127,6 +138,7 @@ session that is refused a write prints the exact command. Only you can grant pai
 	}
 	cmd.Flags().StringVar(&harnessName, "harness", "", "the harness to launch (default: [user] harness)")
 	cmd.Flags().StringVar(&session, "session", "", "grant this running session, as harness:id")
+	cmd.Flags().BoolVar(&useMux, "mux", false, "open it in your terminal multiplexer")
 	return cmd
 }
 

@@ -122,3 +122,17 @@ func TestReachedRequirementsAreCovered(t *testing.T) {
 		}
 	}
 }
+
+// TestSafetyModelIsStated covers R94, whose subject is a document: it must say plainly what the
+// guards are not, and name what is left unprotected.
+func TestSafetyModelIsStated(t *testing.T) {
+	data, err := os.ReadFile("../../docs/safety.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"cooperative agents", "not a security sandbox", "not confined", "fail closed", "network is not restricted"} {
+		if !regexp.MustCompile(regexp.QuoteMeta(want)).Match(data) {
+			t.Errorf("docs/safety.md does not say %q", want)
+		}
+	}
+}

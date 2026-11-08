@@ -65,6 +65,8 @@ type Scope struct {
 	Secrets []string
 	// Servers are the configured server commands, which only aw serve may start.
 	Servers []ServerCommand
+	// MuxProgram is the program of a configured multiplexer template, which a lane may not use.
+	MuxProgram string
 	// Guards are the team's own guards, in name order.
 	Guards []TeamGuard
 	// AskSupported is whether the harness can ask the human; if not, an ask is a deny.
@@ -191,7 +193,7 @@ func decideShell(s Scope, src string, cwd shell.Dir) Decision {
 	var asks []Decision
 	for _, c := range p.Commands {
 		for _, rule := range []func(Scope, shell.Command) Decision{
-			pathsRule, ownerOnlyRule, gitRule, containerRule, killRule, serverRule, secretRule, selfModRule, unattachedRule, publicationRule, teamGuardRule,
+			pathsRule, ownerOnlyRule, gitRule, containerRule, killRule, serverRule, secretRule, muxRule, selfModRule, unattachedRule, publicationRule, teamGuardRule,
 		} {
 			switch d := rule(s, c); d.Verdict {
 			case Deny:

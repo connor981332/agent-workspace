@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"os"
 	"regexp"
 	"strconv"
@@ -38,9 +37,9 @@ func TestBudgetsMatchTheSpec(t *testing.T) {
 		case op.BudgetMS != want:
 			t.Errorf("%s: budgets.toml says %d ms, speed.md says %d ms", op.Name, op.BudgetMS, want)
 		}
-		// A CI ceiling must be stated in speed.md's "Enforcement" too.
-		if op.CIBudgetMS > 0 && !strings.Contains(flat, fmt.Sprintf("above %d ms p99", op.CIBudgetMS)) {
-			t.Errorf("%s: budgets.toml sets a CI ceiling of %d ms, which speed.md does not state", op.Name, op.CIBudgetMS)
+		// speed.md's "Enforcement" names the budgets that also hold on CI.
+		if op.CIAbsolute && !strings.Contains(flat, "absolute on CI: "+op.Spec) {
+			t.Errorf("%s: budgets.toml holds it to its budget on CI, which speed.md does not state", op.Name)
 		}
 		covered[op.Spec] = true
 	}

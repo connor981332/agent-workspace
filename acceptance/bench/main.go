@@ -9,9 +9,10 @@
 // hot-path operations fails the run (§5.3). The lane operations read and change worktrees, so for
 // them Git is real and only the others are stubbed.
 //
-// In absolute mode an operation fails when its p99 exceeds its budget; in relative mode (macOS CI)
-// when its p99 grows more than 25 % over the baseline's. A failing operation is measured once more,
-// and only two failures in a row fail the run.
+// In absolute mode, for a maintainer's laptop, an operation fails when its p99 exceeds its budget.
+// In relative mode, for CI, it fails when its median grows more than 25 % over the baseline's, and
+// with -guard-budgets the operations marked ci_absolute must also meet their budget. A failing
+// operation is measured once more, and only two failures in a row fail the run.
 package main
 
 import (
@@ -38,7 +39,7 @@ type op struct {
 	Name       string `toml:"name"`
 	Spec       string `toml:"spec"`
 	BudgetMS   int    `toml:"budget_ms"`
-	CIBudgetMS int    `toml:"ci_budget_ms"` // the ceiling on the CI runner, where it differs (speed.md)
+	CIAbsolute bool   `toml:"ci_absolute"` // the budget also holds on CI, with -guard-budgets (speed.md)
 	Iterations int    `toml:"iterations"`
 	From       string `toml:"from"`
 	About      string `toml:"about"`
@@ -91,7 +92,7 @@ func main() {
 	baselineAW := flag.String("baseline-aw", "", "a baseline aw binary (master's), measured interleaved with -aw on this machine")
 	out := flag.String("out", "", "write the JSON report here")
 	scale := flag.Float64("scale", 1, "multiply every operation's iterations, e.g. 0.1 for a quick run")
-	on := flag.String("on", "laptop", "laptop (the budgets as speed.md defines them) or ci (ci_budget_ms where an operation has one)")
+	guardBudgets := flag.Bool("guard-budgets", false, "in relative mode, also fail a ci_absolute operation whose p99 is over its budget")
 	flag.Parse()
 
 	ops, err := loadBudgets("bench/budgets.toml")
@@ -133,16 +134,11 @@ func main() {
 		}
 		n := max(10, int(float64(o.Iterations)**scale))
 		r, b := measure(o, n, run, baseRun)
-		if *on == "ci" && o.CIBudgetMS > 0 {
-			o.BudgetMS = o.CIBudgetMS
-		} else if *on != "ci" && *on != "laptop" {
-			fatalf("-on must be laptop or ci")
-		}
-		judge(o, r, b, *mode)
+		judge(o, r, b, *mode, *guardBudgets)
 		if !r.Pass {
 			// One noisy run on a shared runner cannot fail CI on its own (§5.2).
 			r2, b2 := measure(o, n, run, baseRun)
-			judge(o, r2, b2, *mode)
+			judge(o, r2, b2, *mode, *guardBudgets)
 			r2.Runs = 2
 			if !r2.Pass {
 				r2.Note += fmt.Sprintf("; failed twice (first run p50 %.2f, p99 %.2f ms)", r.P50, r.P99)
@@ -172,7 +168,8 @@ func main() {
 // judge decides one result. Absolute: p99 within the budget, with growth of more than 25 % over
 // the baseline flagged. Relative: p50 within 25 % of the baseline's, measured in the same run; the
 // median is used because the tail of a shared virtual machine is mostly noise from its neighbours.
-func judge(o op, r, b *Result, mode string) {
+// A ci_absolute operation barely touches the disk, so its budget can also hold there.
+func judge(o op, r, b *Result, mode string, guardBudgets bool) {
 	switch mode {
 	case "absolute":
 		r.Limit = float64(o.BudgetMS)
@@ -187,11 +184,15 @@ func judge(o op, r, b *Result, mode string) {
 	case "relative":
 		if b == nil {
 			r.Pass, r.Note = true, "master has no such operation yet; reported only"
-			return
+		} else {
+			r.Limit = b.P50 * 1.25
+			r.Pass = r.P50 <= r.Limit
+			r.Note = fmt.Sprintf("p50 vs master's %.2f ms + 25 %%", b.P50)
 		}
-		r.Limit = b.P50 * 1.25
-		r.Pass = r.P50 <= r.Limit
-		r.Note = fmt.Sprintf("p50 vs master's %.2f ms + 25 %%", b.P50)
+		if guardBudgets && o.CIAbsolute && r.P99 > float64(o.BudgetMS) {
+			r.Pass = false
+			r.Note += fmt.Sprintf("; p99 is over its %d ms budget", o.BudgetMS)
+		}
 	default:
 		fatalf("unknown mode %q", mode)
 	}

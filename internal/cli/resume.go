@@ -18,6 +18,7 @@ import (
 
 	"github.com/connor981332/agent-workspace/internal/harness/launch"
 	"github.com/connor981332/agent-workspace/internal/lanes"
+	"github.com/connor981332/agent-workspace/internal/mux"
 	"github.com/connor981332/agent-workspace/internal/platform"
 	"github.com/connor981332/agent-workspace/internal/runners"
 	"github.com/connor981332/agent-workspace/internal/state"
@@ -120,11 +121,13 @@ func find(w *writeContext, all []candidate, name string) (candidate, error) {
 }
 
 func newResumeCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "resume [name]",
+	var all, useMux bool
+	cmd := &cobra.Command{
+		Use:   "resume [name] [--all] [--mux]",
 		Short: "Reopen a session where it left off",
 		Long: `Relaunch a session's harness in its lane, with the harness's own resume flag and the recorded session
-ID. With no name, choose from a list. If the harness can no longer resume it, this falls back to
+ID. With no name, choose from a list. --all --mux reopens every interrupted session, each in its own
+window or pane. If the harness can no longer resume it, this falls back to
 aw open: a new session on the same lane, given the latest handoff. "pair" names the pair session.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: run(func(cmd *cobra.Command, args []string) error {
@@ -136,15 +139,26 @@ aw open: a new session on the same lane, given the latest handoff. "pair" names 
 			if err := manager(w).Recover(cmd.Context()); err != nil {
 				return err
 			}
-			all, err := candidates(w)
+			allOf, err := candidates(w)
 			if err != nil {
 				return err
 			}
+			if useMux {
+				if err := mux.Check(w.cfg.User.Multiplexer); err != nil {
+					return err
+				}
+			}
+			if all {
+				if !useMux || len(args) > 0 {
+					return &usageError{errors.New("--all opens several sessions, so it needs --mux and no name")}
+				}
+				return resumeAll(cmd, w, allOf)
+			}
 			var c candidate
 			if len(args) == 1 {
-				c, err = find(w, all, args[0])
+				c, err = find(w, allOf, args[0])
 			} else {
-				c, err = pick(cmd, all)
+				c, err = pick(cmd, allOf)
 			}
 			if err != nil {
 				return err
@@ -152,9 +166,61 @@ aw open: a new session on the same lane, given the latest handoff. "pair" names 
 			if c.lane != nil && c.lane.State == state.LaneParked {
 				return fmt.Errorf("lane %s is parked → aw unpark %s, then aw resume %s", c.lane.Name, c.lane.Name, c.lane.Name)
 			}
-			return resume(cmd, w, c)
+			return resume(cmd, w, c, useMux)
 		}),
 	}
+	cmd.Flags().BoolVar(&all, "all", false, "reopen every interrupted session (with --mux)")
+	cmd.Flags().BoolVar(&useMux, "mux", false, "open it in your terminal multiplexer")
+	return cmd
+}
+
+// resumeAll reopens every interrupted session in the background of the multiplexer.
+func resumeAll(cmd *cobra.Command, w *writeContext, all []candidate) error {
+	opened := 0
+	for _, c := range all {
+		if c.session.State != state.SessionInterrupted || (c.lane != nil && c.lane.State == state.LaneParked) {
+			continue
+		}
+		args, known := launch.ResumeArgs(c.session.Harness, c.session.HarnessSession)
+		if !known || neverIdentified(c.session) {
+			fmt.Fprintf(cmd.ErrOrStderr(), "aw: %s cannot be resumed: %s never reported its session ID → aw open %s\n", ui.Clean(c.label), ui.Clean(c.session.Harness), ui.Clean(c.label))
+			continue
+		}
+		if err := resumeInMux(cmd, w, c, args, true); err != nil {
+			return err
+		}
+		opened++
+	}
+	if opened == 0 {
+		return errors.New("there are no interrupted sessions to resume")
+	}
+	return nil
+}
+
+// resumeInMux reopens a session in the multiplexer. Whether the harness managed it cannot be seen
+// from here, so there is no fallback to aw open.
+func resumeInMux(cmd *cobra.Command, w *writeContext, c candidate, args []string, background bool) error {
+	s := c.session
+	dir := w.ws.Owner
+	if c.lane != nil {
+		dir = manager(w).Root(c.lane.Number)
+	}
+	where, err := mux.Open(cmd.Context(), w.cfg.User.Multiplexer, mux.Launch{Name: c.label, Dir: dir,
+		Env: []string{"AW_SESSION=" + s.Harness + ":" + s.HarnessSession}, Argv: append([]string{s.Harness}, args...)}, background)
+	if err != nil {
+		return err
+	}
+	// Its earlier processes are gone; its next hook call records the new one.
+	if err := w.store.Write(cmd.Context(), func(tx *sql.Tx) error {
+		if err := state.ForgetSessionProcesses(tx, s.Harness, s.HarnessSession); err != nil {
+			return err
+		}
+		return state.ActivateSession(tx, s.ID)
+	}); err != nil {
+		return err
+	}
+	fmt.Fprintf(cmd.ErrOrStderr(), "aw: resumed %s in %s\n", ui.Clean(c.label), where)
+	return nil
 }
 
 // neverIdentified reports a session whose harness never told aw its own ID: aw's made-up one is
@@ -168,7 +234,7 @@ func neverIdentified(s state.Session) bool {
 	return false
 }
 
-func resume(cmd *cobra.Command, w *writeContext, c candidate) error {
+func resume(cmd *cobra.Command, w *writeContext, c candidate, useMux bool) error {
 	errOut := cmd.ErrOrStderr()
 	s := c.session
 	args, known := launch.ResumeArgs(s.Harness, s.HarnessSession)
@@ -178,6 +244,9 @@ func resume(cmd *cobra.Command, w *writeContext, c candidate) error {
 		}
 		fmt.Fprintf(errOut, "aw: %s cannot resume this session, so this opens a new one on lane %s\n", ui.Clean(s.Harness), ui.Clean(c.lane.Name))
 		return open(cmd, w, *c.lane, s.Harness)
+	}
+	if useMux {
+		return resumeInMux(cmd, w, c, args, false)
 	}
 	if _, err := exec.LookPath(s.Harness); err != nil {
 		return fmt.Errorf("the harness %s is not installed (not on PATH) → install it, or aw open starts a session with the default harness", ui.Clean(s.Harness))
