@@ -77,6 +77,8 @@ type Handoff struct {
 	Summary    string `json:"summary"`
 	Plan       string `json:"plan,omitempty"`
 	Heads      string `json:"heads"` // JSON: project → head
+	// Archived is when aw open picked it up, or "".
+	Archived string `json:"archived,omitempty"`
 }
 
 // AddHandoff records a handoff.
@@ -86,12 +88,18 @@ func AddHandoff(tx *sql.Tx, h Handoff) error {
 	return err
 }
 
+// ArchiveHandoff records that aw open has picked a handoff up.
+func ArchiveHandoff(tx *sql.Tx, id int) error {
+	_, err := tx.Exec(`UPDATE handoffs SET archived = ? WHERE id = ? AND archived = ''`, now(), id)
+	return err
+}
+
 // LatestHandoff returns the newest handoff of a lane's current generation.
 func LatestHandoff(q Querier, lane, generation int) (Handoff, error) {
 	var h Handoff
-	err := q.QueryRow(`SELECT id, lane, generation, created, summary, plan, heads FROM handoffs
+	err := q.QueryRow(`SELECT id, lane, generation, created, summary, plan, heads, archived FROM handoffs
 		WHERE lane = ? AND generation = ? ORDER BY id DESC LIMIT 1`, lane, generation).
-		Scan(&h.ID, &h.Lane, &h.Generation, &h.Created, &h.Summary, &h.Plan, &h.Heads)
+		Scan(&h.ID, &h.Lane, &h.Generation, &h.Created, &h.Summary, &h.Plan, &h.Heads, &h.Archived)
 	if errors.Is(err, sql.ErrNoRows) {
 		return h, ErrNotFound
 	}

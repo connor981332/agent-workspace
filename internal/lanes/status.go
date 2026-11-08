@@ -305,7 +305,9 @@ func (m *Manager) classify(ls *LaneStatus, l state.Lane) {
 			interrupted = true
 		}
 	}
-	if h, err := state.LatestHandoff(m.Store.DB(), l.Number, l.Generation); err == nil {
+	if h, err := state.LatestHandoff(m.Store.DB(), l.Number, l.Generation); err == nil && h.Archived != "" {
+		// A later session has picked it up: it no longer describes the lane.
+	} else if err == nil {
 		hs := &HandoffStatus{Summary: h.Summary, Plan: h.Plan, Created: h.Created}
 		var heads map[string]string
 		if json.Unmarshal([]byte(h.Heads), &heads) != nil || len(heads) == 0 {

@@ -80,7 +80,11 @@ personal instructions yet. Known limit: OpenCode's background server does not in
 OpenCode are not tied to the session they launch. A lane is still confined by its directory, and a
 pair session is granted with the `--session` command its first refusal prints.
 
-**Next step:** purpose capture from the first prompt, team guards, terminal multiplexers, `aw resume` and `aw open`, `docs/safety.md`.
+Now (`m3/resume`): `aw resume [name]` with each harness's resume flag and the fallback to `aw open`, and `aw open`, which injects the latest handoff and archives it (state schema 6). `--all` and `--mux` come with the multiplexers.
+
+(PR #36.) Now (`m3/team-guards`): team guards (R54, S9) and a session's purpose from its first prompt, with the schema and the extra hook write the spec owner approved on 2026-11-08. Executable guards are left out of the first release.
+
+**Next step:** terminal multiplexers, `docs/safety.md`.
 
 **Pending manual checks:** the hot-path and budget benchmarks on an Apple Silicon laptop (T3, M1, M2;
 docs/dev/benchmarks.md).

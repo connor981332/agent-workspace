@@ -130,6 +130,12 @@ func JoinSession(tx *sql.Tx, id, pid int, start string) error {
 	return err
 }
 
+// InterruptSession marks a session as no longer running.
+func InterruptSession(tx *sql.Tx, id int) error {
+	_, err := tx.Exec(`UPDATE sessions SET state = ? WHERE id = ?`, SessionInterrupted, id)
+	return err
+}
+
 // RecordSessionJoin is JoinSession for the hook at session start: it never waits for a lock.
 func RecordSessionJoin(dir string, id, pid int, start string) error {
 	db, err := sql.Open("sqlite", "file:"+filepath.Join(dir, File)+"?_pragma=busy_timeout(0)&_txlock=immediate")
