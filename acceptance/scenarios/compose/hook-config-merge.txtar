@@ -1,6 +1,54 @@
-# compose/hook-config-merge: to be written (plan §3.5).
+# aw setup merges its hooks into each harness's project configuration: other settings and other
+# tools' hooks are kept, its own entries are replaced rather than repeated, and a file it cannot
+# read is left alone with a message.
 # req: R52
 # source: C1 ScaffoldTests.test_hook_merge_keeps_other_settings
 # milestone: M3
+# changed: C1 replaced the whole hooks table; other tools' hooks are now kept.
 
-unwritten
+workspace solo --single --init
+owner-may-change
+mkdir .claude
+cp $WORK/settings.json .claude/settings.json
+exec aw setup --json
+json stdout .harness_config[0].path .claude/settings.json
+json stdout .harness_config[0].changed true
+exists .codex/hooks.json
+exec cat .claude/settings.json
+stdout '"allow"'
+stdout 'other-tool --check'
+stdout 'bin/aw\\" hook claude pre-tool-use'
+stdout 'bin/aw\\" hook claude session-start'
+! stdout 'hook codex'
+grep 'hook codex pre-tool-use' .codex/hooks.json
+
+cp .claude/settings.json $WORK/once
+exec aw setup --json
+json stdout .harness_config[0].changed false
+cmp .claude/settings.json $WORK/once
+exec grep -c 'hook claude pre-tool-use' .claude/settings.json
+stdout '^1$'
+
+cp $WORK/broken .claude/settings.json
+! exec aw setup
+stderr '.claude/settings.json is not valid JSON'
+cmp .claude/settings.json $WORK/broken
+
+# The installed command reaches the real hook, and refuses for it, from a project subdirectory.
+cp $WORK/once .claude/settings.json
+exec aw attach 'add feature flag'
+exec sh $WORK/run-hook.sh
+stdout 'status=2'
+stderr 'is outside lane feature-flag'
+
+-- settings.json --
+{"permissions": {"allow": ["Read"]}, "hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "other-tool --check"}]}]}}
+-- broken --
+{not json
+-- run-hook.sh --
+lane="$OWNER/.worktrees/01"
+mkdir -p "$lane/sub"
+cd "$lane/sub"
+command=$(sed -n 's/.*"command": "\(d=.*hook claude pre-tool-use.*\)".*/\1/p' "$OWNER/.claude/settings.json" | sed 's/\\"/"/g')
+printf '{"session_id":"s","cwd":"%s","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"cat ../../../README.md"}}' "$lane/sub" | sh -c "$command"
+echo "status=$?"

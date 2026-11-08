@@ -1,6 +1,23 @@
-# harness/session-start-guidance: to be written (plan §3.5).
+# A session started in the owner checkout is told it belongs to the human, that reading needs no
+# lane, and how to attach, for every harness. Telling it changes nothing.
 # req: R56
 # source: C1 test_owner_startup_guidance_for_all_harnesses_is_observational
 # milestone: M3
 
-unwritten
+workspace shop --init
+exec sh $WORK/tree.sh
+cp stdout $WORK/before
+exec awtest-hook session-start -
+stdout 'owner checkout, which belongs to the human'
+stdout 'Read-only work needs no attach'
+stdout 'bin/aw attach'
+stdout 'aw pair'
+exec awtest-hook -harness codex session-start -
+stdout 'bin/aw attach'
+exec awtest-hook -harness grok session-start -
+stdout 'bin/aw attach'
+exec sh $WORK/tree.sh
+cmp stdout $WORK/before
+
+-- tree.sh --
+find "$OWNER" "$HOME" -type f | LC_ALL=C sort | while IFS= read -r f; do cksum < "$f" | tr '\n' ' '; echo "$f"; done

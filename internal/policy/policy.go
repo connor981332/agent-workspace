@@ -254,6 +254,9 @@ func (s Scope) selfModification(abs, given string) Decision {
 	return allow()
 }
 
+// Quote shows a path the way a shell would need it.
+func Quote(s string) string { return quote(s) }
+
 // quote shows a path the way a shell would need it, so a message never suggests a command that
 // splits or expands it.
 func quote(s string) string {

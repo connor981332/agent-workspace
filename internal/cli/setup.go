@@ -15,9 +15,10 @@ func newSetupCmd() *cobra.Command {
 	var asJSON bool
 	cmd := &cobra.Command{
 		Use:   "setup",
-		Short: "Install the Git hooks dispatcher in every repository of this workspace",
+		Short: "Install aw's Git hooks and harness hooks in this workspace",
 		Long: `Point every repository's core.hooksPath at aw's hooks dispatcher, which refuses ref updates a lane may
-not make and then runs the team's own hook of the same name. Safe to rerun.`,
+not make and then runs the team's own hook of the same name. Merge aw's guard hooks into each
+harness's project configuration, keeping other settings. Safe to rerun.`,
 		Args: cobra.NoArgs,
 		RunE: run(func(cmd *cobra.Command, _ []string) error {
 			ws, c, err := loadConfig()
@@ -28,8 +29,12 @@ not make and then runs the team's own hook of the same name. Safe to rerun.`,
 			if err != nil {
 				return err
 			}
+			configs, err := app.InstallHarnessConfig(ws.Owner)
+			if err != nil {
+				return err
+			}
 			if asJSON {
-				return writeJSON(cmd.OutOrStdout(), map[string]any{"repos": results})
+				return writeJSON(cmd.OutOrStdout(), map[string]any{"repos": results, "harness_config": configs})
 			}
 			out := cmd.OutOrStdout()
 			for _, r := range results {
@@ -41,6 +46,16 @@ not make and then runs the team's own hook of the same name. Safe to rerun.`,
 				default:
 					fmt.Fprintf(out, "%s: already set up\n", ui.Clean(r.Repo))
 				}
+			}
+			changed := false
+			for _, c := range configs {
+				if c.Changed {
+					changed = true
+					fmt.Fprintf(out, "%s: wrote aw's hooks\n", ui.Clean(c.Path))
+				}
+			}
+			if changed {
+				fmt.Fprintln(out, "Next: commit these files, so lanes get them. Codex asks once to trust project hooks, and Grok to trust the folder (/hooks-trust).")
 			}
 			return nil
 		}),
