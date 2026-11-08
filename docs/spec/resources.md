@@ -124,10 +124,11 @@ a crashed harness or a killed terminal is recovered, with no daemon.
 
 An unreadable lease record is treated as held, and `aw doctor` reports it with the fix.
 
-## Budget-based capacity (later)
+## Why capacities are fixed
 
-Some machines would be better served by one budget than by fixed capacities, for example a 28 GB
-memory pool where the monolith costs 12 and the Next.js stack costs 2. The lease model supports this:
-each resource would declare a cost against a named pool, and admission would check the pool instead
-of a seat count. The admission rule and its interaction with preemption are not designed yet. This is
-not in the first release.
+One memory budget shared by resources of different cost (a 28 GB pool where the monolith costs 12 and
+the Next.js stack costs 2) was considered and rejected. Fixed capacities give the team exact control
+over what can run at once. A pool would also be wrong on most machines, because a workspace cannot
+know what else the developer runs: other workspaces, a blog, an editor. `aw doctor` warns when the
+capacities of all workspaces registered on one machine could together need more memory than the
+machine has, for resources that declare an approximate `memory`.

@@ -22,9 +22,9 @@ The CLI is part of the design, not an afterthought. Most of the tool's value is 
 | Command | Who | Does |
 |---|---|---|
 | `aw` | human | Dashboard: needs you, running, parked, cleanable |
-| `aw new "<purpose>" [--harness h] [--tmux]` | human | Claim a lane and launch a harness in it |
+| `aw new "<purpose>" [--harness h] [--mux]` | human | Claim a lane and launch a harness in it |
 | `aw attach "<purpose>"` | agent | Claim a lane for the current session |
-| `aw resume [name] [--all] [--tmux]` | human | Reopen sessions where they left off |
+| `aw resume [name] [--all] [--mux]` | human | Reopen sessions where they left off |
 | `aw open <name>` | human | Start a fresh session on existing work, with the handoff injected |
 | `aw recap [--remote]` | human | Full status, for after a reboot or a weekend |
 | `aw run <project> <cmd…>` | both | Run a command in the right place with the lane's environment |
@@ -100,8 +100,9 @@ CLEANABLE
   2 lanes proven merged → aw sweep
 ```
 
-`--remote` adds merge request and CI status from the forge. `aw resume --all --tmux` reopens every
-interrupted session, one per window.
+`--remote` adds merge request and CI status from the forge. `aw resume --all --mux` reopens every
+interrupted session, one per window or pane of the multiplexer chosen in the individual layer (herdr,
+tmux or another; see [architecture.md](architecture.md#terminal-multiplexers)).
 
 ## Finishing and cleanup
 

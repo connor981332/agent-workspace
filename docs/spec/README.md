@@ -78,16 +78,27 @@ shows where any value came from.
 | [onboarding.md](onboarding.md) | Agentic onboarding skills, the readiness audit and rehearsal. |
 | [decisions.md](decisions.md) | Each design decision, its alternative and its cost, compared with the candidates. |
 
-## Open questions
+## Settled questions
 
-These are deliberately undecided. The implementation plan should either decide them or schedule the
-decision.
+These were left open when the specification was written. They were settled on 2026-11-07, and the
+[implementation plan](../../plans/release-candidate.md#8-open-questions) carries out the decisions.
 
-1. Whether `aw upgrade` activates a new version immediately (with state migration) or offers a drain
-   that waits until no lane holds a lease. Current lean: immediate, with `--drain` as an option.
-2. Budget-based capacity (a machine-wide memory pool shared by resources of different cost). The
-   lease model allows it; the admission rule is not designed. See [resources.md](resources.md).
-3. Per-lane isolation for external services that are shared today: mail inboxes, webhook routing and
-   provider sandbox accounts. See [lifecycle.md](lifecycle.md#external-service-stand-ins).
-4. Real sandboxing as an optional runner. Out of scope for the first release.
-5. Which harnesses are supported at first release beyond Claude Code and Codex.
+1. **Upgrades take effect at once.** When the owner checkout's pin changes, every running session
+   uses the new version at its next tool call, after the state backup and migration in
+   [distribution.md](distribution.md). A `--drain` option is added only if a future state migration
+   cannot run safely while leases are held.
+2. **Capacities stay fixed.** There is no budget-based capacity. Fixed capacities give the team exact
+   control, and no shared pool could know what else runs on a developer's machine, such as other
+   workspaces. See [resources.md](resources.md#why-capacities-are-fixed).
+3. **External services are shared in the first release** as shown in
+   [lifecycle.md](lifecycle.md#external-service-stand-ins). Per-lane inboxes and webhook routing
+   between lanes that share a sandbox account are decided when the stand-in modules are built.
+4. **Real sandboxing is out of scope for 1.0.** Where a harness has its own sandbox, `aw setup`
+   configures it to allow exactly the lane, the state directory and the repositories' Git
+   directories.
+5. **Harnesses come in two tiers.** Tier 1 is hooked, with guards enforced: Claude Code, Codex, Grok
+   and OpenCode, all at first release. Tier 2 is every other harness, which gets the composed
+   instructions and the single entry point and is documented as not confined (R57). Declarative
+   adapters let a team add a hooked harness without a new release (see
+   [architecture.md](architecture.md#harness-adapters)). Sessions can be opened in any terminal
+   multiplexer: herdr and tmux are built in, and others are configured with a command template.

@@ -132,8 +132,9 @@ When a new version first runs against a workspace's state store:
 4. A binary that finds a state schema newer than it knows (someone ran a newer version, then pulled
    an older pin) goes read-only: it reports the situation and the fix, and protects every lane.
 
-Whether `aw upgrade` should offer to drain first, waiting until no lane holds a lease, is an open
-question (see [README.md](README.md#open-questions)).
+The new version takes effect at once. A `--drain` option, which would wait until no lane holds a
+lease, is added only if a future state migration cannot run safely while leases are held (see
+[README.md](README.md#settled-questions)).
 
 ### Compatibility promise
 

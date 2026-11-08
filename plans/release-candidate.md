@@ -14,15 +14,19 @@ milestone named in its row.
 
 **Updated:** 2026-11-07
 
-**Branches / MRs:** `plan/release-candidate`, [PR #5](https://github.com/connor981332/agent-workspace/pull/5) (this plan). No implementation branches yet.
+**Branches / MRs:** [PR #5](https://github.com/connor981332/agent-workspace/pull/5) (this plan, merged),
+[PR #6](https://github.com/connor981332/agent-workspace/pull/6) (`plan/open-questions`: the
+settled questions, in the spec and here). No implementation branches yet.
 
 **Done:** Read the spec and both candidates. Wrote this plan: milestones M0 to M12, v0.1 defined at
 the end of M7, R1 to R94 assigned, the acceptance suite design and its inventory, the module layout,
-benchmarks, the release pipeline, CI, open questions, risks, spec issues and the first tasks.
+benchmarks, the release pipeline, CI, risks, spec issues and the first tasks. Settled all five of
+the spec's open questions with the spec owner (§8); the spec records the answers under "Settled
+questions" in its README.
 
-**In progress:** Nothing. The plan waits for review in PR #5.
+**In progress:** Nothing. PR #6 waits for review.
 
-**Next step:** After the PR merges, start [T1](#t1-go-module-skeleton-and-ci-matrix): the Go module
+**Next step:** After PR #6 merges, start [T1](#t1-go-module-skeleton-and-ci-matrix): the Go module
 skeleton and the four-platform CI matrix, on a branch named `m0/skeleton`. Before M1 starts, the
 spec owner must answer the spec issues needed by M1 (S5 and S6 in [Spec issues](#spec-issues)).
 
@@ -73,7 +77,7 @@ the end of M7. Both workspaces the candidates came from run their projects in co
 per-lane databases, share scarce servers, and (in C1's case) enforce lanes with hooks. A release
 without any one of these would be a step back for one of those teams. So v0.1 includes config
 layers, the state store, the launcher, lanes, merge proof with forge evidence, guards for Claude
-Code and Codex, the resource queue with owner preemption, lifecycle hooks with the Postgres and
+Code, Codex, Grok and OpenCode, the resource queue with owner preemption, lifecycle hooks with the Postgres and
 Redis providers, the host and devcontainer runners, and a published, verifiable release.
 
 **Deferred past v0.1, and why:**
@@ -84,7 +88,7 @@ Redis providers, the host and devcontainer runners, and a published, verifiable 
 | Delegation, roles, publication pre-authorization, change sets, `move-to-lane`, `try` | M9 (v0.3) | They make the tool more convenient but no safer. v0.1 already asks before anything outward-facing (the default in R72), and the owner can run maintenance commands personally. |
 | Modules, shared-infrastructure management, stand-ins, per-session browser, the plans mechanism | M10 (v0.4) | Teams keep their existing Compose files and plans as their own files. Lanes do not depend on them. |
 | `aw inspect`, `aw rehearse`, onboarding skills, `aw add project` | M11 (v0.5) | Maintainers write `workspace.toml` by hand, as they do with both candidates today. |
-| Documentation for outsiders, the decision on Grok, the optional supervisor, the security review | M12 (1.0) | These are about the public release, not about daily use. |
+| Documentation for outsiders, declarative harness adapters, the optional supervisor, the security review | M12 (1.0) | These are about the public release, not about daily use. The four built-in adapters already cover the harnesses the maintainers use. |
 
 ### M0: Foundations
 
@@ -178,8 +182,11 @@ harness launches.
   publication policy, which asks (R72, its default half); team guards declared in configuration
   (R54, S9); and changes to the workspace's own configuration from a pair session (R63). Every
   error is a deny.
-- `harness`: adapters for Claude Code and Codex, built from recorded payload fixtures. An
-  unrecognized payload is denied (R56). Session-start context. Session identity and PID tracking
+- `harness`: built-in adapters for the four tier-1 harnesses, Claude Code, Codex, Grok and OpenCode,
+  built from recorded payload fixtures. Build Claude Code and Codex first, then Grok (ported from
+  C1's adapter and tests), then OpenCode, whose adapter installs a managed plugin whose
+  `tool.execute.before` handler runs `bin/aw hook opencode` and cancels the call on a deny
+  (architecture.md). An unrecognized payload is denied (R56). Session-start context. Session identity and PID tracking
   (several processes for one session ID, adoption of a Codex attach by its first hook). Purpose
   capture from the first prompt. Hook configuration installed and merged with the user's existing
   settings.
@@ -194,7 +201,11 @@ harness launches.
   detection of hand edits to generated blocks (R52), and personal content kept out of the team
   repository (R53, S13).
 - `aw resume` and `aw open`, using each adapter's resume flag (R77).
-- The harness parity suite (R56).
+- Terminal multiplexers: `--mux` on `aw new`, `aw resume` and `aw pair`, with herdr and tmux built
+  in and a command template for any other (the `multiplexer` key in the individual layer). Session
+  liveness follows the harness process, whatever its parent. A policy rule stops lane agents from
+  using a multiplexer's API (herdr's socket and CLI) to run commands outside their lane.
+- The harness parity suite (R56), across all four adapters.
 - `docs/safety.md`, which states the safety model (R94, first version).
 
 **Safety invariants covered in this milestone:** guards fail closed (an invalid config, a corrupt
@@ -221,6 +232,9 @@ both reference runners. The ref hook has the same budget (S3).
   hostnames and URLs (R74), and token resources with acquire and release scripts through the
   extension protocol.
 - `aw finish` and `aw park` release only the lane's own leases.
+- `aw doctor` warns when the capacities of all workspaces registered on the machine (S15) could
+  together need more memory than the machine has, for resources that declare an approximate
+  `memory`. Capacities are always fixed (§8, question 2).
 
 **Safety invariants covered in this milestone:** eviction never touches a lane's files, branches or
 data; the owner's servers always count against capacity and always win the queue; a lease that
@@ -288,6 +302,9 @@ and its results are recorded in the PR.
   distribution.md.
 - The global `aw` acts as a proxy for the workspace's pin.
 - `aw doctor` complete for the v0.1 feature set.
+- Harness sandboxes: where a tier-1 harness has its own sandbox (Codex and Claude Code do), `aw setup`
+  configures it to allow exactly the lane, the state directory and the repositories' Git
+  directories (§8, question 4; risk 7).
 - Documentation: getting started, the configuration reference (generated from the schema), the
   safety model, and the supported harnesses.
 - Dogfooding: at least two real workspaces move onto v0.1 release candidates without falling back
@@ -306,7 +323,7 @@ recorded in this plan.
 
 `aw upgrade` with the changelog between versions, configuration migration with a diff (R10),
 managed-file regeneration with edit detection and eject (R18), state migrations with a backup
-(R19), lanes never stranded by an upgrade (R20), the decision on open question 1, Homebrew (§6),
+(R19), lanes never stranded by an upgrade (R20), the `--drain` check from §8 (question 1), Homebrew (§6),
 and a Renovate preset.
 
 **Exit criterion:** an upgrade from v0.1.x to v0.2.0 passes in an acceptance scenario that starts
@@ -329,7 +346,9 @@ first-party modules for a mail catcher, an object store with a bucket provider, 
 pgAdmin, webhook forwarding, a browser MCP server with an isolated browser per session, the
 implementer role and plans (R75, R76, F7, F15, F16, F19); and the plan mechanism (templates, the
 status convention, the index, the docs checker, promotion from individual to team, and opting out:
-R82, R83, R84, R66). The decisions on open question 3 are made at the start of this milestone.
+R82, R83, R84, R66). The decisions on per-lane mail and webhook routing (§8, question 3) are made
+at the start of this milestone. Build the mail catcher first: RideTracker sends email, so it can
+dogfood the module at once, and webhooks are likely to follow.
 
 **Exit criterion:** every first-party module installs, is recorded and can be ejected. The M10
 scenarios pass. `aw check-docs` passes on this repository's own `plans/` and `docs/`.
@@ -347,9 +366,9 @@ validate` checks in CI.
 
 ### M12: 1.0
 
-Documentation written for people outside the two source teams (R94, complete); the decision on
-Grok and other harnesses (open question 5); a harness without hooks gets instructions and a
-documented warning (R57); the optional `aw supervise` as a user service; a performance audit of
+Documentation written for people outside the two source teams (R94, complete); declarative
+adapters, so a team or module can add a hooked harness without a new release, covered by the parity
+suite (architecture.md); a harness without hooks gets instructions and a documented warning (R57); the optional `aw supervise` as a user service; a performance audit of
 every budget on real laptops; a security review of the guards and the launcher; removal of anything
 specific to the source teams; contribution guidelines; and the public announcement.
 
@@ -422,7 +441,7 @@ agreement.
 | R53 | Personal content never dirties the team repository | M3 | S13. |
 | R54 | Team guards and hooks with requirements | M3 | S9. |
 | R55 | Syntax-tree guard decisions, fail closed | M3 | |
-| R56 | Harness parity suite | M3 | |
+| R56 | Harness parity suite | M3 | Claude Code, Codex, Grok and OpenCode. Declarative adapters join it in M12. |
 | R57 | Harnesses without hooks | M12 | The instructions themselves exist from M3. |
 | R58 | Lane agents cannot disturb the owner checkout | M3 | Safety invariant. |
 | R59 | `reference-transaction` hook | M3 | S3, risk 3. |
@@ -527,7 +546,8 @@ schema = 1
   runs `<cmd>` on the host in `<dir>`, with the env file applied. That is valid because the runner
   uses the same paths inside and outside the container (S7), and it lets runner scenarios observe
   real effects.
-- **Harness stubs** (`claude`, `codex`) are long-lived processes that record their argv, so `aw new`
+- **Harness stubs** (`claude`, `codex`, `grok`, `opencode`) and **multiplexer stubs** (`herdr`,
+  `tmux`) are long-lived processes that record their argv, so `aw new`
   and `aw resume` can be checked, and own a PID, so session liveness can be tested. Payloads come
   from recorded fixtures in `acceptance/fixtures/payloads/<harness>/<harness-version>/`, templated
   with the scenario's paths.
@@ -613,8 +633,8 @@ Scenario areas: `cli`, `config`, `state`, `launcher`, `init`, `doctor`, `whoami`
 | `test_read_only_git_explains_the_fix` | `state/read-only-state-dir-names-fix` | R14 | M2 |
 | `test_only_session_start_revives_an_ended_record` | `sessions/only-start-revives` | R23 | M3 |
 | `test_join_requires_a_verifiable_process` | `sessions/join-needs-live-process`, unit | R23 | M3 |
-| `test_grok_payloads_are_normalized` | Deferred to the Grok decision (open question 5); the fixtures are kept for it | R56 | M12 |
-| `test_grok_attach_and_confinement` | Deferred, as above; its cases join the parity table | R56 | M12 |
+| `test_grok_payloads_are_normalized` | `harness/grok-payloads`, from C1's payloads, rerecorded from the current Grok CLI | R56 | M3 |
+| `test_grok_attach_and_confinement` | `harness/grok-attach-and-confinement`; its cases also join the parity table | R56, R58 | M3 |
 | `test_codex_attach_is_adopted_by_its_hook` | `harness/codex-attach-adopted` | R56, R77 | M3 |
 | `test_codex_patches_name_their_files` | `harness/codex-apply-patch-paths`: every path in the patch is checked | R55 | M3 |
 | `test_mapped_session_hooks` | `policy/attached-session-in-owner-cwd`. Changed: an unattached session in the owner checkout is refused writes with the `aw attach` and `aw pair` message (lazy claiming), where C1 allowed them. | R58 | M3 |
@@ -738,7 +758,7 @@ Scenario areas: `cli`, `config`, `state`, `launcher`, `init`, `doctor`, `whoami`
 | F12 Freeing slots is a procedure | The `sweep/*` scenarios. Changed: stricter, merge proof only (R25). | R25 | M2 |
 | F13 Restored snapshots lag the code | `providers/restore-then-reset-hook` | R35 | M5 (S19) |
 | F14 Postgres cannot copy a database in use | `providers/postgres-terminate-option`, `providers/snapshot-quiesces-lane-servers` | R35 | M5 (S19) |
-| F15 Mail is shared | `modules/mail-lane-tag` | R75 | M10 (open question 3) |
+| F15 Mail is shared | `modules/mail-lane-tag` | R75 | M10 (§8, question 3) |
 | F16 Object storage is shared | `modules/bucket-provider-per-lane` | R33, R75 | M10 |
 | F17 Third-party sandboxes are shared | `onboarding/audit-idempotency-keys`, `modules/webhook-to-registering-lane` | R75, R86 | M10, M11 |
 | F18 Human-gated setup | `providers/postgres-snapshot-restore`, `lanes/secret-links-relative` | R35, R67 | M2, M5 |
@@ -754,7 +774,10 @@ These are written from the spec directly: `policy/ref-hook-refuses-foreign-ref` 
 `broker/owner-port-counts` (R36 to R45), `state/newer-schema-read-only` (R19),
 `config/lock-refused-and-reported` (R7), `config/explain-provenance` (R8),
 `lanes/pool-claim` (R24), `lanes/discard-refused-to-agents` (R27), `harness/unknown-payload-denied`,
-`harness/parity` (R56), `compose/personal-content-untracked` (R53) and
+`harness/parity` (R56), `harness/opencode-plugin-cancels-on-deny`, `harness/mux-herdr`,
+`harness/mux-tmux`, `harness/mux-command-template`, `policy/mux-pane-outside-lane-denied`,
+`setup/harness-sandbox-allows-lane` (M7), `doctor/machine-capacity-warning` (M4),
+`compose/personal-content-untracked` (R53) and
 `recap/after-reboot-interrupted` (R80).
 
 ### 3.6 Coverage check
@@ -800,7 +823,9 @@ internal/
   runners/                  runner interface, host, devcontainer (identity, claim, mount and port checks)
   policy/                   the decision path and its rules
   shell/                    mvdan.cc/sh wrapper: commands, redirects, literal paths, unknowns
-  harness/                  adapter interface; claude/, codex/; payload decoding, decisions, hook config
+  harness/                  adapter interface; claude/, codex/, grok/, opencode/; payload decoding, decisions, hook config
+  harness/declarative/      declarative adapters compiled into the config cache (M12)
+  mux/                      terminal multiplexers: herdr, tmux, command templates
   harness/launch/           launching and resuming each harness (uses subprocesses, so not hot-path safe)
   compose/                  AGENTS.md block, import files, skills, MCP config, managed-file hashes
   sessions/                 session records, attachments, generations, handoffs, recap model
@@ -976,13 +1001,16 @@ candidates are archived.
 
 ## 8. Open questions
 
-| # | Question (README.md) | Decision | When |
+All five questions from the spec's README were settled with the spec owner on 2026-11-07. The spec
+now records them under "Settled questions" in [its README](../docs/spec/README.md#settled-questions).
+
+| # | Question | Decision | Where it lands |
 |---|---|---|---|
-| 1 | Does `aw upgrade` activate at once, or offer `--drain`? | **Decided: activate at once**, with the backup and migration in distribution.md. Activation happens when the owner checkout's `.aw/version` changes, which is when `aw upgrade` runs there, or when a pull brings the change in. `--drain` is scheduled, not decided: at the M8 design review, it is added only if a v0.2 state migration cannot run safely while leases are held. | Decided now; `--drain` reviewed at M8 start |
-| 2 | Budget-based capacity | **Deferred past 1.0.** The broker keeps its admission rule behind one function (`admit(resource, request) → grant or wait`), so a memory pool can replace the seat count later without touching the queue, preemption or recovery code. A design note is due before any work starts. | Reviewed after 1.0, with usage data |
-| 3 | Per-lane isolation for mail, webhooks and sandbox accounts | **First release as in the lifecycle.md table.** Scheduled decisions at the start of M10: per-lane mail through Mailpit tags, or separate inboxes; routing webhooks when several lanes share one sandbox account. One account per lane stays out of 1.0 because each one must be onboarded by a person (F18). | M10 start |
-| 4 | Real sandboxing as an optional runner | **Out of scope for 1.0**, as the spec says. The runner interface stays open to a sandboxed runner. | After 1.0 |
-| 5 | Harnesses at first release beyond Claude Code and Codex | **Decided for v0.1: Claude Code and Codex only**, both hooked. **Scheduled for M12:** Grok gets an adapter in 1.0 only if its hook payloads are documented and stable enough to record fixtures (C1 already has a Grok adapter and tests to start from). Every other harness gets the composed instructions and the single entry point, with the warning that it is not confined (R57). | Decided for v0.1; Grok at M12 start |
+| 1 | Does `aw upgrade` take effect at once, or offer `--drain`? | **At once**, with the backup and migration in distribution.md. Activation happens when the owner checkout's `.aw/version` changes, which is when `aw upgrade` runs there, or when a pull brings the change in. Running sessions switch at their next tool call. `--drain` is added only if a state migration cannot run safely while leases are held. | M8; a migration that needs `--drain` must say so in its PR |
+| 2 | Budget-based capacity | **Not planned. Capacities are fixed.** They give the team exact control, and no shared pool could know what else runs on a developer's machine (other workspaces, a blog). Instead, `aw doctor` warns when the capacities of all workspaces registered on the machine could need more memory than it has. The spec's "later" section is replaced by the reason. | M4 (the doctor warning) |
+| 3 | Per-lane isolation for mail, webhooks and sandbox accounts | **First release as in the lifecycle.md table**: a shared inbox that lanes filter by tag, a bucket per lane, webhooks forwarded to the lane that registered, shared provider accounts with snapshots, and an audit finding for idempotency keys that can repeat. Decided at the start of M10: a real inbox per lane, and webhook routing when lanes share one account. One account per lane stays out of 1.0, because a person must onboard each one (F18). RideTracker sends email and will likely take webhooks, so the mail catcher is built first and dogfooded there. | M10 start |
+| 4 | Real sandboxing | **Out of scope for 1.0.** Meanwhile, `aw setup` configures each tier-1 harness's own sandbox, where it has one, to allow exactly the lane, the state directory and the Git directories. | M7 (harness sandboxes); a sandboxed runner after 1.0 |
+| 5 | Which harnesses at first release | **Two tiers.** Tier 1, hooked with guards enforced, in v0.1: Claude Code, Codex, Grok and OpenCode. Tier 2: every other harness gets the composed instructions and the single entry point, and is documented as not confined (R57). Declarative adapters let a team add a hooked harness without a release (1.0). Separately, sessions open in any terminal multiplexer: herdr and tmux are built in, others through a command template. | M3 (four adapters, multiplexers), M12 (declarative adapters, R57) |
 
 ---
 
@@ -1009,12 +1037,12 @@ Ranked by likelihood times impact.
 | # | Risk | Mitigation |
 |---|---|---|
 | 1 | **The hook latency budget (5 ms p99 including the launcher) is missed**, especially on macOS, where process start is slower and the first run of a new binary is scanned. Every tool call of every agent pays this. | The architecture is proven in M0 before anything is built on it (T3, with a 3 ms target that leaves room for the rules). The budget is enforced from M1. The hot path is structurally limited (§4.3). The CLI framework is bypassed. If the target is missed, the fallbacks, in order: shrink package initialization on the hot path; read a small per-session snapshot file that state changes write, instead of opening SQLite (a spec change, taken to the spec owner first); keep binary size down. The cached binary is executed before the first hook, at `aw setup`, so the one-time scan never lands in a hook. |
-| 2 | **Harness payloads change without notice.** An adapter that fails closed blocks every tool call of that harness. | Recorded fixtures per harness version. Adapters detect the version from the payload's shape and the environment. The deny message names the fix (update `aw`, or pin the harness version). A weekly scheduled CI job diffs the hook input types published by each harness (for example the Claude Agent SDK's type definitions and Codex's hook documentation) against the fixtures, and opens an issue on a change. Patch releases are reserved for adapter fixes. |
+| 2 | **Harness payloads change without notice.** An adapter that fails closed blocks every tool call of that harness. | Recorded fixtures per harness version. Adapters detect the version from the payload's shape and the environment. The deny message names the fix (update `aw`, or pin the harness version). A weekly scheduled CI job diffs the hook input types published by each harness (for example the Claude Agent SDK's type definitions, Codex's hook documentation and OpenCode's plugin types) against the fixtures, and opens an issue on a change. With four built-in adapters this is the most frequent kind of maintenance, which is also why declarative adapters (M12) matter. Patch releases are reserved for adapter fixes. |
 | 3 | **The `reference-transaction` hook behaves differently across Git versions**, or Git updates refs that the rule did not anticipate (fetch, stash, worktree creation, `aw`'s own operations from a lane), leading to false refusals or gaps. | The M0 spike records the behavior matrix. The allowed-ref rules are written from it (S3). The `git-versions` CI job gates M3. The guards remain the first line of protection. `aw doctor` checks the Git version and `core.hooksPath`. Fast exit for the `committed` and `aborted` states, which cannot reject. |
 | 4 | **Devcontainer identity on macOS**: Docker Desktop, OrbStack and Colima differ in file sharing, path case, the `/private` symlinks and port publishing, and container PIDs are not visible from the host. GitHub's macOS runners have no Docker. | Paths are canonicalized everywhere. Same-path mounts (S7). A host-side keeper process per container server, for liveness and eviction (S8). Stubbed acceptance tests on macOS CI. A manual checklist on Docker Desktop and OrbStack at M6 and before each release. Supported engines are documented. |
 | 5 | **Scope**: v0.1 is large, and the candidates keep working meanwhile, so it may slip. | Each milestone is a usable pre-release, dogfooded from M2. The deferred list is explicit. Each milestone's scenarios are written at its start, so progress is measurable. |
 | 6 | **State contention**: many agents writing to SQLite at once. | WAL mode, `BEGIN IMMEDIATE` for writers, short transactions, a busy timeout, activity writes that are batched and never waited on, and a stress scenario with concurrent `attach`, `serve` and `sweep` (`lanes/attach-concurrent`, `lanes/concurrent-sweep-and-attach`). |
-| 7 | **Sandboxed harnesses cannot write the state store.** Codex's default sandbox keeps `.git` read-only, and SQLite in WAL mode needs write access to its `-shm` file even to read. | `aw setup` writes the state directory into Codex's writable roots. When writes fail, the error names that setting (C1 behavior, scenario `harness/codex-sandbox-names-writable-root`). `aw doctor` checks it. |
+| 7 | **Sandboxed harnesses cannot write the state store.** Codex's default sandbox keeps `.git` read-only, and SQLite in WAL mode needs write access to its `-shm` file even to read. | `aw setup` writes the state directory into Codex's writable roots, as part of configuring each harness's own sandbox to the lane (M7). When writes fail, the error names that setting (C1 behavior, scenario `harness/codex-sandbox-names-writable-root`). `aw doctor` checks it. |
 | 8 | **Merge proof wrongly proves a merge**, and a lane is destroyed. | Every C1 evidence test is carried over. Unknown means keep. Removal never forces. `discard` archives before removing. Before v0.1, a property test generates random histories and checks that proof implies the head is reachable from the base, or that a forge reported exactly that head. |
 | 9 | **Process supervision without a daemon** leaves orphaned servers, or kills the wrong process. | Process identity is the PID plus its start time. A process whose identity is uncertain is never signalled. Process-group signalling only. `procs` unit tests run on both operating systems. Recovery stops orphans on the next state-changing command. |
 | 10 | **The shell parser refuses ordinary commands** (false denials), which pushes people to disable guards. | A corpus of real agent commands, gathered from the maintainers' sessions with C1 and redacted, is part of the unit tests. The false-denial rate is reported in the PR summary. |
