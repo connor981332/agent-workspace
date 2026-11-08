@@ -201,10 +201,30 @@ hook that refuses ref updates from a lane outside that lane's branches (see
 
 ## Harness adapters
 
-An adapter is a small piece of Go code per harness that knows the harness's hook payload, how to
-return a decision and context, how to install hook configuration, how to launch the harness in a
-directory, and how to resume a session by ID. Payload formats are not stable interfaces, so each
-adapter is covered by recorded payload fixtures, and an unrecognized payload is denied.
+An adapter knows a harness's hook payload, how to return a decision and context, how to install
+hook configuration, how to launch the harness in a directory, and how to resume a session by ID.
+Payload formats are not stable interfaces, so each adapter is covered by recorded payload fixtures,
+and an unrecognized payload is denied.
+
+Built-in adapters, written in Go, cover Claude Code, Codex, Grok and OpenCode. OpenCode has no hook
+command; its adapter installs a small managed plugin whose `tool.execute.before` handler runs
+`bin/aw hook opencode` and cancels the tool call on a deny. A **declarative adapter**, a mapping
+from a harness's payload fields and tool names to the common form, compiled into the configuration
+cache, lets a team or module add another hooked harness without a new release. Harnesses whose
+payloads need real parsing, such as Codex's patches, keep a built-in adapter.
+
+A harness with no hooks gets the composed instructions and `bin/aw` as its single entry point, and
+the documentation says it is not confined.
+
+### Terminal multiplexers
+
+`aw new`, `aw resume` and `aw pair` can open a session in a terminal multiplexer instead of the
+current terminal. The individual layer chooses one with `multiplexer`: `herdr` and `tmux` are built
+in, `none` is the default, and any other is a command template such as
+`{ command = "zellij run --name {name} -- {cmd}" }`. Session liveness never depends on the
+multiplexer: it follows the harness process, whatever its parent is. Agents that can start panes
+through a multiplexer's API (herdr has a socket API and CLI) are guarded like any other command, and
+a lane agent cannot use one to run commands outside its lane.
 
 The harness parity suite runs the same scenario table through every adapter and requires identical
 decisions.

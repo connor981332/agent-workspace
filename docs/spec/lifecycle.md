@@ -137,9 +137,10 @@ Restoring a snapshot taken on an older schema leaves the data behind the code. T
 
 ## External-service stand-ins
 
-Modules provide shared stand-ins. Isolation per lane for some of them is an open question:
+Modules provide shared stand-ins. Per-lane isolation beyond the first release is decided when
+the stand-in modules are built (see [README.md](README.md#settled-questions)):
 
-| Service | First release | Open |
+| Service | First release | Later |
 |---|---|---|
 | Mail catcher | Shared inbox; lanes can filter by a per-lane tag or recipient | A real per-lane inbox |
 | Object store | A bucket per lane through a provider | — |
