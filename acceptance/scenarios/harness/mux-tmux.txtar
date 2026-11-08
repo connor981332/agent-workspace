@@ -1,6 +1,46 @@
-# harness/mux-tmux: to be written (plan §3.5).
+# --mux opens a session in tmux, with its own directory and identity, whatever tmux's server was
+# started with. Inside tmux it is a new window; outside, a detached session. The session is held
+# until its own process exits, which its first hook call records.
 # req: R77
 # source: spec (no candidate source)
 # milestone: M3
 
-unwritten
+workspace shop --init
+stubs tmux claude
+exec sh $WORK/use.sh tmux
+
+env TMUX=
+exec aw new 'fix checkout tax' --mux -- --model opus
+stderr 'opened claude in tmux session checkout-tax'
+exec cat $STUB_LOG
+stdout '^tmux \[new-session\] \[-d\] \[-s\] \[checkout-tax\] '
+stdout '^claude \[--model\] \[opus\]$'
+stdout '^claude cwd .*/\.worktrees/01$'
+stdout '^claude AW_SESSION=claude:new-[0-9a-f]{16}$'
+exec aw sweep --json
+json stdout .lanes[0].action keep
+
+env TMUX=/tmp/tmux-1000/default,1,0
+exec aw pair --mux
+stderr 'opened claude in a new tmux window, pair'
+exec cat $STUB_LOG
+stdout '^tmux \[new-window\] \[-n\] \[pair\] '
+stdout '^claude AW_SESSION=claude:pair-[0-9a-f]{16}$'
+
+# Every interrupted session comes back, in the background.
+exec aw attach 'add feature flag'
+session s-1 claude
+exec aw attach 'add webhook retries'
+end-session s-1
+exec aw resume --all --mux
+stderr 'resumed webhook-retries in a new tmux window'
+exec cat $STUB_LOG
+stdout '^tmux \[new-window\] \[-d\] \[-n\] \[webhook-retries\] '
+stdout '^claude \[--resume\] \[s-1\]$'
+
+! exec aw resume --all
+stderr 'needs --mux'
+
+-- use.sh --
+mkdir -p "$XDG_CONFIG_HOME/agent-workspace"
+printf '[user]\nmultiplexer = "%s"\n' "$1" > "$XDG_CONFIG_HOME/agent-workspace/shop.toml"

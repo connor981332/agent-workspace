@@ -130,6 +130,12 @@ func JoinSession(tx *sql.Tx, id, pid int, start string) error {
 	return err
 }
 
+// ActivateSession marks a session as running again.
+func ActivateSession(tx *sql.Tx, id int) error {
+	_, err := tx.Exec(`UPDATE sessions SET state = ?, last_activity = ? WHERE id = ?`, SessionActive, now(), id)
+	return err
+}
+
 // InterruptSession marks a session as no longer running.
 func InterruptSession(tx *sql.Tx, id int) error {
 	_, err := tx.Exec(`UPDATE sessions SET state = ? WHERE id = ?`, SessionInterrupted, id)

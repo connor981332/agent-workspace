@@ -570,6 +570,86 @@ func isReadOnly(c shell.Command) bool {
 	return readOnly[name]
 }
 
+// herdrReads are the herdr verbs that only look, or that a harness uses to report its own state.
+var herdrReads = map[string]bool{
+	"list": true, "current": true, "get": true, "layout": true, "read": true, "process-info": true, "neighbor": true,
+	"edges": true, "wait-output": true, "report-agent": true, "report-agent-session": true, "release-agent": true,
+	"report-metadata": true, "status": true, "snapshot": true, "schema": true,
+}
+
+// muxRule stops a lane agent from using a multiplexer to run something elsewhere (R58): a pane it
+// opens or types into runs outside the lane and outside these guards. Looking is allowed.
+func muxRule(s Scope, c shell.Command) Decision {
+	if s.Role != Lane || len(c.Args) == 0 {
+		return allow()
+	}
+	name := c.Name()
+	args := c.Args[1:]
+	refuse := func() Decision {
+		return deny("multiplexer", "%s would run a command in a pane outside this lane, where the guards cannot see it → run it here, in the lane's shell", name)
+	}
+	for _, a := range args {
+		if a.Known && strings.Contains(a.Text, "herdr") && strings.Contains(a.Text, ".sock") {
+			return deny("multiplexer", "this command talks to herdr's socket, which can run commands outside this lane → run it here, in the lane's shell")
+		}
+	}
+	switch name {
+	case "tmux":
+		for i := 0; i < len(args); i++ {
+			t := args[i].Text
+			if !args[i].Known {
+				return refuse()
+			}
+			if t == "-L" || t == "-S" || t == "-f" || t == "-T" {
+				i++
+				continue
+			}
+			if strings.HasPrefix(t, "-") {
+				continue
+			}
+			if strings.HasPrefix(t, "list-") || strings.HasPrefix(t, "show-") || t == "ls" || t == "lsw" || t == "lsp" ||
+				t == "has-session" || t == "has" || t == "display-message" || t == "display" || t == "capture-pane" || t == "capturep" {
+				return allow()
+			}
+			return refuse()
+		}
+		return refuse()
+	case "herdr":
+		var words []string
+		for i := 0; i < len(args); i++ {
+			t := args[i].Text
+			if !args[i].Known {
+				return refuse()
+			}
+			if t == "--session" || t == "--machine" || t == "--remote" {
+				i++
+				continue
+			}
+			if !strings.HasPrefix(t, "-") {
+				words = append(words, t)
+			}
+		}
+		if len(words) > 1 && herdrReads[words[1]] || len(words) == 1 && words[0] == "status" {
+			return allow()
+		}
+		return refuse()
+	case "zellij":
+		if sub, _ := subcommand(args); sub == "list-sessions" || sub == "ls" {
+			return allow()
+		}
+		return refuse()
+	case "screen":
+		if hasArg(args, "-ls", "-list") {
+			return allow()
+		}
+		return refuse()
+	}
+	if s.MuxProgram != "" && name == s.MuxProgram {
+		return refuse()
+	}
+	return allow()
+}
+
 // writeTargets are the paths a command writes, removes or changes, for the common commands that do
 // so. Like every shell rule it stops accidents by cooperative agents: a program that writes files
 // by its own logic is not visible here.

@@ -1,6 +1,51 @@
-# policy/mux-pane-outside-lane-denied: to be written (plan §3.5).
+# A pane opened through a multiplexer runs outside the lane and outside the guards, so a lane agent
+# may look at panes but not start or type into them. A pair session may.
 # req: R58
 # source: spec (no candidate source)
 # milestone: M3
 
-unwritten
+workspace shop --init
+exec aw attach 'add feature flag'
+cd .worktrees/01
+exec sh $WORK/table.sh
+! stdout DIFFERS
+cd $OWNER
+exec sh $WORK/pair.sh
+exec awtest-hook bash 'tmux new-window -n x "npm test"'
+! stdout .
+exec awtest-hook bash 'herdr pane run p1 ls'
+! stdout .
+
+-- table.sh --
+check() {
+	want=$1 cmd=$2
+	for h in claude codex grok opencode; do
+		awtest-hook -harness "$h" bash "$cmd" >/dev/null 2>&1
+		got=$?
+		[ "$got" = "$want" ] || echo "DIFFERS: $h $cmd: exit $got, want $want"
+	done
+}
+check 2 'tmux new-window "cat ~/.ssh/config"'
+check 2 'tmux -L other send-keys -t 0 "rm -rf ." Enter'
+check 2 'tmux split-window'
+check 2 'tmux "$WHAT"'
+check 2 'herdr pane run p1 ls'
+check 2 'herdr pane send-text p1 hi'
+check 2 'herdr tab create --cwd /'
+check 2 'herdr workspace create'
+check 2 'herdr agent start x'
+check 2 'zellij run -- ls'
+check 2 'screen -dm ls'
+check 2 'socat - UNIX-CONNECT:/run/user/1000/herdr.sock'
+check 2 'echo $(tmux run-shell ls)'
+check 0 'tmux list-windows'
+check 0 'tmux -L other has-session -t x'
+check 0 'herdr pane list'
+check 0 'herdr pane read p1'
+check 0 'herdr tab get t1'
+check 0 'herdr status'
+check 0 'zellij list-sessions'
+check 0 'screen -ls'
+-- pair.sh --
+mkdir -p "$XDG_CONFIG_HOME/agent-workspace"
+printf '[user]\nowner_sessions = "pair"\n' > "$XDG_CONFIG_HOME/agent-workspace/shop.toml"

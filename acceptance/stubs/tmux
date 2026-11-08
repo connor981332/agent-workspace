@@ -1,0 +1,10 @@
+#!/bin/sh
+# Test double for tmux. It records its arguments in $STUB_LOG and runs the shell command it was given
+# last, as tmux would in a new window.
+{
+	printf 'tmux'
+	for a in "$@"; do printf ' [%s]' "$a"; done
+	printf '\n'
+} >> "$STUB_LOG"
+for last; do :; done
+sh -c "$last"

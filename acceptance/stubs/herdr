@@ -1,0 +1,15 @@
+#!/bin/sh
+# Test double for herdr. It records its arguments in $STUB_LOG, answers tab create with the new pane,
+# and runs what pane run is given.
+{
+	printf 'herdr'
+	for a in "$@"; do printf ' [%s]' "$a"; done
+	printf '\n'
+} >> "$STUB_LOG"
+case "$1 $2" in
+"tab create") printf '{"result":{"tab":{"tab_id":"t1"},"root_pane":{"pane_id":"p7"}}}\n' ;;
+"pane run")
+	for last; do :; done
+	sh -c "$last"
+	;;
+esac

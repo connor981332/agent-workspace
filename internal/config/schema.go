@@ -24,6 +24,7 @@ const (
 	kDuration               // string such as "15s", "45m", "14d"
 	kStringList             // array of strings
 	kHook                   // string, or { run, timeout, needs }
+	kMux                    // none, herdr, tmux, or { command }
 )
 
 // layer names where a key comes from.
@@ -70,6 +71,7 @@ func boolean(doc string) *node  { return &node{kind: kBool, doc: doc} }
 func duration(doc string) *node { return &node{kind: kDuration, doc: doc} }
 func strList(doc string) *node  { return &node{kind: kStringList, doc: doc} }
 func hook(doc string) *node     { return &node{kind: kHook, doc: doc} }
+func muxNode(doc string) *node  { return &node{kind: kMux, doc: doc, def: "none"} }
 
 func (n *node) withDefault(v any) *node { n.def = v; return n }
 func (n *node) oneOf(vs ...string) *node {
@@ -220,14 +222,8 @@ var schema = table("",
 				}
 				return "", ""
 			}),
-		"multiplexer", str("Where aw new, resume and pair open sessions with --mux: herdr, tmux, or a command "+
-			"template containing {command}.").withDefault("tmux").checked(func(v any) (string, string) {
-			s := v.(string)
-			if s == "herdr" || s == "tmux" || strings.Contains(s, "{command}") {
-				return "", ""
-			}
-			return "is neither herdr, tmux nor a template", `use "herdr", "tmux", or a command containing {command}`
-		}),
+		"multiplexer", muxNode("Where aw new, resume and pair open sessions with --mux: none, herdr, tmux, or a command "+
+			"template, { command = \"zellij run --name {name} -- {cmd}\" }."),
 		"auto_sweep", boolean("Recycle proven-merged lanes in the background.").withDefault(false),
 		"owner_sessions", str("normal: sessions in the owner checkout must attach to a lane before writing. pair: "+
 			"every session started in the owner checkout is a pair session.").oneOf("normal", "pair").withDefault("normal"),
@@ -304,6 +300,20 @@ func walk(d *doc, layer string, v any, n *node, path Path, errs *Errors) {
 			}
 			walk(d, layer, m[k], n.elem, path.child(k), errs)
 		}
+	case kMux:
+		switch m := v.(type) {
+		case string:
+			if m != "none" && m != "herdr" && m != "tmux" {
+				fail(path, fmt.Sprintf("%q is not a built-in multiplexer", m), `use "none", "herdr", "tmux", or { command = "… {name} -- {cmd}" }`)
+			}
+		case map[string]any:
+			walk(d, layer, m, muxTable, path, errs)
+			if c, _ := m["command"].(string); !strings.Contains(c, "{cmd}") {
+				fail(path.child("command"), "has no {cmd}, so it would not start the session", `write it like "zellij run --name {name} -- {cmd}"`)
+			}
+		default:
+			fail(path, "must be a name or a table { command = \"…\" }, not "+typeName(v), `write it as "tmux" or { command = "… {cmd}" }`)
+		}
 	case kHook:
 		switch h := v.(type) {
 		case string:
@@ -324,6 +334,10 @@ func walk(d *doc, layer string, v any, n *node, path Path, errs *Errors) {
 		}
 	}
 }
+
+var muxTable = table("",
+	"command", str("Opens a window or pane. {name} is the session's name and {cmd} the command to run in it."),
+)
 
 var hookTable = table("",
 	"run", str("The command."),
@@ -491,6 +505,8 @@ func lookupSchema(p Path) *node {
 			n = n.elem
 		case kHook:
 			n = hookTable.fields[seg]
+		case kMux:
+			n = muxTable.fields[seg]
 		default:
 			return nil
 		}

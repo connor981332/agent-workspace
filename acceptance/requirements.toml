@@ -3,9 +3,9 @@
 # The coverage check (§3.6) uses this file. See acceptance/README.md.
 
 # The latest milestone whose scenarios must pass. Scenarios of later milestones are pending.
-current = "M2"
+current = "M3"
 # The milestone being built: its written scenarios run and must pass, its unwritten ones are pending.
-in_progress = "M3"
+in_progress = ""
 
 [req.R1] # Guard decision < 5 ms p99
 milestone = "M1"
@@ -294,3 +294,4 @@ milestone = "M1"
 
 [req.R94] # Safety model stated plainly
 milestone = "M3"
+covered_by = "docs"

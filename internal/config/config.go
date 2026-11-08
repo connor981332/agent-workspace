@@ -146,10 +146,26 @@ type Locks struct {
 }
 
 type User struct {
-	Harness       string `json:"harness"`
-	Multiplexer   string `json:"multiplexer"`
-	AutoSweep     bool   `json:"auto_sweep"`
-	OwnerSessions string `json:"owner_sessions"`
+	Harness       string      `json:"harness"`
+	Multiplexer   Multiplexer `json:"multiplexer"`
+	AutoSweep     bool        `json:"auto_sweep"`
+	OwnerSessions string      `json:"owner_sessions"`
+}
+
+// Multiplexer is where --mux opens a session: a built-in by Name, or a Command template.
+type Multiplexer struct {
+	Name    string `json:"name,omitempty"`
+	Command string `json:"command,omitempty"`
+}
+
+func (m *Multiplexer) UnmarshalJSON(data []byte) error {
+	var s string
+	if json.Unmarshal(data, &s) == nil {
+		*m = Multiplexer{Name: s}
+		return nil
+	}
+	type plain Multiplexer
+	return json.Unmarshal(data, (*plain)(m))
 }
 
 type Ports struct {
@@ -471,6 +487,8 @@ func patternMatchesSchema(p Path) bool {
 			n = n.elem
 		case kHook:
 			n = hookTable.fields[seg]
+		case kMux:
+			n = muxTable.fields[seg]
 		default:
 			return false
 		}

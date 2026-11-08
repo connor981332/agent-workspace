@@ -145,6 +145,9 @@ func resolveScope(p Payload, version string, t *timing.Recorder) (*policy.Scope,
 		}
 	}
 
+	if f := strings.Fields(cfg.User.Multiplexer.Command); len(f) > 0 {
+		scope.MuxProgram = filepath.Base(f[0])
+	}
 	for _, name := range slices.Sorted(maps.Keys(cfg.Guards)) {
 		g := cfg.Guards[name]
 		tg := policy.TeamGuard{Name: name, Paths: g.Paths, Ask: g.Action == "ask", Message: g.Message, Requires: g.Requires}

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -42,6 +43,9 @@ func openForWrite() (*writeContext, error) {
 		}
 		_ = config.WriteCache(cache, frameworkVersion(), cfg) // a cache is an optimization; never fail on it
 	}
+	if err := checkSandbox(dir); err != nil {
+		return nil, err
+	}
 	store, err := state.Open(dir, state.ReadWrite)
 	if err != nil {
 		return nil, err
@@ -57,4 +61,22 @@ func openForWrite() (*writeContext, error) {
 		return nil, err
 	}
 	return w, nil
+}
+
+// checkSandbox names the setting to change when Codex's sandbox keeps the state directory read-only
+// (plan risk 7): SQLite's own error would say only that it cannot write.
+func checkSandbox(dir string) error {
+	if os.Getenv("CODEX_THREAD_ID") == "" {
+		return nil
+	}
+	if _, err := os.Stat(dir); err != nil {
+		return nil // nothing there yet: state.Open reports what is wrong
+	}
+	f, err := os.CreateTemp(dir, ".sandbox-probe-*")
+	if err != nil {
+		root := filepath.Dir(dir)
+		return fmt.Errorf("aw cannot write its state in %s, because Codex's sandbox keeps it read-only → start Codex with -c 'sandbox_workspace_write.writable_roots=[\"%s\"]', or add that to its configuration", dir, root)
+	}
+	f.Close()
+	return os.Remove(f.Name())
 }

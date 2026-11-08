@@ -15,7 +15,7 @@ type Requirement struct {
 	// Milestone is the first milestone named for the requirement in the plan's §2. From then on it
 	// must be covered.
 	Milestone string `toml:"milestone"`
-	// CoveredBy is "scenario" (the default), or "bench" or "ci" for requirements that a scenario
+	// CoveredBy is "scenario" (the default), or "bench", "ci" or "docs" for requirements that a scenario
 	// cannot show, such as a latency budget or the CI platform matrix.
 	CoveredBy string `toml:"covered_by"`
 }
@@ -60,9 +60,9 @@ func LoadRequirements(path string) (*Requirements, error) {
 			return nil, fmt.Errorf("%s: [req.%s] milestone: %v", path, key, err)
 		}
 		switch req.CoveredBy {
-		case "", "scenario", "bench", "ci":
+		case "", "scenario", "bench", "ci", "docs":
 		default:
-			return nil, fmt.Errorf("%s: [req.%s] covered_by: %q is not scenario, bench or ci", path, key, req.CoveredBy)
+			return nil, fmt.Errorf("%s: [req.%s] covered_by: %q is not scenario, bench, ci or docs", path, key, req.CoveredBy)
 		}
 	}
 	return &r, nil

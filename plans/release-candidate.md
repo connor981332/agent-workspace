@@ -84,7 +84,9 @@ Now (`m3/resume`): `aw resume [name]` with each harness's resume flag and the fa
 
 (PR #36.) Now (`m3/team-guards`): team guards (R54, S9) and a session's purpose from its first prompt, with the schema and the extra hook write the spec owner approved on 2026-11-08. Executable guards are left out of the first release.
 
-**Next step:** terminal multiplexers, `docs/safety.md`.
+(PR #37.) Now (`m3/mux`): `--mux` on `aw new`, `aw pair` and `aw resume`, with herdr, tmux and command templates, following architecture.md's form of the setting as the spec owner decided on 2026-11-08 (the default is `none`); a lane agent may not start or type into panes; `docs/safety.md` (R94, checked as a document); the `git-versions` CI job; and `requirements.toml` moved to `current = "M3"`. Real herdr and tmux have not been driven by the suite, only stand-ins. herdr's reply format was read from its bundled documentation.
+
+**Next step:** the M3 pre-release, then M4.
 
 **Pending manual checks:** the hot-path and budget benchmarks on an Apple Silicon laptop (T3, M1, M2;
 docs/dev/benchmarks.md).

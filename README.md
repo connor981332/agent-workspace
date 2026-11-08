@@ -54,7 +54,7 @@ The specification adds two principles the wishlist did not state: the tool is ne
 - **The tool is never the bottleneck.** Only the project's own work, such as booting servers or migrating databases, takes noticeable time.
 - **Uncertain work stays.** Cleanup removes only work it can prove was merged.
 - **Guards fail closed.** If a guard cannot run, the action is blocked.
-- **Honest about safety.** Hooks are guardrails for cooperative agents, not a security sandbox. Do not run untrusted agents or prompts on the strength of this tool.
+- **Honest about safety.** Hooks are guardrails for cooperative agents, not a security sandbox. Do not run untrusted agents or prompts on the strength of this tool. See the [safety model](docs/safety.md).
 - **Any agent tool.** One set of instructions, not one per harness.
 
 ## Open source plans

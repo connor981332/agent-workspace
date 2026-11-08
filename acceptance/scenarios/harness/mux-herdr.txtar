@@ -1,6 +1,19 @@
-# harness/mux-herdr: to be written (plan §3.5).
+# --mux with herdr opens a tab in the session's directory, and runs the session in the tab's pane.
 # req: R77
 # source: spec (no candidate source)
 # milestone: M3
 
-unwritten
+workspace shop --init
+stubs herdr claude
+exec sh $WORK/use.sh
+exec aw new 'fix checkout tax' --mux
+stderr 'opened claude in a new herdr tab, checkout-tax'
+exec cat $STUB_LOG
+stdout '^herdr \[tab\] \[create\] \[--cwd\] \[.*/\.worktrees/01\] \[--label\] \[checkout-tax\] \[--focus\]$'
+stdout '^herdr \[pane\] \[run\] \[p7\] '
+stdout '^claude cwd .*/\.worktrees/01$'
+stdout '^claude AW_SESSION=claude:new-'
+
+-- use.sh --
+mkdir -p "$XDG_CONFIG_HOME/agent-workspace"
+printf '[user]\nmultiplexer = "herdr"\n' > "$XDG_CONFIG_HOME/agent-workspace/shop.toml"
