@@ -27,14 +27,6 @@ from = "M1"
 about = "aw config get lanes.max through bin/aw"
 
 [[op]]
-name = "dashboard"
-spec = "`aw` dashboard and `aw recap` (local only)"
-budget_ms = 100
-iterations = 200
-from = "M2"
-about = "aw (the dashboard) through bin/aw: 10 lanes across 4 repositories, half with uncommitted work, half clean with unmerged commits"
-
-[[op]]
 name = "attach-from-pool"
 spec = "`aw attach` from the warm pool"
 budget_ms = 100
@@ -49,6 +41,14 @@ budget_ms = 150
 iterations = 100
 from = "M2"
 about = "aw new through bin/aw from the warm pool, until the stub harness starts (it signals through a FIFO)"
+
+[[op]]
+name = "dashboard"
+spec = "`aw` dashboard and `aw recap` (local only)"
+budget_ms = 100
+iterations = 200
+from = "M2"
+about = "aw (the dashboard) through bin/aw: 10 lanes across 4 repositories, half with uncommitted work, half clean with unmerged commits"
 
 [[op]]
 name = "serve-free-seat"

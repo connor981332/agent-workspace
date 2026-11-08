@@ -193,6 +193,12 @@ func judge(o op, r, b *Result, mode string) {
 // measure runs an operation n times, after a warm-up. With a baseline, the two alternate, so that
 // drift on a shared runner affects both alike.
 func measure(o op, n int, run, base *benchOp) (*Result, *Result) {
+	for _, b := range []*benchOp{run, base} {
+		if b != nil && b.prepare != nil {
+			b.prepare()
+			b.prepare = nil // a second measurement (after a failure) reuses it
+		}
+	}
 	for range min(50, n/5) {
 		run.once()
 		if base != nil {
@@ -308,11 +314,13 @@ func fatalf(format string, args ...any) {
 
 // The fixture.
 
-// benchOp is one measured operation: run returns how long it took. reset, when set, runs after
-// each iteration, untimed, to put the fixture back (a claimed lane returned to the pool).
+// benchOp is one measured operation: run returns how long it took. prepare, when set, runs once
+// before the first iteration, untimed; reset, when set, runs after each iteration, untimed, to put
+// the fixture back (a claimed lane returned to the pool).
 type benchOp struct {
-	run   func() time.Duration
-	reset func()
+	prepare func()
+	run     func() time.Duration
+	reset   func()
 }
 
 func (b *benchOp) once() time.Duration {
@@ -488,6 +496,19 @@ func (fx *fixture) aw(env []string, stdin []byte, args ...string) {
 	}
 }
 
+// output runs bin/aw in the owner checkout and returns its standard output.
+func (fx *fixture) output(env []string, args ...string) ([]byte, error) {
+	c := exec.Command(filepath.Join(fx.owner, "bin", "aw"), args...)
+	c.Dir, c.Env = fx.owner, env
+	var errOut bytes.Buffer
+	c.Stderr = &errOut
+	out, err := c.Output()
+	if err != nil {
+		return nil, fmt.Errorf("aw %s: %v\n%s", strings.Join(args, " "), err, errOut.String())
+	}
+	return out, nil
+}
+
 func (fx *fixture) try(env []string, stdin []byte, args ...string) error {
 	c := exec.Command(filepath.Join(fx.owner, "bin", "aw"), args...)
 	c.Dir, c.Env = fx.owner, env
@@ -550,29 +571,6 @@ func (fx *fixture) addLaneOps(tmp, launcher string) error {
 	if err := fx.try(env, nil, "recap", "--json"); err != nil {
 		return err // no dashboard in this binary
 	}
-	for i := 1; i <= laneCount; i++ {
-		if err := fx.try(env, nil, "attach", fmt.Sprintf("bench lane %d", i)); err != nil {
-			return err
-		}
-		root := filepath.Join(fx.owner, ".worktrees", fmt.Sprintf("%02d", i))
-		for _, p := range []string{"web", "api", "android", "ios"} {
-			dir := filepath.Join(root, p)
-			if err := os.WriteFile(filepath.Join(dir, "work.txt"), []byte("work\n"), 0o644); err != nil {
-				return err
-			}
-			if err := git(dir, "add", "work.txt"); err != nil {
-				return err
-			}
-			if err := git(dir, "commit", "-q", "-m", "work"); err != nil {
-				return err
-			}
-		}
-		if i%2 == 1 { // half the lanes have uncommitted work; the others are clean, so their proof is tried
-			if err := os.WriteFile(filepath.Join(root, "web", "dirty.txt"), []byte("wip\n"), 0o644); err != nil {
-				return err
-			}
-		}
-	}
 	// The pool: lanes claimed and released at once, which aw sweep recycles.
 	for i := range poolSize {
 		if err := fx.try(env, nil, "attach", fmt.Sprintf("pool lane %d", i)); err != nil {
@@ -598,7 +596,39 @@ func (fx *fixture) addLaneOps(tmp, launcher string) error {
 	}
 	newEnv := append(slices.Clone(env[:len(env)-1]), env[len(env)-1]+string(os.PathListSeparator)+harnessDir)
 	n := 0
-	fx.ops["dashboard"] = &benchOp{run: func() time.Duration {
+	// The dashboard's ten lanes are built only when it is measured, after attach and new, so that
+	// their resets (aw sweep) see only the pool.
+	buildLanes := func() {
+		for i := 1; i <= laneCount; i++ {
+			out, err := fx.output(env, "attach", fmt.Sprintf("bench lane %d", i), "--json")
+			if err != nil {
+				fatalf("%v", err)
+			}
+			var claimed struct{ Root string }
+			if err := json.Unmarshal(out, &claimed); err != nil || claimed.Root == "" {
+				fatalf("aw attach --json: no root in %s", out)
+			}
+			root := claimed.Root
+			for _, p := range []string{"web", "api", "android", "ios"} {
+				dir := filepath.Join(root, p)
+				if err := os.WriteFile(filepath.Join(dir, "work.txt"), []byte("work\n"), 0o644); err != nil {
+					fatalf("%v", err)
+				}
+				if err := git(dir, "add", "work.txt"); err != nil {
+					fatalf("%v", err)
+				}
+				if err := git(dir, "commit", "-q", "-m", "work"); err != nil {
+					fatalf("%v", err)
+				}
+			}
+			if i%2 == 1 { // half the lanes have uncommitted work; the others are clean, so their proof is tried
+				if err := os.WriteFile(filepath.Join(root, "web", "dirty.txt"), []byte("wip\n"), 0o644); err != nil {
+					fatalf("%v", err)
+				}
+			}
+		}
+	}
+	fx.ops["dashboard"] = &benchOp{prepare: buildLanes, run: func() time.Duration {
 		start := time.Now()
 		fx.aw(env, nil)
 		return time.Since(start)
