@@ -1,6 +1,28 @@
-# sessions/attaching-states-protect: to be written (plan §3.5).
+# A lane that is still being created (claiming) is never swept, and an attaching session is held
+# off until it is built.
 # req: R25
-# source: C1 test_attachment_reservations_are_observational
+# source: C1 test_lanes.py::test_attachment_reservations_are_observational
 # milestone: M2
 
-unwritten
+workspace shop --init
+exec sh $WORK/slow.sh
+env PATH=$WORK/slow:$PATH
+exec sh -c 'aw attach "slow one" --json > "$WORK/attach.json" & i=0; while [ ! -e "$WORK/slow/started" ] && [ $i -lt 200 ]; do sleep 0.05; i=$((i + 1)); done; aw sweep --apply --json > "$WORK/sweep.json"; wait'
+exec cat $WORK/sweep.json
+stdout '"state": "claiming"'
+stdout '"reason": "it is being set up"'
+exec cat $WORK/attach.json
+stdout '"state": "working"'
+
+-- slow.sh --
+# A git wrapper that pauses while the first project worktree is created.
+mkdir -p "$WORK/slow"
+real=$(command -v git)
+cat > "$WORK/slow/git" <<EOS
+#!/bin/sh
+case "\$*" in
+worktree\ add*web/.worktrees/01*) touch "$WORK/slow/started"; sleep 1 ;;
+esac
+exec "$real" "\$@"
+EOS
+chmod +x "$WORK/slow/git"

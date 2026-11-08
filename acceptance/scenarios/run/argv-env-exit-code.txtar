@@ -1,6 +1,29 @@
-# run/argv-env-exit-code: to be written (plan §3.5).
-# req: R51
-# source: C1 test_env_and_command_forwarding_exit_and_busy_cleanup
+# aw run passes arguments through unchanged, gives the command the lane's environment and env file,
+# and exits with the command's status.
+# req: R51 R30
+# source: C1 test_tooling.py::test_env_and_command_forwarding_exit_and_busy_cleanup
 # milestone: M2
 
-unwritten
+workspace shop --init
+exec aw attach 'add feature flag'
+cd .worktrees/01
+exec aw run web sh -c 'printf "[%s]" "$@"; echo' x 'a b' '' '"q"' '$HOME' '*'
+stdout '^\[a b\]\[\]\["q"\]\[\$HOME\]\[\*\]$'
+exec aw run web sh -c 'pwd -P; echo "$AW_LANE $AW_LANE_NAME $AW_PROJECT $AW_NAMESPACE $AW_HOSTNAME"; echo "$AW_PROJECT_PATH"; echo "$AW_LANE_STATE"'
+stdout '/web/\.worktrees/01$'
+stdout '^01 feature-flag web shop lane-01\.localhost$'
+exec sh -c 'aw run web sh -c "exit 7"; echo "status=$?"'
+stdout '^status=7$'
+
+# The project's env file in the lane's state directory reaches every command in the project.
+exec aw run web sh -c 'printf "DATABASE_URL=postgres://lane-01\nFEATURE=on\n" > "$AW_LANE_STATE/web.env"'
+exec aw run web sh -c 'echo "$DATABASE_URL $FEATURE"'
+stdout '^postgres://lane-01 on$'
+exec aw run api sh -c 'echo "[$FEATURE]"'
+stdout '^\[\]$'
+
+! exec aw run nope true
+stderr 'there is no project named "nope" → known: api, web'
+exec sh -c 'aw run web no-such-command-x; echo "status=$?"'
+stdout '^status=1$'
+stderr 'no-such-command-x: command not found'

@@ -18,6 +18,10 @@ func Main(args []string, stdout, stderr io.Writer) int {
 	root.SetArgs(args)
 
 	cmd, err := root.ExecuteC()
+	var status *exitStatus
+	if errors.As(err, &status) {
+		return status.code // the command's own status; it has printed what it had to say
+	}
 	code := exitCode(err)
 	if err != nil {
 		fmt.Fprintf(stderr, "aw: %v\n", err)
@@ -40,6 +44,10 @@ func Main(args []string, stdout, stderr io.Writer) int {
 func exitCode(err error) int {
 	if err == nil {
 		return ExitOK
+	}
+	var usage *usageError
+	if errors.As(err, &usage) {
+		return ExitUsage
 	}
 	var failed *commandError
 	if errors.As(err, &failed) {
@@ -66,7 +74,7 @@ func newRoot(stdout, stderr io.Writer) *cobra.Command {
 	root.CompletionOptions.HiddenDefaultCmd = true
 
 	root.AddCommand(newVersionCmd(), newConfigCmd(), newInitCmd(), newDoctorCmd(), newWhoamiCmd(), newAttachCmd(),
-		newSweepCmd(), newDiscardCmd(), newParkCmd(false), newParkCmd(true), newFinishCmd())
+		newSweepCmd(), newDiscardCmd(), newParkCmd(false), newParkCmd(true), newFinishCmd(), newRunCmd(), newNewCmd())
 	return root
 }
 

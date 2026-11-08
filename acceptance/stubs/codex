@@ -1,0 +1,15 @@
+#!/bin/sh
+# Test double for a harness (claude, codex, grok, opencode: the same script under each name). It
+# records how it was launched in $STUB_LOG: its name and arguments, then its working directory and
+# AW_SESSION. It exits with $STUB_HARNESS_EXIT (default 0), after waiting $STUB_HARNESS_SLEEP
+# seconds if set, so a scenario can check a lane while a session is running.
+tool=${0##*/}
+{
+	printf '%s' "$tool"
+	for a in "$@"; do printf ' [%s]' "$a"; done
+	printf '\n'
+	echo "$tool cwd $PWD"
+	echo "$tool AW_SESSION=${AW_SESSION:-}"
+} >> "$STUB_LOG"
+if [ -n "${STUB_HARNESS_SLEEP:-}" ]; then sleep "$STUB_HARNESS_SLEEP"; fi
+exit "${STUB_HARNESS_EXIT:-0}"

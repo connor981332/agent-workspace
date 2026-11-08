@@ -1,6 +1,26 @@
-# lanes/new-passes-harness-args-verbatim: to be written (plan §3.5).
+# aw new claims a lane and launches the harness in the lane root, with its arguments unchanged and
+# AW_SESSION set; --harness overrides the individual layer's default.
 # req: R77
-# source: C1 test_explicit_harness_arguments_keep_boundaries
+# source: C1 test_tooling.py::test_explicit_harness_arguments_keep_boundaries
 # milestone: M2
 
-unwritten
+workspace shop --init
+stubs claude codex
+exec aw new 'fix checkout tax rounding' -- --model 'opus 5' '' '--' 'a"b' '$X'
+stderr 'aw: lane 01 checkout-tax, starting claude'
+exec cat $STUB_LOG
+stdout '^claude \[--model\] \[opus 5\] \[\] \[--\] \[a"b\] \[\$X\]$'
+stdout '^claude cwd .*/\.worktrees/01$'
+stdout '^claude AW_SESSION=claude:new-[0-9a-f]{16}$'
+
+exec aw new 'add webhook retries' --harness codex
+exec cat $STUB_LOG
+stdout '^codex$'
+stdout '^codex cwd .*/\.worktrees/02$'
+
+! exec aw new 'x' --harness nothere
+stderr 'the harness nothere is not installed'
+! exists .worktrees/03
+exec sh -c 'aw new two words; echo "status=$?"'
+stdout 'status=2'
+stderr 'aw new takes one purpose'

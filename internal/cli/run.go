@@ -1,0 +1,138 @@
+package cli
+
+import (
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
+	"os"
+	"os/exec"
+	"syscall"
+
+	"github.com/spf13/cobra"
+
+	"github.com/connor981332/agent-workspace/internal/lanes"
+	"github.com/connor981332/agent-workspace/internal/runners"
+)
+
+// exitStatus makes Main exit with a command's own status, printing nothing more.
+type exitStatus struct{ code int }
+
+func (e *exitStatus) Error() string { return fmt.Sprintf("exit status %d", e.code) }
+
+func newRunCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "run <project> [command…]",
+		Short: "Run a command in the project, in this lane, with the lane's environment",
+		Long: `Run a command in the project: in a lane, in the lane's worktree of it, with the lane's
+environment (AW_LANE, AW_LANE_NAME, AW_LANE_ROOT, AW_LANE_STATE, AW_PROJECT, AW_PROJECT_PATH,
+AW_OWNER, AW_NAMESPACE, AW_HOSTNAME, AW_TOOL, and the project's env file). In the owner checkout,
+in the owner's checkout of the project.
+
+Arguments, standard input, the exit status and signals pass through unchanged. With no command it
+runs the project's [projects.<p>] run.`,
+		Args: cobra.MinimumNArgs(1),
+		RunE: run(func(cmd *cobra.Command, args []string) error {
+			w, err := openForWrite()
+			if err != nil {
+				return err
+			}
+			m := manager(w)
+			where, err := m.Locate(args[0])
+			if err != nil {
+				w.Close()
+				return err
+			}
+			argv := args[1:]
+			if len(argv) == 0 {
+				p := w.cfg.Projects[args[0]]
+				if p.Run == "" {
+					w.Close()
+					return fmt.Errorf("give a command to run, or set [projects.%s] run", args[0])
+				}
+				argv = []string{"sh", "-c", p.Run}
+			}
+			w.Close() // the command may run for hours; hold nothing open
+			code, err := runners.RunHost(where.Dir, where.Env, argv)
+			if err != nil {
+				return err
+			}
+			if code != 0 {
+				return &exitStatus{code}
+			}
+			return nil
+		}),
+	}
+	cmd.Flags().SetInterspersed(false)
+	return cmd
+}
+
+func newNewCmd() *cobra.Command {
+	var harness, branch string
+	cmd := &cobra.Command{
+		Use:   `new "<purpose>" [--harness h] [--branch b] [-- harness arguments…]`,
+		Short: "Claim a lane and launch a harness in it",
+		Long: `Claim a lane for the purpose (from the warm pool when there is one), then launch the harness in the
+lane root: the individual layer's [user] harness, or --harness. Arguments after -- go to the harness
+unchanged. The harness runs as this process, with AW_SESSION set, so the session is recorded
+against the lane.`,
+		Args: cobra.MinimumNArgs(1),
+		RunE: run(func(cmd *cobra.Command, args []string) error {
+			purpose, extra := args[0], []string{}
+			if dash := cmd.ArgsLenAtDash(); dash >= 0 {
+				if dash != 1 {
+					return &usageError{fmt.Errorf(`aw new takes one purpose before --; quote it: aw new "fix checkout tax"`)}
+				}
+				extra = args[1:]
+			} else if len(args) > 1 {
+				return &usageError{fmt.Errorf(`aw new takes one purpose; quote it, and put harness arguments after --`)}
+			}
+			w, err := openForWrite()
+			if err != nil {
+				return err
+			}
+			defer w.Close()
+			if harness == "" {
+				harness = w.cfg.User.Harness
+			}
+			if err := lanes.CheckName(harness); err != nil {
+				return fmt.Errorf("%q is not a harness name", harness)
+			}
+			path, err := exec.LookPath(harness)
+			if err != nil {
+				return fmt.Errorf("the harness %s is not installed (not on PATH) → install it, or choose another with --harness or [user] harness", harness)
+			}
+			id := "new-" + randomHex(8)
+			m := manager(w)
+			c, err := m.Claim(cmd.Context(), lanes.ClaimRequest{Purpose: purpose, Branch: branch,
+				Who: lanes.Identity{Harness: harness, Session: id, PID: os.Getpid()}})
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.ErrOrStderr(), "aw: lane %s %s, starting %s\n", c.Dir, c.Lane.Name, harness)
+			w.Close()
+			if err := os.Chdir(c.Root); err != nil {
+				return err
+			}
+			env := append(os.Environ(), "AW_SESSION="+harness+":"+id, fmt.Sprintf("AW_SESSION_PID=%d", os.Getpid()), "PWD="+c.Root)
+			// The harness replaces this process: it keeps this PID, so the session's process identity
+			// recorded at the claim stays true.
+			return syscall.Exec(path, append([]string{harness}, extra...), env)
+		}),
+	}
+	cmd.Flags().StringVar(&harness, "harness", "", "the harness to launch (default: [user] harness)")
+	cmd.Flags().StringVar(&branch, "branch", "", "start the lane on this existing branch")
+	return cmd
+}
+
+// usageError is a usage mistake found after cobra parsed the command line.
+type usageError struct{ err error }
+
+func (e *usageError) Error() string { return e.err.Error() }
+
+func randomHex(n int) string {
+	b := make([]byte, n)
+	if _, err := rand.Read(b); err != nil {
+		panic(err)
+	}
+	return hex.EncodeToString(b)
+}

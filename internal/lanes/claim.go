@@ -15,6 +15,7 @@ import (
 	"github.com/connor981332/agent-workspace/internal/config"
 	"github.com/connor981332/agent-workspace/internal/forge"
 	"github.com/connor981332/agent-workspace/internal/gitx/run"
+	"github.com/connor981332/agent-workspace/internal/platform"
 	"github.com/connor981332/agent-workspace/internal/state"
 	"github.com/connor981332/agent-workspace/internal/workspace"
 )
@@ -220,8 +221,12 @@ func (m *Manager) attach(tx *sql.Tx, who Identity, lane state.Lane, purpose stri
 		return nil
 	}
 	now := state.Now()
-	_, err := state.SaveSession(tx, state.Session{Harness: who.Harness, HarnessSession: who.Session, Lane: lane.Number,
-		LaneGeneration: lane.Generation, Purpose: purpose, State: state.SessionActive, Started: now, LastActivity: now, PID: who.PID})
+	s := state.Session{Harness: who.Harness, HarnessSession: who.Session, Lane: lane.Number,
+		LaneGeneration: lane.Generation, Purpose: purpose, State: state.SessionActive, Started: now, LastActivity: now, PID: who.PID}
+	if who.PID > 0 {
+		s.PIDStart, _ = platform.ProcessIdentity(who.PID)
+	}
+	_, err := state.SaveSession(tx, s)
 	return err
 }
 

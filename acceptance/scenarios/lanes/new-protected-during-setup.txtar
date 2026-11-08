@@ -1,6 +1,27 @@
-# lanes/new-protected-during-setup: to be written (plan §3.5).
+# A lane made by aw new is protected while its session runs, even with no warm pool and work that
+# is already merged.
 # req: R23
-# source: C1 test_cli_new_reserves_reuse_with_pool_zero
+# source: C1 test_lanes.py::test_cli_new_reserves_reuse_with_pool_zero
 # milestone: M2
 
-unwritten
+workspace solo --single --init
+stubs claude
+env STUB_HARNESS_SLEEP=3
+exec sh -c 'aw new "add feature flag" > /dev/null 2>&1 & echo started'
+exec sh -c 'i=0; while ! grep -q "claude cwd" "$STUB_LOG" 2>/dev/null && [ $i -lt 100 ]; do sleep 0.05; i=$((i + 1)); done'
+exec aw sweep --apply --json
+json stdout .lanes[0].action keep
+stdout 'session new-[0-9a-f]+ \(claude\) is attached'
+exists .worktrees/01
+
+-- workspace.toml --
+[workspace]
+name = "Solo"
+namespace = "solo"
+schema = 1
+
+[lanes]
+pool = 0
+
+[projects.solo]
+directory = "."

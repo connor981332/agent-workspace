@@ -1,6 +1,27 @@
-# run/task-in-lane: to be written (plan §3.5).
+# aw run with no command runs the project's run command, in the lane; from the owner checkout it
+# runs in the owner's checkout of the project, with no lane variables.
 # req: R21 R25 R30 R36
-# source: C1 HostLaneTests.test_single_repo_lane_from_init_to_cleanup
+# source: C1 test_generic.py::HostLaneTests::test_single_repo_lane_from_init_to_cleanup
 # milestone: M2
 
-unwritten
+workspace shop --init
+exec aw attach 'add feature flag'
+cd .worktrees/01/web
+exec aw run web
+stdout '^ran in .*/web/\.worktrees/01 lane=01$'
+cd $OWNER
+exec aw run web
+stdout '^ran in .*shop/web lane=$'
+! exec aw run api
+stderr 'give a command to run, or set \[projects\.api\] run'
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[projects.web]
+run = 'echo "ran in $(pwd -P) lane=${AW_LANE:-}"'
+
+[projects.api]
