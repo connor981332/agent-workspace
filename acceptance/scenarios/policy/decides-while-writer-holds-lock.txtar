@@ -1,0 +1,6 @@
+# policy/decides-while-writer-holds-lock: to be written (plan §3.5).
+# req: R1 R55
+# source: C1 test_guard_hook_fails_closed_and_ignores_the_gate; C1 test_v2_guard_without_maintenance_gate
+# milestone: M3
+
+unwritten

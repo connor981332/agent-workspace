@@ -1,0 +1,6 @@
+# policy/direct-server-start-denied: to be written (plan §3.5).
+# req: R31 R37 R93
+# source: C1 test_setup_failure_no_wait_and_server_refusal
+# milestone: M3
+
+unwritten

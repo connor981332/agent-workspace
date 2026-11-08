@@ -1,0 +1,6 @@
+# policy/single-repo-boundary: to be written (plan §3.5).
+# req: R55 R58
+# source: C1 HostLaneTests.test_guards_on_a_single_repo_lane
+# milestone: M3
+
+unwritten

@@ -1,0 +1,6 @@
+# policy/before-setup-diagnosis-only: to be written (plan §3.5).
+# req: R55
+# source: C1 test_inactive_guard_allows_only_read_only_diagnosis
+# milestone: M3
+
+unwritten
