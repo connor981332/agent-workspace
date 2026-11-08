@@ -21,8 +21,9 @@ milestone named in its row.
 [PR #9](https://github.com/connor981332/agent-workspace/pull/9) (GoReleaser),
 [PR #10](https://github.com/connor981332/agent-workspace/pull/10) (spike results),
 [PR #11](https://github.com/connor981332/agent-workspace/pull/11) (the 8 ms budget),
-[PR #12](https://github.com/connor981332/agent-workspace/pull/12) (M1 configuration), all merged.
-`m1/state` (M1 state store, open). `spike/hot-path` (T3 and the ref-hook spike, never merged).
+[PR #12](https://github.com/connor981332/agent-workspace/pull/12) (M1 configuration),
+[PR #13](https://github.com/connor981332/agent-workspace/pull/13) (M1 state store), all merged.
+`m1/launcher` (M1 launcher and `aw init`, open). `spike/hot-path` (T3 and the ref-hook spike, never merged).
 
 **Done:** Read the spec and both candidates and wrote this plan. Settled the spec's five open
 questions (§8). The spec owner accepted every proposed answer in [Spec issues](#spec-issues) (S1 to
@@ -39,12 +40,12 @@ macOS CI checked for regressions only.
 decoding with file, line and fix, the compiled cache, `aw config get|explain|validate`, the
 configuration reference generated from the schema (docs/reference/config.md), examples, and the
 seven `config/` scenarios. The acceptance runner gained `in_progress` (requirements.toml), so the
-milestone's written scenarios run in CI from the PR that adds them. Now: the state store
-(`m1/state`): SQLite in WAL mode, `PRAGMA user_version`, numbered migrations with a backup before
+milestone's written scenarios run in CI from the PR that adds them. The state store (PR #13): SQLite in WAL mode, `PRAGMA user_version`, numbered migrations with a backup before
 each, read-only mode for a newer schema, and protection when the database is unreadable. Rule 3 of
-§4.3 gained a reviewed allowlist for the SQLite driver's own dependencies.
+§4.3 gained a reviewed allowlist for the SQLite driver's own dependencies. Now: the `bin/aw`
+launcher and `aw init` (`m1/launcher`), with the `init/` and `launcher/` scenarios.
 
-**Next step:** the launcher and `aw init`, then `aw whoami`, `aw doctor`, the
+**Next step:** `aw whoami`, `aw doctor`, the
 hook stub, timings and the `bench` job.
 
 **Pending manual checks:** hot-path benchmark on an Apple Silicon laptop (T3).

@@ -54,7 +54,7 @@ func TestVersionSetAtLinkTime(t *testing.T) {
 	t.Cleanup(func() { version = old })
 
 	_, out, _ := runCLI(t, "version")
-	if !strings.HasPrefix(out, "aw v1.2.3 ") {
+	if !strings.HasPrefix(out, "aw 1.2.3 ") {
 		t.Fatalf("stdout %q does not report the linked version", out)
 	}
 }

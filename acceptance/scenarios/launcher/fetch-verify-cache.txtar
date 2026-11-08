@@ -1,6 +1,42 @@
-# The launcher fetches the pinned binary from the local mirror, refuses a wrong checksum, and does not fetch a second time.
+# The launcher fetches the pinned binary from the mirror, verifies its checksum, caches it, and
+# does not fetch a second time. A binary with the wrong checksum is refused and not installed.
 # req: R15 R16
 # source: C1 test_generic.py::LauncherTests::test_pin_fetches_that_commit_and_runs_it
 # milestone: M1
 
-unwritten
+env GOOD_MIRROR=$AW_MIRROR
+env CACHED=$XDG_CACHE_HOME/agent-workspace/bin/$AW_VERSION/aw
+workspace shop
+exec aw init
+owner-snapshot
+
+! exists $CACHED
+exec bin/aw version
+stdout '^aw '$AW_VERSION' '
+exists $CACHED
+
+# The cache is used from now on: the mirror is no longer needed.
+env AW_MIRROR=$WORK/nowhere
+exec bin/aw version
+stdout '^aw '$AW_VERSION' '
+
+# A binary whose checksum does not match the lock is refused.
+exec rm -rf $XDG_CACHE_HOME/agent-workspace
+exec mkdir $WORK/bad
+exec sh -c 'cp "$GOOD_MIRROR"/aw_* "$WORK/bad/" && for f in "$WORK"/bad/aw_*; do printf x >> "$f"; done'
+env AW_MIRROR=$WORK/bad
+! exec bin/aw version
+stderr 'checksum mismatch for aw_'$AW_VERSION'_.* it was not installed'
+! exists $CACHED
+exec sh -c 'ls -a "$XDG_CACHE_HOME/agent-workspace/bin/$AW_VERSION"'
+! stdout 'download'
+
+# A missing asset is reported with the mirror's name.
+env AW_MIRROR=$WORK/nowhere
+! exec bin/aw version
+stderr 'not found in the mirror \(AW_MIRROR\)'
+
+# With the good mirror again, it installs.
+env AW_MIRROR=$GOOD_MIRROR
+exec bin/aw version
+exists $CACHED

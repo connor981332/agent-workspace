@@ -8,10 +8,14 @@
 package acceptance_test
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -45,7 +49,8 @@ func setup() (int, error) {
 	awBin := os.Getenv("AW_BIN")
 	if awBin == "" {
 		awBin = filepath.Join(tmp, "bin", "aw")
-		build := exec.Command("go", "build", "-trimpath", "-o", awBin, "./cmd/aw")
+		build := exec.Command("go", "build", "-trimpath",
+			"-ldflags", "-X github.com/connor981332/agent-workspace/internal/cli.version="+testVersion, "-o", awBin, "./cmd/aw")
 		build.Dir = ".."
 		build.Env = append(os.Environ(), "CGO_ENABLED=0")
 		if out, err := build.CombinedOutput(); err != nil {
@@ -53,6 +58,15 @@ func setup() (int, error) {
 		}
 	}
 	if awBin, err = filepath.Abs(awBin); err != nil {
+		return 0, err
+	}
+
+	version, err := binaryVersion(awBin)
+	if err != nil {
+		return 0, err
+	}
+	mirror, err := makeMirror(filepath.Join(tmp, "mirror"), awBin, version)
+	if err != nil {
 		return 0, err
 	}
 
@@ -76,8 +90,46 @@ func setup() (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	cfg = cmds.Config{AWBin: awBin, GlobalAW: globalAW, StubsDir: stubs, RealGit: realGit, Repo: repo}
+	cfg = cmds.Config{AWBin: awBin, GlobalAW: globalAW, StubsDir: stubs, RealGit: realGit, Repo: repo,
+		Version: version, Mirror: mirror}
 	return 0, nil
+}
+
+// testVersion is the version the runner gives the aw it builds, so that aw init can pin it.
+const testVersion = "0.0.0-acceptance"
+
+// binaryVersion asks the binary under test for its version.
+func binaryVersion(bin string) (string, error) {
+	out, err := exec.Command(bin, "version", "--json").Output()
+	if err != nil {
+		return "", fmt.Errorf("%s version --json: %v", bin, err)
+	}
+	var v struct {
+		Version string `json:"version"`
+	}
+	if err := json.Unmarshal(out, &v); err != nil || v.Version == "" {
+		return "", fmt.Errorf("%s version --json printed %q", bin, out)
+	}
+	return v.Version, nil
+}
+
+// makeMirror lays out a release mirror (AW_MIRROR) holding the binary under test for this
+// platform, as GoReleaser names it, with its checksums.txt.
+func makeMirror(dir, bin, version string) (string, error) {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	data, err := os.ReadFile(bin)
+	if err != nil {
+		return "", err
+	}
+	asset := fmt.Sprintf("aw_%s_%s_%s", version, runtime.GOOS, runtime.GOARCH)
+	if err := os.WriteFile(filepath.Join(dir, asset), data, 0o755); err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(data)
+	line := fmt.Sprintf("%s  %s\n", hex.EncodeToString(sum[:]), asset)
+	return dir, os.WriteFile(filepath.Join(dir, "checksums.txt"), []byte(line), 0o644)
 }
 
 // globalShim is the suite's global aw. Inside a workspace it runs that workspace's bin/aw launcher,
