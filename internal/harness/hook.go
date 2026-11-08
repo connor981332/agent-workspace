@@ -125,6 +125,9 @@ func resolveScope(p Payload, version string, t *timing.Recorder) (*policy.Scope,
 	}
 
 	scope := &policy.Scope{Role: policy.Unattached, Owner: ws.Owner}
+	if p.Session != "" {
+		scope.Session = p.Harness + ":" + p.Session
+	}
 	if cfg.User.OwnerSessions == "pair" {
 		scope.Role = policy.Pair
 	}
@@ -153,12 +156,16 @@ func resolveScope(p Payload, version string, t *timing.Recorder) (*policy.Scope,
 
 	n, attached := 0, false
 	if s != nil {
-		var stale bool
-		if n, stale, err = attachment(s, stateDir, p); err != nil {
+		at, err := attachment(s, stateDir, p)
+		if err != nil {
 			return nil, err
 		}
-		attached = n > 0
-		if stale && ws.LaneRoot != "" {
+		if at.pair && ws.LaneRoot == "" {
+			scope.Role = policy.Pair
+			return scope, nil
+		}
+		n, attached = at.lane, at.lane > 0
+		if at.stale && ws.LaneRoot != "" {
 			return nil, fmt.Errorf("the lane at %s has moved on to other work since this session attached → go back to the owner checkout, and run bin/aw attach \"<what you are working on>\"", ws.LaneRoot)
 		}
 	}
@@ -193,39 +200,49 @@ func resolveScope(p Payload, version string, t *timing.Recorder) (*policy.Scope,
 	return scope, nil
 }
 
-// attachment finds the lane a hook call's session is attached to. It returns 0 when there is none:
-// no record, a record that has ended, or one whose process has gone. stale means the session's lane
-// has since moved on, or been recycled or destroyed (architecture.md, step 2: a stale session cannot
-// act on it).
+// attached is what a hook call's session is attached to: a lane, a pair session in the owner
+// checkout, or nothing (no record, a record that has ended, or one whose process has gone). stale
+// means the session's lane has since moved on, or been recycled or destroyed (architecture.md, step
+// 2: a stale session cannot act on it).
+type attached struct {
+	lane  int
+	pair  bool
+	stale bool
+}
+
+// attachment finds what a hook call's session is attached to.
 //
 // On a session's first hook call it records the harness's own session ID (aw new only knows the one
 // it made up), and the session's process when that was not known; a harness's tool commands may be
 // unable to see it, but a hook can. Neither waits: a busy database is tried again on the next call.
-func attachment(s *state.Store, stateDir string, p Payload) (lane int, stale bool, err error) {
+func attachment(s *state.Store, stateDir string, p Payload) (attached, error) {
 	rec, err := state.SessionByHarnessID(s.DB(), p.Harness, p.Session)
 	adopted := false
 	if errors.Is(err, state.ErrNotFound) {
 		h, id, ok := strings.Cut(os.Getenv("AW_SESSION"), ":")
 		if !ok || h != p.Harness || id == p.Session {
-			return 0, false, nil
+			return attached{}, nil
 		}
 		adopted = true
 		if rec, err = state.SessionByHarnessID(s.DB(), h, id); errors.Is(err, state.ErrNotFound) {
-			return 0, false, nil
+			return attached{}, nil
 		}
 	}
 	if err != nil {
-		return 0, false, err
+		return attached{}, err
 	}
-	if rec.Lane == 0 {
-		return 0, true, nil // its lane was recycled or destroyed: whatever is there now is not its own
-	}
-	l, err := state.LaneByNumber(s.DB(), rec.Lane)
-	if errors.Is(err, state.ErrNotFound) || (err == nil && l.Generation != rec.LaneGeneration) {
-		return 0, true, nil
-	}
-	if err != nil {
-		return 0, false, err
+	current := attached{lane: rec.Lane, pair: rec.Pair}
+	if !rec.Pair {
+		if rec.Lane == 0 {
+			return attached{stale: true}, nil // its lane was recycled or destroyed: whatever is there now is not its own
+		}
+		l, err := state.LaneByNumber(s.DB(), rec.Lane)
+		if errors.Is(err, state.ErrNotFound) || (err == nil && l.Generation != rec.LaneGeneration) {
+			return attached{stale: true}, nil
+		}
+		if err != nil {
+			return attached{}, err
+		}
 	}
 	// Only a session starting brings a record back: a harness resumed in a new process keeps its
 	// session ID. An ordinary tool call must not, or it would undo a session having ended.
@@ -233,15 +250,12 @@ func attachment(s *state.Store, stateDir string, p Payload) (lane int, stale boo
 		if pid := platform.HarnessAncestor(os.Getpid(), p.Harness); pid > 0 {
 			if start, err := platform.ProcessIdentity(pid); err == nil && !rec.Has(pid, start) {
 				_ = state.RecordSessionJoin(stateDir, rec.ID, pid, start) // best effort: retried next start
-				return rec.Lane, false, nil
+				return current, nil
 			}
 		}
 	}
-	if rec.State != state.SessionActive {
-		return 0, false, nil
-	}
-	if !rec.Alive() {
-		return 0, false, nil
+	if rec.State != state.SessionActive || !rec.Alive() {
+		return attached{}, nil
 	}
 	if adopted || rec.PID == 0 {
 		pid, start := 0, ""
@@ -254,7 +268,7 @@ func attachment(s *state.Store, stateDir string, p Payload) (lane int, stale boo
 			_ = state.RecordSessionIdentity(stateDir, rec.ID, p.Session, pid, start) // best effort: retried next call
 		}
 	}
-	return rec.Lane, false, nil
+	return current, nil
 }
 
 // startContext tells a new session where it is and how to work there. It changes nothing.
@@ -266,5 +280,9 @@ func startContext(s policy.Scope) string {
 	case policy.Pair:
 		return "This is a pair session in the owner checkout, granted by the human. You may edit here. Destructive Git, unapproved publication and changes to the workspace's own configuration are still refused."
 	}
-	return `You are in the owner checkout, which belongs to the human. Read-only work needs no attach. Before changing anything, run bin/aw attach "<what you are working on>", then work in the lane root it prints. If the human wants you here instead, they can run aw pair.`
+	pair := "aw pair"
+	if s.Session != "" {
+		pair = "aw pair --session " + policy.Quote(s.Session)
+	}
+	return `You are in the owner checkout, which belongs to the human. Read-only work needs no attach. Before changing anything, run bin/aw attach "<what you are working on>", then work in the lane root it prints. If the human wants you here instead, they can run ` + pair + `.`
 }

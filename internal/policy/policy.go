@@ -50,6 +50,8 @@ const (
 type Scope struct {
 	Role  Role
 	Owner string // the owner checkout, absolute
+	// Session is the session as <harness>:<id>, so a refusal can tell the human how to grant it.
+	Session string
 	// For a lane: its root, the physical directories it may use (the root, its project worktrees,
 	// its private state directory), and its name, for messages.
 	LaneRoot string
@@ -182,7 +184,7 @@ func decideShell(s Scope, src string, cwd shell.Dir) Decision {
 	var asks []Decision
 	for _, c := range p.Commands {
 		for _, rule := range []func(Scope, shell.Command) Decision{
-			pathsRule, ownerOnlyRule, gitRule, containerRule, killRule, serverRule, secretRule, unattachedRule, publicationRule,
+			pathsRule, ownerOnlyRule, gitRule, containerRule, killRule, serverRule, secretRule, selfModRule, unattachedRule, publicationRule,
 		} {
 			switch d := rule(s, c); d.Verdict {
 			case Deny:
@@ -225,18 +227,27 @@ func (s Scope) isSecret(abs string) bool {
 	return slices.Contains(s.Secrets, abs) || slices.ContainsFunc(s.Secrets, func(sec string) bool { return shell.Resolve(sec) == abs })
 }
 
-const attachHint = `→ run bin/aw attach "<what you are working on>" to claim a lane, and work there; or ask the human to make this a pair session with aw pair`
+// attachHint names both ways forward. The grant is spelled out with this session's ID, because the
+// human chooses the session by naming it, and only the agent's harness knows the ID.
+func (s Scope) attachHint() string {
+	pair := "aw pair"
+	if s.Session != "" {
+		pair = "aw pair --session " + quote(s.Session)
+	}
+	return `→ run bin/aw attach "<what you are working on>" to claim a lane, and work there; or ask the human to make this a pair session by running ` + pair
+}
 
 func (s Scope) unattachedWrite() Decision {
 	if s.Role != Unattached {
 		return allow()
 	}
-	return deny("attach", "this session is not attached to a lane, and the owner checkout belongs to the human %s", attachHint)
+	return deny("attach", "this session is not attached to a lane, and the owner checkout belongs to the human %s", s.attachHint())
 }
 
 // selfModification asks before a pair session changes the workspace's own instructions, hooks,
-// guards or configuration (R63). In a lane such a change is on the lane's branch, and merging it
-// is the review.
+// guards or configuration (R63), and refuses a change inside a Git directory, where its own record
+// is: the human alone grants pairing (R60). In a lane such a change is on the lane's branch, and
+// merging it is the review.
 func (s Scope) selfModification(abs, given string) Decision {
 	if s.Role != Pair || !within(abs, s.Owner) {
 		return allow()
@@ -245,7 +256,11 @@ func (s Scope) selfModification(abs, given string) Decision {
 	if err != nil {
 		return allow()
 	}
-	top := strings.Split(rel, string(filepath.Separator))[0]
+	parts := strings.Split(rel, string(filepath.Separator))
+	if slices.Contains(parts, ".git") {
+		return deny("self-modification", "%s is inside a Git directory, which holds the workspace's hooks, shared configuration and aw's own records, including this session's → ask the human to change it", quote(given))
+	}
+	top := parts[0]
 	switch {
 	case rel == "workspace.toml", rel == "AGENTS.md", rel == "CLAUDE.md", top == ".aw", top == "bin",
 		top == ".claude", top == ".codex", top == ".grok", top == ".opencode", top == ".githooks":

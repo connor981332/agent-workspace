@@ -1,6 +1,62 @@
-# owner/pair-owner-seat-still-refuses-destructive: to be written (plan §3.5).
-# req: R61
+# aw pair launches the harness in the owner checkout. Its session may edit there and no lane is
+# claimed; destructive Git, publication and the workspace's own configuration stay refused, through
+# the shell as well as the file tools. Several pair sessions are allowed, with a warning.
+# req: R61 R63
 # source: spec (no candidate source)
 # milestone: M3
 
-unwritten
+workspace shop --init
+stubs claude
+env STUB_HARNESS_SLEEP=20
+exec sh -c 'aw pair -- --model opus > /dev/null 2>&1 & echo started'
+exec sh -c 'i=0; while ! grep -q "claude AW_SESSION" "$STUB_LOG" 2>/dev/null && [ $i -lt 100 ]; do sleep 0.05; i=$((i + 1)); done'
+exec cat $STUB_LOG
+stdout '^claude \[--model\] \[opus\]$'
+stdout '^claude AW_SESSION=claude:pair-[0-9a-f]{16}$'
+! exists .worktrees/01
+
+exec sh $WORK/as.sh write web/src/app.ts
+! stdout .
+exec sh $WORK/as.sh bash 'echo hi > notes.txt'
+! stdout .
+
+# The harness's own ID replaced the one aw issued, and the session's commands still carry that one.
+exec sh $WORK/whoami.sh
+json stdout .pair true
+
+! exec awtest-hook bash 'git branch -D main'
+stderr 'deletes, moves or forces a branch'
+! exec awtest-hook bash 'git reset --hard'
+stderr 'discards uncommitted work'
+exec awtest-hook bash 'git push origin main'
+stdout '"permissionDecision":"ask"'
+
+exec awtest-hook bash 'echo x > workspace.toml'
+stdout '"permissionDecision":"ask"'
+stdout 'human reviews'
+exec awtest-hook bash 'cp /tmp/x AGENTS.md'
+stdout '"permissionDecision":"ask"'
+exec awtest-hook bash 'rm -rf .claude'
+stdout '"permissionDecision":"ask"'
+exec awtest-hook bash 'sed -i s/a/b/ workspace.toml'
+stdout '"permissionDecision":"ask"'
+exec awtest-hook bash 'echo x | tee .githooks/pre-commit'
+stdout '"permissionDecision":"ask"'
+exec awtest-hook bash 'echo x > "$OUT"'
+stdout '"permissionDecision":"ask"'
+! exec awtest-hook bash 'echo x > .git/config'
+stderr 'inside a Git directory'
+! exec awtest-hook -harness codex -session never-granted bash 'echo x > workspace.toml'
+
+# Reading those files needs nothing.
+exec awtest-hook bash 'cat workspace.toml'
+! stdout .
+
+env STUB_HARNESS_SLEEP=
+exec aw pair
+stderr 'warning: 1 other pair session running'
+
+-- as.sh --
+AW_SESSION=$(sed -n 's/^claude AW_SESSION=//p' "$STUB_LOG" | head -1) exec awtest-hook "$@"
+-- whoami.sh --
+AW_SESSION=$(sed -n 's/^claude AW_SESSION=//p' "$STUB_LOG" | head -1) exec aw whoami --json

@@ -402,7 +402,8 @@ func newFixture(tmp, awBin string) (*fixture, error) {
 	})
 	env := append(inherited,
 		"HOME="+home, "XDG_CONFIG_HOME="+filepath.Join(home, ".config"), "XDG_CACHE_HOME="+filepath.Join(home, ".cache"),
-		"GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL="+filepath.Join(home, ".gitconfig"), "AW_MIRROR="+mirror)
+		"GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL="+filepath.Join(home, ".gitconfig"), "AW_MIRROR="+mirror,
+		"AW_ANCESTRY_STOP="+strconv.Itoa(os.Getpid())) // a harness above the bench is not a session's
 	if err := os.MkdirAll(owner, 0o755); err != nil {
 		return nil, err
 	}

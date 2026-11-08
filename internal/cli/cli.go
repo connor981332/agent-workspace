@@ -78,7 +78,8 @@ func newRoot(stdout, stderr io.Writer) *cobra.Command {
 	root.CompletionOptions.HiddenDefaultCmd = true
 
 	root.AddCommand(newVersionCmd(), newConfigCmd(), newInitCmd(), newSetupCmd(), newDoctorCmd(), newWhoamiCmd(), newAttachCmd(),
-		newSweepCmd(), newDiscardCmd(), newParkCmd(false), newParkCmd(true), newFinishCmd(), newRunCmd(), newNewCmd(), newRecapCmd())
+		newSweepCmd(), newDiscardCmd(), newParkCmd(false), newParkCmd(true), newFinishCmd(), newRunCmd(), newNewCmd(), newRecapCmd(), newPairCmd())
+	root.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error { return refuseAgent(cmd) }
 	return root
 }
 

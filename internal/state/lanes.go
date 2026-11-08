@@ -59,6 +59,8 @@ type Session struct {
 	LastActivity   string `json:"last_activity"`
 	PID            int    `json:"pid,omitempty"`
 	PIDStart       string `json:"pid_start,omitempty"`
+	// Pair is a pair session: granted by the human, in the owner checkout, with no lane (R60).
+	Pair bool `json:"pair,omitempty"`
 	// Joined are the processes that joined after it started (session_processes).
 	Joined []Process `json:"joined,omitempty"`
 }
@@ -266,17 +268,17 @@ func SetLaneRepos(tx *sql.Tx, lane int, repos []LaneRepo) error {
 	return nil
 }
 
-const sessionColumns = `id, harness, harness_session, coalesce(lane, 0), coalesce(lane_generation, 0), purpose, state, started, last_activity, coalesce(pid, 0), coalesce(pid_start, '')`
+const sessionColumns = `id, harness, harness_session, coalesce(lane, 0), coalesce(lane_generation, 0), purpose, state, started, last_activity, coalesce(pid, 0), coalesce(pid_start, ''), pair`
 
 func scanSession(row interface{ Scan(...any) error }) (Session, error) {
 	var s Session
-	err := row.Scan(&s.ID, &s.Harness, &s.HarnessSession, &s.Lane, &s.LaneGeneration, &s.Purpose, &s.State, &s.Started, &s.LastActivity, &s.PID, &s.PIDStart)
+	err := row.Scan(&s.ID, &s.Harness, &s.HarnessSession, &s.Lane, &s.LaneGeneration, &s.Purpose, &s.State, &s.Started, &s.LastActivity, &s.PID, &s.PIDStart, &s.Pair)
 	return s, err
 }
 
 // SessionByHarnessID returns the session a harness knows by id.
 func SessionByHarnessID(q Querier, harness, id string) (Session, error) {
-	s, err := scanSession(q.QueryRow(`SELECT `+sessionColumns+` FROM sessions WHERE harness = ? AND harness_session = ?`, harness, id))
+	s, err := scanSession(q.QueryRow(`SELECT `+sessionColumns+` FROM sessions WHERE harness = ?1 AND (harness_session = ?2 OR (?2 != '' AND issued_session = ?2))`, harness, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return s, ErrNotFound
 	}
@@ -300,8 +302,9 @@ func RecordSessionIdentity(dir string, id int, harnessSession string, pid int, p
 	if pid > 0 {
 		p = pid
 	}
-	_, err = db.Exec(`UPDATE sessions SET harness_session = ?, pid = coalesce(?, pid), pid_start = coalesce(nullif(?, ''), pid_start)
-		WHERE id = ? AND state = ?`, harnessSession, p, pidStart, id, SessionActive)
+	_, err = db.Exec(`UPDATE sessions SET issued_session = CASE WHEN harness_session != ?1 THEN harness_session ELSE issued_session END,
+			harness_session = ?1, pid = coalesce(?2, pid), pid_start = coalesce(nullif(?3, ''), pid_start)
+		WHERE id = ?4 AND state = ?5`, harnessSession, p, pidStart, id, SessionActive)
 	return err
 }
 
@@ -317,6 +320,24 @@ func IssueRefToken(tx *sql.Tx, token string, expires time.Time) error {
 	}
 	_, err := tx.Exec(`INSERT INTO meta (key, value) VALUES (?, ?)`, RefTokenKey(token), at(expires))
 	return err
+}
+
+// ForgetSessionProcesses clears a session's recorded processes.
+func ForgetSessionProcesses(tx *sql.Tx, harness, harnessSession string) error {
+	if _, err := tx.Exec(`DELETE FROM session_processes WHERE session IN (SELECT id FROM sessions WHERE harness = ? AND harness_session = ?)`, harness, harnessSession); err != nil {
+		return err
+	}
+	_, err := tx.Exec(`UPDATE sessions SET pid = NULL, pid_start = NULL WHERE harness = ? AND harness_session = ?`, harness, harnessSession)
+	return err
+}
+
+// PairSessions are the pair sessions still running, newest first.
+func PairSessions(q Querier) ([]Session, error) {
+	all, err := Sessions(q)
+	if err != nil {
+		return nil, err
+	}
+	return slices.DeleteFunc(all, func(s Session) bool { return !s.Pair || s.State != SessionActive || !s.Alive() }), nil
 }
 
 // Sessions returns every session, newest first.
@@ -355,13 +376,14 @@ func SaveSession(tx *sql.Tx, s Session) (int, error) {
 		pid = s.PID
 	}
 	var id int
-	err := tx.QueryRow(`INSERT INTO sessions (harness, harness_session, lane, lane_generation, purpose, state, started, last_activity, pid, pid_start)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, nullif(?, ''))
+	err := tx.QueryRow(`INSERT INTO sessions (harness, harness_session, lane, lane_generation, purpose, state, started, last_activity, pid, pid_start, pair)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, nullif(?, ''), ?)
 		ON CONFLICT (harness, harness_session) DO UPDATE SET lane = excluded.lane, lane_generation = excluded.lane_generation,
 			purpose = excluded.purpose, state = excluded.state, last_activity = excluded.last_activity,
-			pid = coalesce(excluded.pid, sessions.pid), pid_start = coalesce(excluded.pid_start, sessions.pid_start)
+			pid = coalesce(excluded.pid, sessions.pid), pid_start = coalesce(excluded.pid_start, sessions.pid_start),
+			pair = excluded.pair
 		RETURNING id`,
-		s.Harness, s.HarnessSession, lane, gen, s.Purpose, s.State, s.Started, s.LastActivity, pid, s.PIDStart).Scan(&id)
+		s.Harness, s.HarnessSession, lane, gen, s.Purpose, s.State, s.Started, s.LastActivity, pid, s.PIDStart, s.Pair).Scan(&id)
 	return id, err
 }
 

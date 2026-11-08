@@ -163,6 +163,12 @@ var ownerOnly = map[string]string{
 	"upgrade": "changes the pinned version", "init": "creates a workspace",
 }
 
+// OwnerOnly reports whether an aw command is one only the human runs.
+func OwnerOnly(command string) bool {
+	_, ok := ownerOnly[command]
+	return ok
+}
+
 // ownerOnlyRule refuses the human's aw commands to agents, wherever they appear: in a pipe, a
 // substitution or a wrapper (R60, R64).
 func ownerOnlyRule(s Scope, c shell.Command) Decision {
@@ -564,6 +570,86 @@ func isReadOnly(c shell.Command) bool {
 	return readOnly[name]
 }
 
+// writeTargets are the paths a command writes, removes or changes, for the common commands that do
+// so. Like every shell rule it stops accidents by cooperative agents: a program that writes files
+// by its own logic is not visible here.
+func writeTargets(c shell.Command) []shell.Word {
+	if len(c.Args) == 0 {
+		return nil
+	}
+	args := c.Args[1:]
+	plain := slices.DeleteFunc(slices.Clone(args), func(a shell.Word) bool { return a.Known && strings.HasPrefix(a.Text, "-") })
+	switch c.Name() {
+	case "rm", "mv", "tee", "touch", "chmod", "chown", "chgrp", "mkdir", "rmdir", "truncate", "unlink", "shred", "patch":
+		return plain
+	case "cp", "install", "ln", "rsync":
+		for i, a := range args[:max(len(args)-1, 0)] {
+			if a.Text == "-t" || a.Text == "--target-directory" {
+				return []shell.Word{args[i+1]}
+			}
+		}
+		if len(plain) > 0 {
+			return plain[len(plain)-1:]
+		}
+	case "dd":
+		var out []shell.Word
+		for _, a := range args {
+			if v, ok := strings.CutPrefix(a.Text, "of="); ok {
+				out = append(out, shell.Word{Text: v, Known: a.Known})
+			}
+		}
+		return out
+	case "sed", "perl", "ruby":
+		if hasArg(args, "--in-place") || hasShortFlag(args, 'i') {
+			return plain
+		}
+	}
+	return nil
+}
+
+// selfModRule applies the rule on a pair session's file tools to its shell commands (R63, R60):
+// redirects, the common file commands, and any writing command that names aw's own records.
+func selfModRule(s Scope, c shell.Command) Decision {
+	if s.Role != Pair {
+		return allow()
+	}
+	first := allow()
+	check := func(w shell.Word) Decision {
+		abs, ok := "", false
+		if w.Known {
+			abs, ok = absolute(w.Text, c.Dir)
+		}
+		if !ok {
+			return ask("self-modification", "this command writes to %s, and aw cannot tell whether that is the workspace's own configuration → write the path literally, or ask the human to approve it", quote(w.Text))
+		}
+		return s.selfModification(abs, w.Text)
+	}
+	targets := writeTargets(c)
+	for _, r := range c.Redirs {
+		if strings.Contains(r.Op, ">") && !isDup(r) && !harmless[r.Target.Text] {
+			targets = append(targets, r.Target)
+		}
+	}
+	for _, t := range targets {
+		switch d := check(t); d.Verdict {
+		case Deny:
+			return d
+		case Ask:
+			if first.Verdict == Allow {
+				first = d
+			}
+		}
+	}
+	if !isReadOnly(c) && len(c.Args) > 1 && !isAW(c) {
+		for _, a := range c.Args[1:] {
+			if abs, ok := absolute(a.Text, c.Dir); a.Known && ok && within(abs, filepath.Join(s.Owner, ".git", "aw")) {
+				return deny("self-modification", "%s is aw's own record of this workspace, which agents do not change → ask the human", quote(a.Text))
+			}
+		}
+	}
+	return first
+}
+
 // unattachedRule claims lanes lazily: a session in the owner checkout with no lane may read, and
 // anything else is refused with the attach and pair instructions.
 func unattachedRule(s Scope, c shell.Command) Decision {
@@ -574,7 +660,7 @@ func unattachedRule(s Scope, c shell.Command) Decision {
 	if n := c.Name(); n != "" {
 		what = n
 	}
-	return deny("attach", "%s may change files, and this session is not attached to a lane: the owner checkout belongs to the human %s", what, attachHint)
+	return deny("attach", "%s may change files, and this session is not attached to a lane: the owner checkout belongs to the human %s", what, s.attachHint())
 }
 
 // publicationRule asks before anything outward-facing (R72, its default): pushing, opening or

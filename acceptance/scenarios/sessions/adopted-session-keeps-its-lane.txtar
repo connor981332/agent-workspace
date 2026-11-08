@@ -1,0 +1,19 @@
+# aw new issues a session ID, and the harness's first hook replaces it with its own. The session's
+# commands still carry the issued one in AW_SESSION, so they must still find the same record.
+# req: R77
+# source: spec (no candidate source)
+# milestone: M3
+
+workspace shop --init
+stubs claude
+env STUB_HARNESS_SLEEP=20
+exec sh -c 'aw new "add feature flag" > /dev/null 2>&1 & echo started'
+exec sh -c 'i=0; while ! grep -q "claude AW_SESSION" "$STUB_LOG" 2>/dev/null && [ $i -lt 100 ]; do sleep 0.05; i=$((i + 1)); done'
+cd .worktrees/01
+exec sh $WORK/as.sh awtest-hook write web/x.ts
+exec sh $WORK/as.sh aw attach 'something else'
+stdout 'Already attached to lane 01'
+! exists $OWNER/.worktrees/02
+
+-- as.sh --
+AW_SESSION=$(sed -n 's/^claude AW_SESSION=//p' "$STUB_LOG" | head -1) exec "$@"

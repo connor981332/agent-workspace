@@ -66,9 +66,12 @@ directory until the session record is consulted. Codex 0.167.0 and Grok 1.0.77 p
 process, and `aw attach` takes its identity from the harness's environment (PR #27). The Git hooks dispatcher and `reference-transaction` hook, with a first `aw setup` (PR #29). `aw setup` also merges aw's hooks into each harness's project configuration, and a session is told
 where it is when it starts (PR #30). The policy, parity and confinement scenarios that needed only the engine (PR #31). Now
 (`m3/resume-sessions`): state schema 4, several processes per session, a resumed session joining or
-returning to its lane, the session-start revival rule, and `aw whoami` reporting attachments.
+returning to its lane, the session-start revival rule, and `aw whoami` reporting attachments (PR #32).
+Now (`m3/pair`): `aw pair`, granting a running session with `--session`, state schema 5, owner-only
+commands refusing in agent context (S10, recorded in owner-checkout.md), and pair sessions' shell
+commands checked for self-modification.
 
-**Next step:** purpose capture from the first prompt, `aw doctor`'s hooks-path check, `aw pair`,
+**Next step:** purpose capture from the first prompt, `aw doctor`'s hooks-path check,
 `compose`, team guards, terminal multiplexers, `aw resume` and `aw open`, `docs/safety.md`.
 
 **Open question for the spec owner:** architecture.md names OpenCode's `tool.execute.before` plugin
