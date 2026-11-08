@@ -1,0 +1,29 @@
+# The hook, aw whoami and aw config get run no Git, container engine, devcontainer CLI, forge CLI,
+# database client or network tool. Recording stubs for all of them come first on PATH and must
+# stay silent.
+# req: R2
+# source: spec (speed.md, "The hot path"; plan §5.3)
+# milestone: M1
+
+workspace shop
+exec aw init
+exec aw version
+owner-snapshot
+
+exec sh $WORK/forbid.sh
+env PATH=$WORK/forbid:$PATH
+
+exec sh -c 'printf "{\"cwd\":\"%s\"}" "$OWNER" | aw hook claude pre-tool-use'
+exec aw whoami
+exec aw whoami --json
+exec aw config get lanes.max
+exec aw config explain lanes.max
+exec aw config validate
+! exists $WORK/forbidden.log
+
+-- forbid.sh --
+mkdir -p "$WORK/forbid"
+for tool in git docker devcontainer gh glab psql redis-cli curl wget; do
+	printf '#!/bin/sh\necho "%s $*" >> "$WORK/forbidden.log"\nexit 97\n' "$tool" > "$WORK/forbid/$tool"
+	chmod +x "$WORK/forbid/$tool"
+done

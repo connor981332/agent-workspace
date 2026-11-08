@@ -157,3 +157,60 @@ jobs:
             echo
             echo "Skipped scenarios are pending: their milestone is later than \`current\` in acceptance/requirements.toml."
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # Latency budgets (§5.2): absolute on ubuntu-24.04, and regressions against master on macos-15,
+  # whose virtual machines cannot hold an absolute budget (docs/dev/spikes.md). Master's binary is
+  # built in the same job and measured interleaved with this one, so that the noise of a shared
+  # machine affects both alike. Each run's results are kept as an artifact.
+  bench:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            mode: absolute
+          - os: macos-15
+            mode: relative
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            acceptance/go.sum
+      - name: Build master's aw, the baseline
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ -z "$BASE" ] || [ "$BASE" = 0000000000000000000000000000000000000000 ]; then
+            echo "No baseline commit"; exit 0
+          fi
+          git fetch -q --depth=1 origin "$BASE"
+          git worktree add -q "$RUNNER_TEMP/baseline-src" "$BASE"
+          (cd "$RUNNER_TEMP/baseline-src" && CGO_ENABLED=0 go build -trimpath \
+            -ldflags "-X github.com/connor981332/agent-workspace/internal/cli.version=0.0.0-bench-baseline" \
+            -o "$RUNNER_TEMP/aw-baseline" ./cmd/aw)
+          echo "Baseline: $BASE"
+      - name: Bench
+        working-directory: acceptance
+        shell: bash
+        env:
+          AW_BENCH_HOST: ${{ matrix.os }}
+        run: |
+          args=(-mode "${{ matrix.mode }}" -out "$RUNNER_TEMP/bench.json")
+          if [ -x "$RUNNER_TEMP/aw-baseline" ]; then args+=(-baseline-aw "$RUNNER_TEMP/aw-baseline");
+          elif [ "${{ matrix.mode }}" = relative ]; then args=(-mode absolute -out "$RUNNER_TEMP/bench.json"); echo "No baseline: reporting only"; fi
+          set +e
+          go run ./bench "${args[@]}" | tee -a "$GITHUB_STEP_SUMMARY"
+          status=${PIPESTATUS[0]}
+          if [ "${{ matrix.mode }}" = relative ] && [ ! -x "$RUNNER_TEMP/aw-baseline" ]; then status=0; fi
+          exit "$status"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: bench-${{ matrix.os }}
+          path: ${{ runner.temp }}/bench.json
+          if-no-files-found: ignore

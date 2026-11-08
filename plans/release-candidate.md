@@ -14,45 +14,40 @@ milestone named in its row.
 
 **Updated:** 2026-11-07
 
-**Branches / MRs:** [PR #5](https://github.com/connor981332/agent-workspace/pull/5) (this plan),
-[PR #6](https://github.com/connor981332/agent-workspace/pull/6) (settled questions),
-[PR #7](https://github.com/connor981332/agent-workspace/pull/7) (T1),
-[PR #8](https://github.com/connor981332/agent-workspace/pull/8) (T2),
-[PR #9](https://github.com/connor981332/agent-workspace/pull/9) (GoReleaser),
-[PR #10](https://github.com/connor981332/agent-workspace/pull/10) (spike results),
-[PR #11](https://github.com/connor981332/agent-workspace/pull/11) (the 8 ms budget),
-[PR #12](https://github.com/connor981332/agent-workspace/pull/12) (M1 configuration),
-[PR #13](https://github.com/connor981332/agent-workspace/pull/13) (M1 state store),
-[PR #14](https://github.com/connor981332/agent-workspace/pull/14) (M1 launcher and `aw init`), all merged.
-`m1/commands` (M1 `aw whoami`, `aw doctor`, hook stub, open). `spike/hot-path` (T3 and the ref-hook spike, never merged).
+**Branches / MRs:** PRs [#5](https://github.com/connor981332/agent-workspace/pull/5) to
+[#15](https://github.com/connor981332/agent-workspace/pull/15), merged: the plan and settled
+questions (#5, #6), M0 (#7 to #11), M1 (#12 to #15). `m1/bench` (the M1 bench, open).
+`spike/hot-path` (T3 and the ref-hook spike, never merged).
 
 **Done:** Read the spec and both candidates and wrote this plan. Settled the spec's five open
 questions (§8). The spec owner accepted every proposed answer in [Spec issues](#spec-issues) (S1 to
 S19) on 2026-11-07; each is recorded in the spec by the PR of the milestone that needs it (S5 and S6
-are recorded). **M0 is complete:** the Go module and CI matrix (T1; §4.3 rule 3 reworded because
-`cmd/aw` links the command tree), the acceptance harness with three passing scenarios and the M1
-scenarios pending (T2), GoReleaser with a reproducible snapshot build in CI, the PR template with
-the hot-path check, and the hot-path and ref-hook spikes ([docs/dev/spikes.md](../docs/dev/spikes.md)).
-T3 missed its 3 ms target; the spec owner kept the design and set the guard budget to 8 ms p99
-(the M0 target to 6 ms, which the prototype meets on ubuntu-24.04 at 5.58 ms), with budgets on
-macOS CI checked for regressions only.
+are recorded).
+- **M0 complete.** The Go module and CI matrix, the acceptance harness, GoReleaser with a
+  reproducible snapshot build, the PR template with the hot-path check, and the hot-path and
+  ref-hook spikes ([docs/dev/spikes.md](../docs/dev/spikes.md)). T3 missed its 3 ms target; the spec
+  owner kept the design and set the guard budget to 8 ms p99 (M0 target 6 ms, met at 5.58 ms on
+  ubuntu-24.04), with macOS CI checked for regressions only.
+- **M1 complete** (with `m1/bench`). Configuration: three layers, locks, provenance, strict errors
+  with file, line and fix, the compiled cache, `aw config get|explain|validate`, and the reference
+  generated from the schema. State: SQLite in WAL mode with versioned migrations, backups, and
+  read-only mode. The `bin/aw` launcher (exact pins, checksums, a local mirror, and hooks that fail
+  closed) and `aw init`. `aw whoami`, `aw doctor`, the hook stub, timings, NO_COLOR and
+  control-character stripping. All 27 M1 scenarios pass, and the bench enforces the M1 budgets in
+  CI. Decisions made with the spec owner during M1: §4.3 rule 3 allowlists `modernc.org/libc` and
+  `github.com/google/uuid` (needed by the SQLite driver). Changes to the plan's mechanics:
+  `requirements.toml` gained `in_progress`, so a milestone's written scenarios and benchmarks run
+  in CI from the PR that adds them.
 
-**In progress:** M1. Done in M1 so far: configuration (PR #12): the three layers with provenance, locks, strict
-decoding with file, line and fix, the compiled cache, `aw config get|explain|validate`, the
-configuration reference generated from the schema (docs/reference/config.md), examples, and the
-seven `config/` scenarios. The acceptance runner gained `in_progress` (requirements.toml), so the
-milestone's written scenarios run in CI from the PR that adds them. The state store (PR #13): SQLite in WAL mode, `PRAGMA user_version`, numbered migrations with a backup before
-each, read-only mode for a newer schema, and protection when the database is unreadable. Rule 3 of
-§4.3 gained a reviewed allowlist for the SQLite driver's own dependencies. The `bin/aw` launcher
-and `aw init` (PR #14); for hooks the launcher runs the binary as a child, so that a binary that
-cannot start still refuses (exit 2). Now (`m1/commands`): `aw whoami`, `aw doctor` (with
-`--timings`), the hook stub, `AW_DEBUG=1` phase timings, NO_COLOR and control-character stripping,
-and every remaining M1 scenario.
+**In progress:** `m1/bench`: the bench (§5) with budgets checked against speed.md, recording stubs
+for the hot path, the `bench` CI job, three more M1 scenarios (R2, R10, R17), and moving the
+acceptance suite to `current = "M1"`.
 
-**Next step:** the `bench` job and its budgets (§5), then move the acceptance suite's `current` to
-M1, which closes M1.
+**Next step:** M2: lanes and merge proof. Before it starts, record the accepted answers to S4 and
+S17 in the spec.
 
-**Pending manual checks:** hot-path benchmark on an Apple Silicon laptop (T3).
+**Pending manual checks:** the hot-path and budget benchmarks on an Apple Silicon laptop (T3, M1;
+docs/dev/benchmarks.md).
 
 ## How to use this plan
 
@@ -954,7 +949,9 @@ summary for the CI job page.
 - **Reference runners:** GitHub-hosted `ubuntu-24.04` (amd64) and `macos-15` (arm64). See S5. The
   budgets are enforced absolutely on `ubuntu-24.04` only. `macos-15` is a virtual machine whose
   process start alone costs 8 ms p99 (docs/dev/spikes.md), so there an operation fails when its p99
-  grows more than 25 % over master's last run, with the same rerun rule.
+  grows more than 25 % over master's, with the same rerun rule. (Implemented in M1 as an A/B run:
+  the job builds master's binary and measures it interleaved with the PR's on the same machine,
+  comparing medians, because separate macOS runs differed by more than 2× at p99.)
 - A `bench` job runs on every pull request and on every push to master, from M1 on (M0 runs the
   spike prototype only).
 - An operation fails when its p99 exceeds its budget. A failing operation is measured once more in

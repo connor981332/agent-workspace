@@ -8,8 +8,9 @@ exec aw init
 owner-snapshot
 exec bin/aw version
 
-# Damage the cached binary, keeping it executable.
-exec sh -c 'printf "garbage\n" > "$XDG_CACHE_HOME/agent-workspace/bin/$AW_VERSION/aw"'
+# Damage the cached binary, keeping it executable. (It is replaced rather than overwritten in place,
+# because Linux refuses writes to a file that was executed a moment ago: "text file busy".)
+exec sh -c 'f="$XDG_CACHE_HOME/agent-workspace/bin/$AW_VERSION/aw"; rm -f "$f" && printf "garbage\n" > "$f" && chmod 755 "$f"'
 exec sh -c 'bin/aw hook claude pre-tool-use </dev/null; echo "status=$?"'
 stdout '^status=2$'
 stderr 'so this call is refused → run bin/aw doctor'
@@ -19,7 +20,7 @@ exec sh -c 'bin/aw git-hook reference-transaction prepared </dev/null; echo "sta
 stdout '^status=2$'
 
 # A binary that crashes is a refusal too.
-exec sh -c 'printf "#!/bin/sh\nexit 70\n" > "$XDG_CACHE_HOME/agent-workspace/bin/$AW_VERSION/aw"'
+exec sh -c 'f="$XDG_CACHE_HOME/agent-workspace/bin/$AW_VERSION/aw"; rm -f "$f" && printf "#!/bin/sh\nexit 70\n" > "$f" && chmod 755 "$f"'
 exec sh -c 'bin/aw hook claude pre-tool-use </dev/null; echo "status=$?"'
 stdout '^status=2$'
 stderr 'exited with status 70, so this call is refused'
