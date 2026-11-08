@@ -22,7 +22,7 @@ func TestVersionHuman(t *testing.T) {
 	if code != ExitOK {
 		t.Fatalf("exit %d, stderr %q", code, errOut)
 	}
-	want := "aw dev (config schema 0, state schema 0)\n"
+	want := "aw dev (config schema 1, state schema 1)\n"
 	if out != want {
 		t.Fatalf("stdout %q, want %q", out, want)
 	}
@@ -37,7 +37,7 @@ func TestVersionJSON(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &got); err != nil {
 		t.Fatalf("stdout is not JSON: %v\n%s", err, out)
 	}
-	want := map[string]any{"version": "dev", "config_schema": float64(0), "state_schema": float64(0)}
+	want := map[string]any{"version": "dev", "config_schema": float64(1), "state_schema": float64(1)}
 	if len(got) != len(want) {
 		t.Fatalf("got keys %v, want exactly %v", got, want)
 	}

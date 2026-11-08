@@ -20,8 +20,9 @@ milestone named in its row.
 [PR #8](https://github.com/connor981332/agent-workspace/pull/8) (T2),
 [PR #9](https://github.com/connor981332/agent-workspace/pull/9) (GoReleaser),
 [PR #10](https://github.com/connor981332/agent-workspace/pull/10) (spike results),
-[PR #11](https://github.com/connor981332/agent-workspace/pull/11) (the 8 ms budget), all merged.
-`m1/config` (M1 configuration, open). `spike/hot-path` (T3 and the ref-hook spike, never merged).
+[PR #11](https://github.com/connor981332/agent-workspace/pull/11) (the 8 ms budget),
+[PR #12](https://github.com/connor981332/agent-workspace/pull/12) (M1 configuration), all merged.
+`m1/state` (M1 state store, open). `spike/hot-path` (T3 and the ref-hook spike, never merged).
 
 **Done:** Read the spec and both candidates and wrote this plan. Settled the spec's five open
 questions (§8). The spec owner accepted every proposed answer in [Spec issues](#spec-issues) (S1 to
@@ -34,13 +35,16 @@ T3 missed its 3 ms target; the spec owner kept the design and set the guard budg
 (the M0 target to 6 ms, which the prototype meets on ubuntu-24.04 at 5.58 ms), with budgets on
 macOS CI checked for regressions only.
 
-**In progress:** M1. Configuration (`m1/config`): the three layers with provenance, locks, strict
+**In progress:** M1. Done in M1 so far: configuration (PR #12): the three layers with provenance, locks, strict
 decoding with file, line and fix, the compiled cache, `aw config get|explain|validate`, the
 configuration reference generated from the schema (docs/reference/config.md), examples, and the
 seven `config/` scenarios. The acceptance runner gained `in_progress` (requirements.toml), so the
-milestone's written scenarios run in CI from the PR that adds them.
+milestone's written scenarios run in CI from the PR that adds them. Now: the state store
+(`m1/state`): SQLite in WAL mode, `PRAGMA user_version`, numbered migrations with a backup before
+each, read-only mode for a newer schema, and protection when the database is unreadable. Rule 3 of
+§4.3 gained a reviewed allowlist for the SQLite driver's own dependencies.
 
-**Next step:** M1 state store, then the launcher and `aw init`, then `aw whoami`, `aw doctor`, the
+**Next step:** the launcher and `aw init`, then `aw whoami`, `aw doctor`, the
 hook stub, timings and the `bench` job.
 
 **Pending manual checks:** hot-path benchmark on an Apple Silicon laptop (T3).
@@ -885,7 +889,11 @@ Rules, checked by a test that runs `go list -deps`:
    may not import them directly, but it also links the command tree (`cli`, whose flag library
    imports `net`, and later `app`, which reaches `os/exec`), so it cannot meet the transitive rule.
    Rule 4 keeps that code from running on the hot path, and T3 measures what its package
-   initialization costs.
+   initialization costs. Two third-party packages are exempt, by the spec owner's decision of
+   2026-11-07: `modernc.org/libc` (the C library under `modernc.org/sqlite`, which imports
+   `os/exec` for `system()` and `popen()`, never called by SQLite) and `github.com/google/uuid`
+   (which imports `net`). The check does not descend into them; any other path to a forbidden
+   package still fails, and the allowlist lives in `internal/archtest`.
 4. `cmd/aw` checks for `hook` and `git-hook` as its first argument and dispatches before the command
    tree is built, so the CLI framework's setup cost never reaches the hot path.
 
