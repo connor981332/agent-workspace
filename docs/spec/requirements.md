@@ -9,7 +9,7 @@ expected but can follow.
 
 ## Speed
 
-- **R1.** A guard decision for one tool call must take under 5 ms at the 99th percentile on a
+- **R1.** A guard decision for one tool call must take under 8 ms at the 99th percentile on a
   developer laptop, measured from process start to exit, including the launcher.
 - **R2.** No hook, and no read-only command, may contact the network, a container engine or a forge.
 - **R3.** Commands whose duration the tool controls (`aw`, `aw recap`, `aw attach`, `aw new` up to
