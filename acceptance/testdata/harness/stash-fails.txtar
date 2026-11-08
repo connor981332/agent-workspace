@@ -1,0 +1,4 @@
+# A stash is shared by every worktree, so creating one disturbs the owner.
+# want-failure: changed: .: ref refs/stash
+workspace w --single
+exec sh -c 'echo edit >> README.md && git stash -q'

@@ -1,0 +1,13 @@
+# The json command reads stdout, stderr or a file.
+exec cat data.json
+json stdout .name solo
+json stdout .lanes[0].action keep
+json stdout .count 3
+json stdout .ok true
+json stdout .lanes
+! json stdout .missing
+! json stdout .name other
+json data.json .lanes[1].action recycle
+
+-- data.json --
+{"name": "solo", "count": 3, "ok": true, "lanes": [{"action": "keep"}, {"action": "recycle"}]}

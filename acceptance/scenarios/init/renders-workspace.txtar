@@ -1,0 +1,5 @@
+# aw init writes workspace.toml, .aw/version, .aw/lock, .aw/managed, bin/aw and the .gitignore entries, with no placeholder left.
+# source: C2 tests::t_init_renders_every_placeholder
+# milestone: M1
+
+unwritten

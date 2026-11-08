@@ -1,0 +1,6 @@
+# Help and usage errors create no state and take no lock.
+# req: R93
+# source: C1 test_tooling.py::test_rt_usage_and_identity_do_not_initialize_or_acquire_writable_gate
+# milestone: M1
+
+unwritten

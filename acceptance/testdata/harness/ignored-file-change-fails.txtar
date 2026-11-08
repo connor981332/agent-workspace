@@ -1,0 +1,6 @@
+# Ignored files belong to the owner too (a .env, say): changing one fails the scenario.
+# want-failure: removed: web: file .env
+workspace w
+exec sh -c 'echo SECRET=1 > web/.env'
+owner-snapshot
+rm web/.env

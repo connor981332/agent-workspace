@@ -1,0 +1,5 @@
+# Moving one of the owner's branches fails the scenario, even with the files restored.
+# want-failure: changed: api: ref refs/heads/main
+workspace w
+cd api
+exec git commit -q --allow-empty -m 'not the owner'

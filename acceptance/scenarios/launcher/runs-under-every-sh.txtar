@@ -1,0 +1,6 @@
+# The launcher runs under dash, bash, BusyBox ash and macOS /bin/sh.
+# req: R11
+# source: C2 tests::t_scripts_parse
+# milestone: M1
+
+unwritten

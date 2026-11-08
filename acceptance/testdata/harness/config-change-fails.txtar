@@ -1,0 +1,4 @@
+# Shared Git configuration is part of the owner checkout.
+# want-failure: changed: .: .git/config
+workspace w --single
+exec git config core.hooksPath /elsewhere

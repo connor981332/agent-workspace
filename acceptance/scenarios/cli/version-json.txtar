@@ -1,0 +1,13 @@
+# aw version --json gives the same three numbers as JSON, for scripts and agents.
+# req: R93
+# milestone: M0
+
+exec aw version --json
+json stdout .version
+json stdout .config_schema 0
+json stdout .state_schema 0
+! stderr .
+
+# The text form and the JSON form agree.
+exec aw version
+stdout '\(config schema 0, state schema 0\)'

@@ -1,0 +1,6 @@
+# Two workspaces on one machine run different pinned versions side by side.
+# req: R16
+# source: C2 finding F6
+# milestone: M1
+
+unwritten

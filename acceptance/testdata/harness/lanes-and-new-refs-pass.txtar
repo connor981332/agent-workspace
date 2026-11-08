@@ -1,0 +1,10 @@
+# Lanes live under .worktrees, state lives in the Git directory, and new branches are lanes':
+# none of them disturbs the owner checkout.
+workspace w
+exec git worktree add -q -b lane-03 .worktrees/03
+exec sh -c 'echo work > .worktrees/03/file.txt'
+cd web
+exec git worktree add -q -b lane-03 .worktrees/03
+exec git -C .worktrees/03 commit -q --allow-empty -m 'lane work'
+exec git update-ref refs/aw/archive/old HEAD
+exec sh -c 'mkdir -p "$(git rev-parse --git-common-dir)/aw" && echo db > "$(git rev-parse --git-common-dir)/aw/state.db"'

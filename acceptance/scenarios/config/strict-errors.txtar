@@ -1,0 +1,6 @@
+# Every configuration mistake from C1's cases is an error that names the file, the line and the fix.
+# req: R9
+# source: C1 test_generic.py::ManifestTests::test_mistakes_are_errors_rather_than_ignored
+# milestone: M1
+
+unwritten

@@ -1,0 +1,6 @@
+# ! owner-unchanged asserts a change, and owner-snapshot accepts it.
+workspace w
+exec sh -c 'echo edit >> README.md'
+! owner-unchanged
+owner-snapshot
+owner-unchanged

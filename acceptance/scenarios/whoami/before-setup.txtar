@@ -1,0 +1,6 @@
+# aw whoami works before setup.
+# req: R14
+# source: C1 test_tooling.py::test_observers_tolerate_a_never_created_gate
+# milestone: M1
+
+unwritten

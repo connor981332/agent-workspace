@@ -1,0 +1,6 @@
+# aw whoami writes nothing, in the owner checkout or anywhere else.
+# req: R93
+# source: C1 test_tooling.py::test_identity_is_observational_and_handles_unknown_slot
+# milestone: M1
+
+unwritten

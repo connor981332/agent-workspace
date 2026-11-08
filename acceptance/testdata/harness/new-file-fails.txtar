@@ -1,0 +1,4 @@
+# A new untracked file in the owner checkout fails the scenario.
+# want-failure: added: .: file stray.txt
+workspace w
+exec sh -c 'echo x > stray.txt'

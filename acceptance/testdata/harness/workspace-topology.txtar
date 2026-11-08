@@ -1,0 +1,23 @@
+# The workspace command's layout: a workspace repository with nested project repositories, bare
+# remotes, one commit each, a path with spaces and a quote reached through a symlink, and the
+# archive's workspace.toml committed.
+workspace shop --repos web,api,mobile
+exec pwd
+stdout 'it''s a workspace/shop$'
+exec sh -c 'test "$(pwd -P)" != "$OWNER"'
+exists workspace.toml
+exec git log --oneline
+stdout 'Initial commit'
+exec git ls-files
+stdout '^workspace.toml$'
+! stdout 'web'
+exec git -C mobile rev-parse --abbrev-ref --symbolic-full-name '@{u}'
+stdout '^origin/main$'
+exec git -C web status --porcelain
+! stdout .
+exec sh -c 'echo "$AW_TEST_FORGE"'
+stdout '^github$'
+
+-- workspace.toml --
+[workspace]
+name = "Shop"

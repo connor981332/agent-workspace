@@ -1,0 +1,6 @@
+# NO_COLOR is honored, and control characters from names and paths are stripped from output.
+# req: R93
+# source: C1 test_tooling.py::test_terminal_controls_and_no_color
+# milestone: M1
+
+unwritten

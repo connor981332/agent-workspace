@@ -1,0 +1,6 @@
+# A state database with a newer or unknown schema is opened read-only, and commands that would write refuse with the fix.
+# req: R19
+# source: spec (no candidate source)
+# milestone: M1
+
+unwritten

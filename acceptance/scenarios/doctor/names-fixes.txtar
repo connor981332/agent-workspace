@@ -1,0 +1,6 @@
+# Every aw doctor failure names its fix. (M3 adds the hook checks.)
+# req: R14
+# source: C1 test_generic.py::HostLaneTests::test_doctor_names_each_fix
+# milestone: M1
+
+unwritten

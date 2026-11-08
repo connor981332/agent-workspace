@@ -1,0 +1,6 @@
+# Every example workspace.toml in the repository validates.
+# req: R9
+# source: C2 tests::t_example_workspace_loads
+# milestone: M1
+
+unwritten

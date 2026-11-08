@@ -10,4 +10,4 @@ ships its own plan mechanism.
 
 | Plan | State | Updated | Summary |
 |---|---|---|---|
-| [release-candidate.md](release-candidate.md) | PLANNED | 2026-11-07 | Milestones, acceptance suite, module layout, benchmarks, release pipeline and CI for the Go release candidate. |
+| [release-candidate.md](release-candidate.md) | PARTIALLY IMPLEMENTED | 2026-11-07 | Milestones, acceptance suite, module layout, benchmarks, release pipeline and CI for the Go release candidate. |

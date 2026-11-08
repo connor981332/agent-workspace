@@ -1,0 +1,5 @@
+# owner-unchanged in the middle of a scenario checks against the last snapshot.
+# want-failure: the owner checkout changed:
+workspace w
+exec sh -c 'echo edit >> README.md'
+owner-unchanged

@@ -1,0 +1,5 @@
+# A scenario that changes the owner checkout on purpose says so.
+workspace w
+owner-may-change
+exec sh -c 'echo edit >> README.md'
+exec git commit -q -am 'the human commits'
