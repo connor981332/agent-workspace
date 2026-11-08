@@ -1,0 +1,33 @@
+# T3 spike only (branch spike/hot-path, never merged): measure the prototype hot path.
+name: Spike hot path
+on:
+  push:
+    branches: [spike/hot-path]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  bench:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15, ubuntu-24.04-arm, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: spike/go.mod
+          cache-dependency-path: spike/go.sum
+      - name: Shells
+        run: ls -l /bin/sh; (readlink -f /bin/sh || true); uname -a
+      - name: Bench
+        working-directory: spike
+        env:
+          AW_BENCH_HOST: ${{ matrix.os }}
+        run: go run ./bench -n 1000 -out "$RUNNER_TEMP/${{ matrix.os }}.json" | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: bench-${{ matrix.os }}
+          path: ${{ runner.temp }}/${{ matrix.os }}.json
