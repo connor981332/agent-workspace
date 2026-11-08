@@ -41,11 +41,13 @@ type adapter struct {
 	normalize func(m map[string]any, event string) (Payload, error)
 	// reply writes a decision and returns the exit status.
 	reply func(p Payload, d policy.Decision, stdout, stderr io.Writer) int
+	// notify adds a message to an allowed call's reply. nil: this harness has no way to show one yet.
+	notify func(text string, stdout io.Writer)
 }
 
 var adapters = map[string]*adapter{
-	"claude":   {name: "claude", ask: true, normalize: normalizeClaude, reply: replyClaude},
-	"codex":    {name: "codex", ask: false, normalize: normalizeCodex, reply: replyClaude},
+	"claude":   {name: "claude", ask: true, normalize: normalizeClaude, reply: replyClaude, notify: notifyClaude},
+	"codex":    {name: "codex", ask: false, normalize: normalizeCodex, reply: replyClaude, notify: notifyClaude},
 	"grok":     {name: "grok", ask: true, normalize: normalizeGrok, reply: replyGrok},
 	"opencode": {name: "opencode", ask: false, normalize: normalizeOpenCode, reply: replyPlain},
 }
@@ -220,6 +222,12 @@ func replyClaude(p Payload, d policy.Decision, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout, string(out))
 	}
 	return Allow
+}
+
+// notifyClaude adds context to an allowed call, in Claude Code's hook contract.
+func notifyClaude(text string, stdout io.Writer) {
+	out, _ := json.Marshal(map[string]any{"hookSpecificOutput": map[string]any{"hookEventName": "PreToolUse", "additionalContext": text}})
+	fmt.Fprintln(stdout, string(out))
 }
 
 // Codex (measured: 0.167.0, testdata/codex-0.167.0). Its payload has Claude Code's shape; it edits

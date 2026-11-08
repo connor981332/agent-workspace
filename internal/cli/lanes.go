@@ -144,6 +144,9 @@ with uncommitted work is refused. It asks for confirmation on a terminal; elsewh
 					return errors.New("not discarded")
 				}
 			}
+			if err := newBroker(w).ReleaseLane(cmd.Context(), l.Number); err != nil {
+				return err
+			}
 			archived, err := m.Discard(cmd.Context(), l, time.Now())
 			if err != nil {
 				return err
@@ -187,7 +190,9 @@ func newParkCmd(unpark bool) *cobra.Command {
 			if unpark {
 				l, err = m.Unpark(cmd.Context(), l)
 			} else {
-				l, err = m.Park(cmd.Context(), l)
+				if err = newBroker(w).ReleaseLane(cmd.Context(), l.Number); err == nil {
+					l, err = m.Park(cmd.Context(), l)
+				}
 			}
 			if err != nil {
 				return err
@@ -228,6 +233,11 @@ uncommitted work, is not on the lane's branch, or changes while it runs.`,
 			f, err := m.Finish(cmd.Context(), l, o)
 			if err != nil {
 				return err
+			}
+			// After the handoff is on record: a failure here loses nothing, and running aw finish again
+			// retries it.
+			if err := newBroker(w).ReleaseLane(cmd.Context(), l.Number); err != nil {
+				return fmt.Errorf("the handoff is written, but this lane's seats could not be released (%v) → run aw finish again", err)
 			}
 			if asJSON {
 				return writeJSON(cmd.OutOrStdout(), f)

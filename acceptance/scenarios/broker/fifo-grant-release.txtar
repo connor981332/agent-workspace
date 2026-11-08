@@ -1,0 +1,83 @@
+# Seats go first come, first served. A full resource gives a position, and a released seat is
+# reserved for the next in line, who is told on a later tool call and takes it up with aw serve.
+# req: R36 R37 R43
+# source: C1 test_queue_grant_release_priority_and_cancellation
+# milestone: M4
+
+workspace shop --init
+exec aw attach one
+exec aw attach two
+exec aw attach three
+
+cd .worktrees/01
+exec aw serve stack
+stdout 'Holding seat 1 on stack'
+stdout 'app http://lane-01.localhost:3100'
+stdout 'db http://lane-01.localhost:5100'
+
+cd ../02
+! exec aw serve stack
+stderr 'position 1 in line for stack'
+cd ../03
+! exec aw serve stack
+stderr 'position 2 in line for stack'
+
+cd ../02
+exec aw queue --json
+json stdout .resources[0].holders[0].lane_name one
+json stdout .resources[0].waiting[0].lane_name two
+json stdout .resources[0].waiting[1].lane_name three
+
+# The holder releases: its servers stop, and the next lane is told.
+cd ../01
+exec aw stop stack
+stdout 'Released stack'
+cd ../02
+exec awtest-hook bash 'ls'
+stdout 'A seat on stack is reserved for this lane'
+exec awtest-hook bash 'ls'
+! stdout .
+exec aw serve stack
+stdout 'Holding seat 1 on stack'
+cd ../03
+! exec aw serve stack
+stderr 'position 1 in line'
+cd ../02
+exec aw stop stack
+cd ../03
+exec aw serve stack
+stdout 'Holding seat 1'
+exec aw stop stack
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+port_stride = 100
+
+[projects.web]
+directory = "web"
+
+[projects.web.servers.app]
+command = "echo $$ >> $WORK/pids; exec sleep 60 # {port}"
+port = 3000
+
+[projects.web.servers.db]
+command = "echo $$ >> $WORK/pids; exec sleep 61 # {port}"
+port = 5000
+
+[projects.api]
+directory = "api"
+
+[resources.stack]
+kind = "process"
+capacity = 1
+servers = ["web.app", "web.db"]
+owner_counts = true
+owner_preempts = true
+evict_grace = "2s"
+

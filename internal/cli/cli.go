@@ -22,6 +22,11 @@ func Main(args []string, stdout, stderr io.Writer) int {
 	if errors.As(err, &status) {
 		return status.code // the command's own status; it has printed what it had to say
 	}
+	var queued *queuedError
+	if errors.As(err, &queued) {
+		fmt.Fprintln(stderr, "aw: "+queued.message)
+		return ExitQueued
+	}
 	code := exitCode(err)
 	if err != nil {
 		fmt.Fprintf(stderr, "aw: %v\n", err)
@@ -78,7 +83,7 @@ func newRoot(stdout, stderr io.Writer) *cobra.Command {
 	root.CompletionOptions.HiddenDefaultCmd = true
 
 	root.AddCommand(newVersionCmd(), newConfigCmd(), newInitCmd(), newSetupCmd(), newDoctorCmd(), newWhoamiCmd(), newAttachCmd(),
-		newSweepCmd(), newDiscardCmd(), newParkCmd(false), newParkCmd(true), newFinishCmd(), newRunCmd(), newNewCmd(), newRecapCmd(), newPairCmd(), newResumeCmd(), newOpenCmd())
+		newSweepCmd(), newDiscardCmd(), newParkCmd(false), newParkCmd(true), newFinishCmd(), newRunCmd(), newNewCmd(), newRecapCmd(), newPairCmd(), newResumeCmd(), newOpenCmd(), newServeCmd(), newStopCmd(), newQueueCmd())
 	root.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error { return refuseAgent(cmd) }
 	return root
 }

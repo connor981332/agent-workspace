@@ -60,6 +60,10 @@ func openForWrite() (*writeContext, error) {
 		store.Close()
 		return nil, err
 	}
+	if err := newBroker(w).Recover(context.Background()); err != nil {
+		store.Close()
+		return nil, err
+	}
 	return w, nil
 }
 

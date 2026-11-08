@@ -1,0 +1,57 @@
+# Giving up a foreground wait leaves the queue, so nobody behind it waits for someone who has gone.
+# req: R37
+# source: C1 test_queue_grant_release_priority_and_cancellation
+# milestone: M4
+
+workspace shop --init
+exec aw attach one
+exec aw attach two
+cd .worktrees/01
+exec aw serve stack
+cd ../02
+exec sh $WORK/wait.sh
+stdout 'left the queue'
+exec aw queue --json
+! stdout '"lane_name": "two"'
+cd ../01
+exec aw stop stack
+
+-- wait.sh --
+aw serve stack --wait 2>&1 &
+pid=$!
+i=0
+while [ $i -lt 100 ] && ! aw queue --json | grep -q '"lane_name": "two"'; do sleep 0.05; i=$((i + 1)); done
+kill -INT $pid
+wait $pid || true
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+port_stride = 100
+
+[projects.web]
+directory = "web"
+
+[projects.web.servers.app]
+command = "echo $$ >> $WORK/pids; exec sleep 60 # {port}"
+port = 3000
+
+[projects.web.servers.db]
+command = "echo $$ >> $WORK/pids; exec sleep 61 # {port}"
+port = 5000
+
+[projects.api]
+directory = "api"
+
+[resources.stack]
+kind = "process"
+capacity = 1
+servers = ["web.app", "web.db"]
+owner_counts = true
+owner_preempts = true
+evict_grace = "2s"
+

@@ -1,0 +1,53 @@
+# aw finish lets go of the lane's own seats, and nobody else's.
+# req: R78
+# source: C1 test_finish_cli_releases_only_own_slot
+# milestone: M4
+
+workspace shop --init
+exec aw attach one
+exec aw attach two
+cd .worktrees/01
+exec aw serve stack
+cd ../02
+! exec aw serve stack
+exec aw finish --summary 'nothing yet'
+exec aw queue --json
+json stdout .resources[0].holders[0].lane_name one
+! stdout '"lane_name": "two"'
+cd ../01
+exec aw finish --summary 'done'
+exec aw queue --json
+! stdout 'lane_name'
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+port_stride = 100
+
+[projects.web]
+directory = "web"
+
+[projects.web.servers.app]
+command = "echo $$ >> $WORK/pids; exec sleep 60 # {port}"
+port = 3000
+
+[projects.web.servers.db]
+command = "echo $$ >> $WORK/pids; exec sleep 61 # {port}"
+port = 5000
+
+[projects.api]
+directory = "api"
+
+[resources.stack]
+kind = "process"
+capacity = 1
+servers = ["web.app", "web.db"]
+owner_counts = true
+owner_preempts = true
+evict_grace = "2s"
+

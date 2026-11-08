@@ -77,7 +77,7 @@ func hook(args []string, version string, stdin io.Reader, stdout, stderr io.Writ
 	if p.Event != PreToolUse && p.Event != SessionStart {
 		return Allow // no tool call to decide
 	}
-	scope, err := resolveScope(p, version, t)
+	scope, notes, err := resolveScope(p, version, t)
 	if err != nil {
 		return refuse(err)
 	}
@@ -91,7 +91,24 @@ func hook(args []string, version string, stdin io.Reader, stdout, stderr io.Writ
 	scope.AskSupported = a.ask
 	d := policy.Decide(*scope, p.Call)
 	t.Mark("decide")
-	return a.reply(p, d, stdout, stderr)
+	code := a.reply(p, d, stdout, stderr)
+	if d.Verdict == policy.Allow && a.notify != nil && len(notes.pending) > 0 {
+		var text []string
+		ids := make([]int, 0, len(notes.pending))
+		for _, n := range notes.pending {
+			text = append(text, fmt.Sprintf("[aw notification %d] %s", n.ID, n.Message))
+			ids = append(ids, n.ID)
+		}
+		a.notify(strings.Join(text, "\n"), stdout)
+		_ = state.MarkDelivered(notes.stateDir, ids) // an undelivered message is sent again (S6)
+	}
+	return code
+}
+
+// pendingNotes are a lane's notifications, waiting to go out with this tool call (R43).
+type pendingNotes struct {
+	pending  []state.Notification
+	stateDir string
 }
 
 // resolveScope builds the policy's scope from the workspace around the call's directory: its
@@ -100,29 +117,29 @@ func hook(args []string, version string, stdin io.Reader, stdout, stderr io.Writ
 // A session with a current attachment works in its lane, wherever it runs from. Without one, the
 // directory decides: a call in a lane root is confined to that lane, and one in the owner checkout
 // is unattached (or a pair session, when the individual layer says owner_sessions = "pair").
-func resolveScope(p Payload, version string, t *timing.Recorder) (*policy.Scope, error) {
+func resolveScope(p Payload, version string, t *timing.Recorder) (*policy.Scope, pendingNotes, error) {
 	dir := p.Cwd
 	if !filepath.IsAbs(dir) {
-		return nil, fmt.Errorf("the payload's working directory %q is not absolute", dir)
+		return nil, pendingNotes{}, fmt.Errorf("the payload's working directory %q is not absolute", dir)
 	}
 	ws, err := workspace.Find(dir)
 	if err != nil {
 		var nf *workspace.NotFoundError
 		if errors.As(err, &nf) {
-			return nil, nil
+			return nil, pendingNotes{}, nil
 		}
-		return nil, err
+		return nil, pendingNotes{}, err
 	}
 	stateDir, err := ws.StateDir()
 	if err != nil {
-		return nil, err
+		return nil, pendingNotes{}, err
 	}
 	t.Mark("workspace")
 
 	cfg, err := config.ReadCache(filepath.Join(stateDir, "config.cache"), version)
 	if err != nil {
 		if cfg, err = config.Load(ws.Owner); err != nil {
-			return nil, fmt.Errorf("the workspace configuration is invalid, so guards cannot decide: %v", err)
+			return nil, pendingNotes{}, fmt.Errorf("the workspace configuration is invalid, so guards cannot decide: %v", err)
 		}
 		t.Mark("config")
 	} else {
@@ -162,11 +179,11 @@ func resolveScope(p Payload, version string, t *timing.Recorder) (*policy.Scope,
 	case errors.Is(err, state.ErrNoState):
 		// Before setup there is no state, and nothing is attached.
 	case err != nil:
-		return scope, err
+		return scope, pendingNotes{}, err
 	default:
 		defer s.Close()
 		if s.Newer() {
-			return scope, s.ReadOnly()
+			return scope, pendingNotes{}, s.ReadOnly()
 		}
 	}
 	t.Mark("state")
@@ -175,24 +192,24 @@ func resolveScope(p Payload, version string, t *timing.Recorder) (*policy.Scope,
 	if s != nil {
 		at, err := attachment(s, stateDir, p)
 		if err != nil {
-			return nil, err
+			return nil, pendingNotes{}, err
 		}
 		if at.pair && ws.LaneRoot == "" {
 			scope.Role = policy.Pair
-			return scope, nil
+			return scope, pendingNotes{}, nil
 		}
 		n, attached = at.lane, at.lane > 0
 		if at.stale && ws.LaneRoot != "" {
-			return nil, fmt.Errorf("the lane at %s has moved on to other work since this session attached → go back to the owner checkout, and run bin/aw attach \"<what you are working on>\"", ws.LaneRoot)
+			return nil, pendingNotes{}, fmt.Errorf("the lane at %s has moved on to other work since this session attached → go back to the owner checkout, and run bin/aw attach \"<what you are working on>\"", ws.LaneRoot)
 		}
 	}
 	if !attached {
 		// No current attachment: the working directory decides.
 		if ws.LaneRoot == "" {
-			return scope, nil
+			return scope, pendingNotes{}, nil
 		}
 		if n, err = strconv.Atoi(filepath.Base(ws.LaneRoot)); err != nil || s == nil {
-			return nil, fmt.Errorf("%s is a lane root with no record in the state → run aw doctor", ws.LaneRoot)
+			return nil, pendingNotes{}, fmt.Errorf("%s is a lane root with no record in the state → run aw doctor", ws.LaneRoot)
 		}
 	}
 	root, dirName := ws.LaneRoot, workspace.LaneDir(n, cfg.Lanes.Max)
@@ -201,11 +218,11 @@ func resolveScope(p Payload, version string, t *timing.Recorder) (*policy.Scope,
 	}
 	lane, err := state.LaneByNumber(s.DB(), n)
 	if err != nil {
-		return nil, fmt.Errorf("lane %s has no record in the state (%v) → run aw doctor", dirName, err)
+		return nil, pendingNotes{}, fmt.Errorf("lane %s has no record in the state (%v) → run aw doctor", dirName, err)
 	}
 	repos, err := state.LaneRepos(s.DB(), n)
 	if err != nil {
-		return nil, err
+		return nil, pendingNotes{}, err
 	}
 	scope.Role = policy.Lane
 	scope.LaneRoot = root
@@ -214,7 +231,11 @@ func resolveScope(p Payload, version string, t *timing.Recorder) (*policy.Scope,
 	for _, r := range repos {
 		scope.LaneDirs = append(scope.LaneDirs, shell.Resolve(r.Path))
 	}
-	return scope, nil
+	notes := pendingNotes{stateDir: stateDir}
+	if notes.pending, err = state.PendingNotifications(s.DB(), n); err != nil {
+		return nil, pendingNotes{}, err
+	}
+	return scope, notes, nil
 }
 
 // attached is what a hook call's session is attached to: a lane, a pair session in the owner
