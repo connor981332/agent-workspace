@@ -1,0 +1,12 @@
+# Project repos in this workspace, one per line:
+#
+#   <alias> <directory> [worktree|shared] [port]
+#
+# The directory is also the repo name under WS_REMOTE, the dev container's
+# Compose service, and its workspace path inside the container (/<directory>).
+# `worktree`: each lane gets its own worktree of this repo; `shared`: lanes run
+# the main checkout with the lane's settings. `port`: the dev server's port in
+# the container (lane N uses port + N), or - for none.
+#
+# Add projects with `kit add-project`, which also updates .gitignore and writes
+# the repo's .devcontainer/. bin/bootstrap, bin/ws, and bin/lane read this file.

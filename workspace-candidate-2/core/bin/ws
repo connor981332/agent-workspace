@@ -1,0 +1,104 @@
+#!/bin/sh
+# Run a command inside a project's dev container: the same container VS Code uses.
+#
+#   bin/ws <alias> <command...>        # in the project's main checkout
+#   bin/ws <alias>@<lane> <command...> # in the lane's worktree, with its settings
+#   bin/ws <alias>                     # interactive shell
+#   bin/ws <alias> --up                # only make sure the container is running
+#   bin/ws status                      # shared infrastructure, project containers, lanes
+#   bin/ws infra ps|logs|up ...        # docker compose on infra/ (refuses down)
+#
+# If the container isn't running, this starts it with `devcontainer up`, which
+# goes through the same initializeCommand (bin/devcontainer-init) and pinned
+# Compose project VS Code uses, so VS Code attaches to it later instead of
+# building a second one. Commands then run with `docker exec`, as the image's
+# user, in the workspace folder, which skips the devcontainer CLI's startup cost
+# on every call.
+#
+# Part of the workspace core (`kit update` replaces it).
+
+set -eu
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd -P)"
+WS_SCRIPT="bin/ws"
+. "$ROOT/lib/ws/common.sh"
+ws_load_conf
+
+usage() {
+  echo "usage: bin/ws $(ws_aliases)[@lane] [--up | command...]" >&2
+  echo "       bin/ws status" >&2
+  echo "       bin/ws infra <compose command...>" >&2
+  exit 2
+}
+
+status() {
+  echo "Shared infrastructure ($WS_INFRA_PROJECT):"
+  docker ps -a --filter "label=com.docker.compose.project=$WS_INFRA_PROJECT" \
+    --format '  {{.Names}}\t{{.Status}}'
+  echo "Project containers:"
+  ws_projects | while read -r _alias dir _lanes _port; do
+    docker ps -a --filter "label=com.docker.compose.project=${dir}_devcontainer" \
+      --format '  {{.Names}}\t{{.Status}}\t{{.Label "devcontainer.local_folder"}}'
+  done
+  echo "Lanes:"
+  "$ROOT/bin/lane" list | sed 's/^/  /'
+}
+
+infra() {
+  case "${1:-}" in
+    down|rm|kill|stop)
+      [ "${WS_ALLOW_INFRA_DOWN:-}" = 1 ] ||
+        ws_die "'$1' affects every project and lane. Ask the owner, then rerun with WS_ALLOW_INFRA_DOWN=1." ;;
+    "") usage ;;
+  esac
+  ws_infra_compose "$@"
+}
+
+case "${1:-}" in
+  ""|-h|--help|help) usage ;;
+  status) status; exit 0 ;;
+  infra) shift; infra "$@"; exit $? ;;
+esac
+
+target="$1"; shift
+alias="${target%%@*}"
+lane=""
+case "$target" in *@*) lane="${target#*@}" ;; esac
+ws_project "$alias" || usage
+
+workdir="/$P_DIR"
+lane_env=""
+port=""
+if [ -n "$lane" ]; then
+  ws_need_lane "$lane"
+  lane_env="$(ws_lane_file "$lane")"
+  # Only projects with lane worktrees move; shared ones run the main checkout.
+  [ -d "$ROOT/$P_DIR/.worktrees/$lane" ] && workdir="/$P_DIR/.worktrees/$lane"
+  if [ "$P_PORT" != "-" ]; then
+    port=$((P_PORT + $(ws_lane_get "$lane" WS_SLOT)))
+  fi
+fi
+
+folder="$ROOT/$P_DIR"
+[ -d "$folder" ] || ws_die "$P_DIR is not cloned (bin/bootstrap)"
+
+id="$(ws_project_container "$P_DIR")"
+if [ -z "$id" ]; then
+  echo "Starting $P_DIR dev container..." >&2
+  # Compose 5 always builds through buildx bake, which refuses the Dockerfile
+  # the devcontainer CLI writes under /tmp (outside the build context) unless
+  # its filesystem entitlement check is off. Only this build is affected.
+  # shellcheck disable=SC2086
+  BUILDX_BAKE_ENTITLEMENTS_FS=0 $WS_DEVCONTAINER_CLI up --workspace-folder "$folder" >&2
+  id="$(ws_project_container "$P_DIR")"
+  [ -n "$id" ] || ws_die "devcontainer up finished but no $P_DIR container is running"
+fi
+
+[ "${1:-}" = "--up" ] && exit 0
+[ $# -eq 0 ] && set -- "$WS_DEFAULT_SHELL"
+
+if [ -t 0 ] && [ -t 1 ]; then tty=-it; else tty=-i; fi
+set -- -w "$workdir" "$id" "$@"
+[ -n "$port" ] && set -- -e "PORT=$port" "$@"
+[ -n "$lane_env" ] && set -- --env-file "$lane_env" "$@"
+exec docker exec $tty "$@"

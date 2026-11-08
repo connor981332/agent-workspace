@@ -1,0 +1,304 @@
+#!/bin/sh
+# Parallel lanes, so agent sessions can work side by side without sharing a
+# branch, a dev server port, a database, or a queue.
+#
+#   bin/lane new <name> <branch>          # worktrees, a slot, the lane's resources, setup
+#   bin/lane list
+#   bin/lane show <name>
+#   bin/lane setup <name>                 # rerun lanes.d/setup
+#   bin/lane snapshot <name> <snapshot>   # save the lane's data (stop its servers first)
+#   bin/lane restore <name> <snapshot>    # replace the lane's data with a saved copy
+#   bin/lane snapshots
+#   bin/lane rm <name> [--drop-data] [--force]
+#
+# A lane in slot N (1..WS_LANE_SLOTS) has:
+#   - for each project marked `worktree` in projects, the worktree
+#     <dir>/.worktrees/<name> on <branch> (the same branch name in every repo),
+#     created from origin/WS_BASE_BRANCH when the branch doesn't exist yet, with
+#     the main checkout's gitignored secrets (WS_LANE_LINKS) linked in;
+#   - for each project with a port, port + N inside the container and on the host;
+#   - the lane's copy of each resource in WS_LANE_RESOURCES (lib/ws/resources);
+#   - .lanes/<name>.env (gitignored), which bin/ws passes into the container:
+#     WS_LANE, WS_SLOT, and whatever the resources and WS_LANE_VAR add.
+#
+# Run the lane's commands with bin/ws <alias>@<name> ... Git runs on the host:
+# a worktree's .git file names a host path the container can't see.
+#
+# Part of the workspace core (`kit update` replaces it).
+
+set -eu
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd -P)"
+WS_SCRIPT="bin/lane"
+. "$ROOT/lib/ws/common.sh"
+ws_load_conf
+ws_load_resources
+
+usage() {
+  sed -n '5,12p' "$0" | sed 's/^# //' >&2
+  exit 2
+}
+
+# One lane change at a time, so two sessions can't take the same slot.
+lock() {
+  mkdir -p "$WS_LANES_DIR"
+  tries=0
+  until mkdir "$WS_LANES_DIR/.lock" 2>/dev/null; do
+    tries=$((tries + 1))
+    [ $tries -lt 30 ] || ws_die "another bin/lane is running (or left $WS_LANES_DIR/.lock behind; remove it if not)"
+    sleep 1
+  done
+  trap 'rmdir "$WS_LANES_DIR/.lock" 2>/dev/null || true' EXIT INT TERM
+}
+
+# Every adapter hook runs in a subshell: an adapter can't change this script's
+# variables, and its ws_die stops the command here.
+res() { # <resource> <hook> args...
+  ( ws_res_call "$@" ) || ws_die "lane resource $1 failed in $2"
+}
+
+worktree_projects() { ws_projects | awk '$3 == "worktree" {print $2}'; }
+
+free_slot() {
+  n=1
+  while [ "$n" -le "$WS_LANE_SLOTS" ]; do
+    if ! grep -qx "WS_SLOT=$n" "$WS_LANES_DIR"/*.env 2>/dev/null; then echo "$n"; return; fi
+    n=$((n + 1))
+  done
+}
+
+add_worktree() { # <dir> <name> <branch>
+  repo="$ROOT/$1" tree="$ROOT/$1/.worktrees/$2"
+  git -C "$repo" fetch -q origin
+  if git -C "$repo" show-ref -q --verify "refs/heads/$3"; then
+    git -C "$repo" worktree add -q "$tree" "$3"
+  elif git -C "$repo" show-ref -q --verify "refs/remotes/origin/$3"; then
+    git -C "$repo" worktree add -q --track -b "$3" "$tree" "origin/$3"
+  else
+    git -C "$repo" worktree add -q --no-track -b "$3" "$tree" "origin/$WS_BASE_BRANCH"
+  fi
+}
+
+# WS_LANE_GUARDS entries are <alias>:<file>:<text>. A worktree whose <file>
+# doesn't contain <text> predates lane support (it would use the main
+# checkout's databases), so the lane is refused.
+check_guards() { # <name> <branch>
+  for g in $WS_LANE_GUARDS; do
+    alias="${g%%:*}" rest="${g#*:}"
+    file="${rest%%:*}" text="${rest#*:}"
+    ws_project "$alias" || ws_die "WS_LANE_GUARDS names unknown project '$alias'"
+    tree="$ROOT/$P_DIR/.worktrees/$1"
+    [ -d "$tree" ] || continue
+    if ! grep -qF "$text" "$tree/$file" 2>/dev/null; then
+      echo "$P_DIR: $2 predates lanes ($file doesn't mention $text); rebase it on $WS_BASE_BRANCH first"
+      return 1
+    fi
+  done
+}
+
+# WS_LANE_LINKS entries are <alias>:<path>. Relative links, so they resolve
+# inside the container too.
+link_secrets() { # <name>
+  for l in $WS_LANE_LINKS; do
+    alias="${l%%:*}" path="${l#*:}"
+    ws_project "$alias" || ws_die "WS_LANE_LINKS names unknown project '$alias'"
+    main="$ROOT/$P_DIR/$path" tree="$ROOT/$P_DIR/.worktrees/$1"
+    [ -d "$tree" ] && [ -e "$main" ] || continue
+    target_dir="$(dirname "$tree/$path")"
+    mkdir -p "$target_dir"
+    ln -sfn "$(ws_relpath "$(cd "$target_dir" && pwd -P)" "$main")" "$tree/$path"
+  done
+}
+
+# The WS_LANE_LINKS paths of one project directory, one per line.
+linked_paths() { # <dir>
+  for l in $WS_LANE_LINKS; do
+    ws_project "${l%%:*}" && [ "$P_DIR" = "$1" ] && echo "${l#*:}"
+  done
+  return 0
+}
+
+remove_worktrees() { # <name> [--force]
+  for dir in $(worktree_projects); do
+    tree="$ROOT/$dir/.worktrees/$1"
+    [ -d "$tree" ] || continue
+    # The links are ours; git would count them as untracked files.
+    for path in $(linked_paths "$dir"); do
+      [ -L "$tree/$path" ] && rm -f "$tree/$path"
+    done
+    if [ "${2:-}" = --force ]; then
+      git -C "$ROOT/$dir" worktree remove --force "$tree"
+    else
+      git -C "$ROOT/$dir" worktree remove "$tree"
+    fi
+  done
+}
+
+run_hook() { # <hook> <name>
+  hook="$ROOT/lanes.d/$1"
+  [ -x "$hook" ] || return 0
+  WS_ROOT="$ROOT" WS_LANE="$2" WS_SLOT="$(ws_lane_get "$2" WS_SLOT)" "$hook" "$2"
+}
+
+ports_line() { # <slot>
+  ws_projects | while read -r alias _dir _lanes port; do
+    [ "$port" = "-" ] || printf ' %s=%s' "$alias" $((port + $1))
+  done
+}
+
+# What would be lost if the lane's worktrees went away: uncommitted changes, or
+# a branch that is neither pushed nor merged. Prints one line per problem.
+unsaved_work() { # <name>
+  for dir in $(worktree_projects); do
+    tree="$ROOT/$dir/.worktrees/$1"
+    [ -d "$tree" ] || continue
+    changes="$(git -C "$tree" status --porcelain)"
+    for path in $(linked_paths "$dir"); do
+      changes="$(printf '%s\n' "$changes" | grep -vxF "?? $path" || true)"
+    done
+    if [ -n "$changes" ]; then
+      echo "$dir: uncommitted changes in $tree"
+      continue
+    fi
+    head="$(git -C "$tree" rev-parse HEAD)"
+    if git -C "$tree" merge-base --is-ancestor "$head" "origin/$WS_BASE_BRANCH" 2>/dev/null; then continue; fi
+    if [ -n "$(git -C "$tree" branch -r --contains "$head" 2>/dev/null)" ]; then continue; fi
+    echo "$dir: $(git -C "$tree" branch --show-current) has commits that are neither pushed nor merged"
+  done
+}
+
+cmd="${1:-}"
+[ -n "$cmd" ] || usage
+shift
+
+case "$cmd" in
+new)
+  [ $# -eq 2 ] || usage
+  name="$1" branch="$2"
+  ws_valid_lane "$name"
+  lock
+  ! ws_lane_exists "$name" || ws_usage_die "lane '$name' exists"
+  slot="$(free_slot)"
+  [ -n "$slot" ] || ws_die "all $WS_LANE_SLOTS slots are taken (bin/lane list)"
+
+  for dir in $(worktree_projects); do
+    [ -d "$ROOT/$dir/.git" ] || ws_die "$dir is not cloned (bin/bootstrap)"
+  done
+  for dir in $(worktree_projects); do
+    if ! add_worktree "$dir" "$name" "$branch"; then
+      remove_worktrees "$name" --force; ws_die "could not create the $dir worktree"
+    fi
+  done
+  if ! problem="$(check_guards "$name" "$branch")"; then
+    remove_worktrees "$name" --force; ws_die "$problem"
+  fi
+  link_secrets "$name"
+
+  (
+    umask 077
+    {
+      echo "WS_LANE=$name"
+      echo "WS_SLOT=$slot"
+      echo "WS_LANE_BRANCH=$branch"
+      [ -z "$WS_LANE_VAR" ] || echo "$WS_LANE_VAR=$name"
+      for r in $WS_LANE_RESOURCES; do res "$r" env "$name" "$slot"; done
+    } > "$(ws_lane_file "$name")"
+  )
+
+  for r in $WS_LANE_RESOURCES; do res "$r" create "$name" "$slot"; done
+  rmdir "$WS_LANES_DIR/.lock"; trap - EXIT INT TERM
+
+  if ! run_hook setup "$name"; then
+    ws_warn "lane $name exists, but lanes.d/setup failed; fix it and run: bin/lane setup $name"
+    exit 1
+  fi
+  echo "Lane $name: slot $slot, branch $branch, ports:$(ports_line "$slot")"
+  echo "  bin/ws <alias>@$name <command>"
+  ;;
+
+setup)
+  [ $# -eq 1 ] || usage
+  ws_need_lane "$1"
+  run_hook setup "$1"
+  ;;
+
+list)
+  for f in "$WS_LANES_DIR"/*.env; do
+    [ -f "$f" ] || continue
+    name="$(basename "$f" .env)"
+    slot="$(ws_lane_get "$name" WS_SLOT)"
+    printf '%s\tslot %s\t%s\tports:%s\n' "$name" "$slot" "$(ws_lane_get "$name" WS_LANE_BRANCH)" "$(ports_line "$slot")"
+  done
+  ;;
+
+show)
+  [ $# -eq 1 ] || usage
+  ws_need_lane "$1"
+  slot="$(ws_lane_get "$1" WS_SLOT)"
+  echo "Lane $1, slot $slot, ports:$(ports_line "$slot")"
+  ws_projects | while read -r alias dir lanes _port; do
+    tree="$(ws_lane_tree "$dir" "$1")"
+    if [ "$lanes" = worktree ]; then
+      echo "  $alias: $tree ($(git -C "$tree" branch --show-current 2>/dev/null || echo missing))"
+    else
+      echo "  $alias: main checkout, lane settings"
+    fi
+  done
+  for r in $WS_LANE_RESOURCES; do
+    if ws_res_has "$r" describe; then echo "  $r: $(res "$r" describe "$1" "$slot")"; fi
+  done
+  ;;
+
+snapshot|restore)
+  [ $# -eq 2 ] || usage
+  ws_need_lane "$1"; ws_valid_lane "$2"
+  done_any=""
+  for r in $WS_LANE_RESOURCES; do
+    if ws_res_has "$r" "$cmd"; then res "$r" "$cmd" "$1" "$2"; done_any=1; fi
+  done
+  [ -n "$done_any" ] || ws_die "no lane resource supports ${cmd}s (WS_LANE_RESOURCES=\"$WS_LANE_RESOURCES\")"
+  if [ "$cmd" = snapshot ]; then
+    echo "Snapshot $2 taken from lane $1."
+  else
+    echo "Lane $1 restored from snapshot $2. Restart its servers and consumers."
+  fi
+  ;;
+
+snapshots)
+  for r in $WS_LANE_RESOURCES; do
+    if ws_res_has "$r" snapshots; then res "$r" snapshots | sed "s/^/$r	/"; fi
+  done
+  ;;
+
+rm)
+  [ $# -ge 1 ] || usage
+  name="$1"; shift
+  drop="" force=""
+  for a in "$@"; do
+    case "$a" in
+      --drop-data) drop=1 ;;
+      --force) force=--force ;;
+      *) usage ;;
+    esac
+  done
+  ws_need_lane "$name"
+  lock
+  problems="$(unsaved_work "$name")"
+  if [ -n "$problems" ] && [ -z "$force" ]; then
+    echo "$problems" >&2
+    ws_die "lane $name has unsaved work; save it, or pass --force to discard it"
+  fi
+  slot="$(ws_lane_get "$name" WS_SLOT)"
+  run_hook teardown "$name" || ws_warn "lanes.d/teardown failed; continuing"
+  # Data goes by name, through the adapters, never through project code, so a
+  # worktree that ignores the lane can't drop the main checkout's data.
+  if [ -n "$drop" ]; then
+    for r in $WS_LANE_RESOURCES; do res "$r" drop "$name" "$slot"; done
+  fi
+  remove_worktrees "$name" $force
+  rm -f "$(ws_lane_file "$name")"
+  echo "Lane $name removed. Its branches stay.${drop:+ Its data is dropped.}"
+  ;;
+
+*) usage ;;
+esac

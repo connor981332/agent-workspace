@@ -1,0 +1,39 @@
+# Pinned to the name VS Code derives (<folder>_devcontainer) so VS Code and the
+# devcontainer CLI (bin/ws) always resolve to the same container. Without it,
+# plain Compose would default to "devcontainer" and each tool could build its
+# own rival container.
+#
+# Databases, queues, and other shared services are not defined here. They are
+# shared by every {{TITLE}} project and live in the workspace's infra/, started
+# by .devcontainer/on-initialize.sh and reached by name over {{PREFIX}}-dev-net.
+name: {{DIR}}_devcontainer
+
+services:
+  {{DIR}}:
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
+    command: /bin/sh -c "while sleep 1000; do :; done"
+{{PORTS}}
+    environment:
+      DATABASE_URL: postgres://postgres:password@postgres:5432
+      REDIS_URL: redis://redis:6379
+    volumes:
+      # The project folder at /{{DIR}}. Mounts are relative to this file's
+      # directory, so .. is the project root. Lane worktrees live inside it
+      # (.worktrees/<lane>), so the container sees them without new mounts.
+      - ..:/{{DIR}}:cached
+      # Shared documentation stays owned by the workspace repository.
+      - ../../docs:/{{NAME}}-workspace/docs:ro
+      - ../../AGENTS.md:/{{NAME}}-workspace/AGENTS.md:ro
+      # To run agents inside the container as well as on the host, mount their
+      # config (create these on the host first, or Docker makes root-owned dirs):
+      # - ~/.claude:/home/{{USER}}/.claude
+      # - ~/.codex:/home/{{USER}}/.codex
+      # - ~/.gitconfig:/home/{{USER}}/.gitconfig
+    networks:
+      - {{PREFIX}}-dev-net
+
+networks:
+  {{PREFIX}}-dev-net:
+    external: true
