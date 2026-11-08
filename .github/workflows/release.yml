@@ -1,0 +1,101 @@
+# The release workflow (plans/release-candidate.md §6). On a v* tag it builds with GoReleaser and
+# publishes a GitHub Release, then runs the acceptance suite on all four platforms against the
+# published assets, downloaded as a user's launcher would get them.
+#
+# The publish job uses the protected "release" environment: a maintainer approves each release
+# before anything is published.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: The tag is a version on master
+        run: |
+          case "$GITHUB_REF_NAME" in
+          v[0-9]*.[0-9]*.[0-9]*) ;;
+          *) echo "::error::$GITHUB_REF_NAME is not vMAJOR.MINOR.PATCH"; exit 1 ;;
+          esac
+          git fetch -q origin master
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/master || {
+            echo "::error::$GITHUB_REF_NAME is not on master"; exit 1; }
+      - name: Schema versions for the release notes
+        run: |
+          CGO_ENABLED=0 go build -o "$RUNNER_TEMP/aw" ./cmd/aw
+          "$RUNNER_TEMP/aw" version --json | tee "$RUNNER_TEMP/version.json"
+          python3 - "$RUNNER_TEMP/version.json" >> "$GITHUB_ENV" <<'PY'
+          import json, sys
+          v = json.load(open(sys.argv[1]))
+          print(f"AW_CONFIG_SCHEMA={v['config_schema']}")
+          print(f"AW_STATE_SCHEMA={v['state_schema']}")
+          PY
+      - uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: v2.20.0
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Check the assets
+        run: sh .github/scripts/check-release-assets.sh dist
+
+  # The published assets, as downloaded, pass the acceptance suite on every platform.
+  verify:
+    needs: publish
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm, macos-15, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            acceptance/go.sum
+      - name: BusyBox, for the launcher's shell matrix (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get install -y -qq busybox >/dev/null
+      - name: Download the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          dir="$RUNNER_TEMP/release"
+          gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --dir "$dir"
+          cd "$dir"
+          ls -l
+          if command -v sha256sum >/dev/null; then sha256sum -c checksums.txt; else shasum -a 256 -c checksums.txt; fi
+          chmod +x aw_*
+          os=$(uname -s | tr '[:upper:]' '[:lower:]')
+          case $(uname -m) in x86_64) arch=amd64 ;; arm64|aarch64) arch=arm64 ;; *) echo "unknown machine $(uname -m)"; exit 1 ;; esac
+          bin="$dir/aw_${GITHUB_REF_NAME#v}_${os}_${arch}"
+          "$bin" version --json
+          echo "AW_ACCEPT_MIRROR=$dir" >> "$GITHUB_ENV"
+          echo "AW_BIN=$bin" >> "$GITHUB_ENV"
+      - name: Acceptance suite against the published assets
+        working-directory: acceptance
+        run: go test -count=1 ./...

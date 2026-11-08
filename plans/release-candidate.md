@@ -47,13 +47,17 @@ links, lane guards, the lane limit, `--branch` and the pool (PR #17). Local merg
 patch equivalence), `aw sweep [--apply] [--retry]` with the warm pool, retention and a journal,
 `aw discard` with archived refs, `aw park`/`unpark`, and `aw finish` with handoffs (PR #18). Forge
 exact-head proof through `gh` and `glab` (PR #19). Process identity (PID and start time), session
-recovery, `aw new`, `aw run` on the host runner (PR #20). Now (`m2/recap`): the `aw` dashboard and
-`aw recap [--remote] [--all]`, and the M2 budgets in the bench (dashboard 46 ms, attach 36 ms, new
-39 ms p99 on the Linux laptop). All 73 M2 scenarios are written.
+recovery, `aw new`, `aw run` on the host runner (PR #20). The `aw` dashboard and
+`aw recap [--remote] [--all]`, and the M2 budgets in the bench (PR #21). Decided with the spec
+owner during M2: the dashboard keeps its 100 ms budget on laptops and has a 200 ms ceiling on
+`ubuntu-24.04` (speed.md, "Enforcement"). Now (`m2/release`): the release workflow behind the
+protected `release` environment, an acceptance run against the published assets, and
+`requirements.toml` moved to `current = "M2"`. All 74 M2 scenarios pass.
 
-**Next step:** the release workflow and the first pre-release, v0.0.2, which completes M2.
+**Next step:** tag v0.0.2 once this merges; the release is approved by the maintainer in the
+`release` environment. M2 is complete when the release's acceptance run passes. Then M3.
 
-**Pending manual checks:** the hot-path and budget benchmarks on an Apple Silicon laptop (T3, M1;
+**Pending manual checks:** the hot-path and budget benchmarks on an Apple Silicon laptop (T3, M1, M2;
 docs/dev/benchmarks.md).
 
 ## How to use this plan
@@ -434,7 +438,7 @@ agreement.
 | R19 | State schema version, migration, read-only on newer | M1 (read-only), M8 (migration) | |
 | R20 | Upgrades never strand lanes | M8 | |
 | R21 | Worktree per project per lane, plus data | M2, M5 (data) | |
-| R22 | Names from purpose, no GUIDs | M2 | |
+| R22 | Names from purpose, no GUIDs | M2 | Covered by `lanes/names-from-purpose`, added at the M2 exit: no candidate test maps to it in §3.5. |
 | R23 | Lanes belong to work | M2 | |
 | R24 | Near-instant claim from the pool | M2 | Budget: 100 ms. |
 | R25 | Cleanup only when clean and proven merged | M2 | Safety invariant. |

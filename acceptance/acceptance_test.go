@@ -3,6 +3,9 @@
 //
 //	go test ./...                       build aw from the repository and run every scenario
 //	AW_BIN=/path/to/aw go test ./...    run against a given binary
+//	AW_ACCEPT_MIRROR=dir AW_BIN=dir/aw_<v>_<os>_<arch> go test ./...
+//	                                    run against published release assets: dir holds the
+//	                                    downloaded release (its binaries and checksums.txt)
 //	go test -run 'TestScenarios/cli/'   run one area
 //	AW_ACCEPT_MILESTONE=M1 go test ./...  also run the scenarios of a later milestone
 package acceptance_test
@@ -65,7 +68,12 @@ func setup() (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	mirror, err := makeMirror(filepath.Join(tmp, "mirror"), awBin, version)
+	mirror := os.Getenv("AW_ACCEPT_MIRROR")
+	if mirror == "" {
+		mirror, err = makeMirror(filepath.Join(tmp, "mirror"), awBin, version)
+	} else {
+		mirror, err = checkMirror(mirror, awBin, version)
+	}
 	if err != nil {
 		return 0, err
 	}
@@ -141,6 +149,36 @@ func makeMirror(dir, bin, version string) (string, error) {
 	sum := sha256.Sum256(data)
 	line := fmt.Sprintf("%s  %s\n", hex.EncodeToString(sum[:]), asset)
 	return dir, os.WriteFile(filepath.Join(dir, "checksums.txt"), []byte(line), 0o644)
+}
+
+// checkMirror accepts a downloaded release as the mirror: it must hold this platform's asset, the
+// same file as AW_BIN, listed in its checksums.txt.
+func checkMirror(dir, bin, version string) (string, error) {
+	dir, err := filepath.Abs(dir)
+	if err != nil {
+		return "", err
+	}
+	asset := fmt.Sprintf("aw_%s_%s_%s", version, runtime.GOOS, runtime.GOARCH)
+	data, err := os.ReadFile(filepath.Join(dir, asset))
+	if err != nil {
+		return "", fmt.Errorf("AW_ACCEPT_MIRROR has no %s: %v", asset, err)
+	}
+	mine, err := os.ReadFile(bin)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(data)
+	if sha256.Sum256(mine) != sum {
+		return "", fmt.Errorf("AW_BIN is not the mirror's %s", asset)
+	}
+	sums, err := os.ReadFile(filepath.Join(dir, "checksums.txt"))
+	if err != nil {
+		return "", err
+	}
+	if !strings.Contains(string(sums), hex.EncodeToString(sum[:])+"  "+asset+"\n") {
+		return "", fmt.Errorf("the mirror's checksums.txt does not list %s with its checksum", asset)
+	}
+	return dir, nil
 }
 
 // globalShim is the suite's global aw. Inside a workspace it runs that workspace's bin/aw launcher,

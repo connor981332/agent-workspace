@@ -1,0 +1,29 @@
+# A lane is named for its purpose, in words, never with a generated ID: the first meaningful words,
+# without a leading verb or filler. A name already in use gets a number, and the branch follows the
+# name.
+# req: R22
+# source: spec (R22; ux.md, "Starting a session")
+# milestone: M2
+
+workspace solo --single --init
+exec aw attach 'Fix checkout tax rounding' --json
+json stdout .name checkout-tax
+exec aw attach 'add the feature flag for payments' --json
+json stdout .name feature-flag
+exec aw attach 'checkout tax: JPY has no decimals' --json
+json stdout .name checkout-tax-2
+exec aw attach '修正 🙂 !!!' --json
+json stdout .name lane
+exec git for-each-ref --format=%(refname:short) refs/heads/aw
+cmp stdout $WORK/branches
+
+# No name, directory or branch carries a hexadecimal or UUID-like token.
+exec aw recap --json
+! stdout '"name": ?"[^"]*[0-9a-f]{8}'
+! stdout '[0-9a-f]{8}-[0-9a-f]{4}-'
+
+-- branches --
+aw/checkout-tax
+aw/checkout-tax-2
+aw/feature-flag
+aw/lane
