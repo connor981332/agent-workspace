@@ -2,4 +2,27 @@
 # source: C2 tests::t_init_refuses_existing_workspace
 # milestone: M1
 
-unwritten
+workspace shop
+exec aw init
+owner-snapshot
+
+! exec aw init
+stderr 'already a workspace; nothing was changed'
+! stdout .
+# (The runner checks at the end that the owner checkout is unchanged.)
+
+# A directory inside a workspace is refused too.
+exec mkdir notes
+exec git -C notes init -q
+cd notes
+! exec aw init
+stderr 'is inside the workspace'
+cd ..
+exec rm -rf notes
+
+# So is a directory that is not a Git repository: the state lives in its Git directory.
+exec mkdir $WORK/plain
+cd $WORK/plain
+! exec aw init
+stderr 'is not a Git repository → run git init there first'
+! exists workspace.toml

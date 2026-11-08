@@ -1,6 +1,37 @@
-# Changed: the pin is an exact version plus a checksum in .aw/lock; a range, a branch or a missing checksum is refused.
+# The pin is an exact version plus a checksum in .aw/lock. A range, a branch, a tag such as
+# latest, or a missing checksum is refused before anything is fetched.
 # req: R15
 # source: C1 test_generic.py::LauncherTests::test_mutable_refs_are_refused
 # milestone: M1
+# changed: C1 pinned a Git commit; the pin is now an exact release version with a checksum per platform.
 
-unwritten
+workspace shop
+exec aw init
+owner-may-change
+exec cp .aw/version $WORK/good-version
+exec cp .aw/lock $WORK/good-lock
+
+exec sh -c 'for pin in latest main "^1.2.3" "~1.2" 1.2 1.2.x v1.2.3 "1.2.3 || 2.0.0" ""; do printf "%s\n" "$pin" > .aw/version; bin/aw version 2>&1; echo "status=$?"; done'
+! stdout 'status=0'
+stdout -count=9 'is not an exact version → pin an exact release such as 1.4.2'
+exec rm .aw/version
+! exec bin/aw version
+stderr '\.aw/version is missing or empty → restore it from Git'
+! exists $XDG_CACHE_HOME/agent-workspace
+
+# A pin with no checksum for this platform is refused.
+exec cp $WORK/good-version .aw/version
+exec sh -c ': > .aw/lock'
+! exec bin/aw version
+stderr '\.aw/lock has no checksum for aw_'$AW_VERSION'_'
+! exists $XDG_CACHE_HOME/agent-workspace/bin/$AW_VERSION/aw
+
+# Every launcher failure is exit 1 for commands and exit 2, a refusal, for hooks.
+exec sh -c 'bin/aw version 2>/dev/null; echo "status=$?"'
+stdout '^status=1$'
+exec sh -c 'bin/aw hook claude pre-tool-use </dev/null 2>/dev/null; echo "status=$?"'
+stdout '^status=2$'
+
+exec cp $WORK/good-lock .aw/lock
+exec bin/aw version
+stdout '^aw '$AW_VERSION' '

@@ -54,6 +54,11 @@ forward and `in_progress` to the next milestone.
   test (`$AW_BIN`). Use `exec aw …`.
 - `$STUB_LOG` and `$STUB_STATE` for the stubs, and `$AW_REPO`, the repository under test (for
   scenarios that check its examples).
+- `$AW_VERSION`, the version of the binary under test (the runner builds it as `0.0.0-acceptance`),
+  and `$AW_MIRROR`, a release mirror holding it for this platform, laid out as GoReleaser publishes
+  it (`aw_<version>_<os>_<arch>` and `checksums.txt`). `aw init` pins `$AW_VERSION` and the
+  launcher fetches from the mirror, so every scenario in a workspace goes through the launcher's
+  fetch and verify path with no network.
 - **The owner check.** When the scenario has built a workspace, the runner appends a final check
   that the owner checkout is exactly as the last snapshot recorded it. A scenario that changes the
   owner checkout on purpose declares `owner-may-change`.

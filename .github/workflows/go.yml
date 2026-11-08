@@ -128,8 +128,14 @@ jobs:
           cache-dependency-path: |
             go.sum
             acceptance/go.sum
-      - name: Git
+      - name: Git and shells
         run: git --version
+      - name: BusyBox, for the launcher's shell matrix (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install -y -qq busybox >/dev/null
+          busybox | head -1
+          command -v dash bash
       - name: Acceptance suite and coverage check (§3)
         working-directory: acceptance
         run: go test -count=1 -v ./... 2>&1 | tee "$RUNNER_TEMP/acceptance.log"; exit "${PIPESTATUS[0]}"

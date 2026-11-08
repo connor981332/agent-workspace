@@ -1,6 +1,20 @@
-# The launcher runs under dash, bash, BusyBox ash and macOS /bin/sh.
+# The launcher runs under dash, bash, BusyBox ash and macOS /bin/sh, both from the cache and when
+# it must fetch and verify. Each shell available on the runner is tried; CI installs BusyBox.
 # req: R11
 # source: C2 tests::t_scripts_parse
 # milestone: M1
 
-unwritten
+workspace shop
+exec aw init
+owner-snapshot
+
+exec sh -n bin/aw
+[exec:dash] exec dash -n bin/aw
+[exec:bash] exec bash -n bin/aw
+
+exec sh -c 'for sh in sh dash bash "busybox sh"; do command -v ${sh%% *} >/dev/null || continue; rm -rf "$XDG_CACHE_HOME/agent-workspace"; $sh bin/aw version || exit 1; $sh bin/aw version || exit 1; echo "ran under $sh"; done'
+stdout 'ran under sh'
+[exec:dash] stdout 'ran under dash'
+[exec:bash] stdout 'ran under bash'
+[exec:busybox] stdout 'ran under busybox sh'
+! stderr 'not found|syntax|unexpected'

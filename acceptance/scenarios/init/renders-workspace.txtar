@@ -1,5 +1,50 @@
-# aw init writes workspace.toml, .aw/version, .aw/lock, .aw/managed, bin/aw and the .gitignore entries, with no placeholder left.
+# aw init writes workspace.toml, .aw/version, .aw/lock, .aw/managed, bin/aw and the .gitignore
+# entries, with no placeholder left, and the result is a working, pinned workspace.
+# req: R15
 # source: C2 tests::t_init_renders_every_placeholder
 # milestone: M1
 
-unwritten
+workspace shop --repos web,api
+exec aw init
+stdout '^Created the workspace .*shop \(namespace shop\), pinned to aw '$AW_VERSION'\.$'
+stdout '^Projects: api, web$'
+owner-snapshot
+
+exists workspace.toml .aw/version .aw/lock .aw/managed bin/aw
+exec test -x bin/aw
+grep '^\[projects\.web\]$' workspace.toml
+grep '^\[projects\.api\]$' workspace.toml
+grep '^namespace = "shop"$' workspace.toml
+! grep '\{\{|\}\}|<[a-z]+>|TODO' workspace.toml
+exec cat .aw/version
+stdout '^'$AW_VERSION'$'
+grep '^[0-9a-f]{64}  aw_'$AW_VERSION'_[a-z]+_(amd64|arm64)$' .aw/lock
+grep '^[0-9a-f]{64}  bin/aw$' .aw/managed
+grep '^/\.worktrees/$' .gitignore
+grep '^/\.aw/owner$' .gitignore
+grep '^/web/$' .gitignore
+grep '^/api/$' .gitignore
+
+# The project repositories are ignored, so the workspace repository sees only its own files.
+exec git status --porcelain
+stdout '^\?\? \.aw/$'
+stdout '^\?\? bin/$'
+stdout '^\?\? workspace\.toml$'
+! stdout 'web|api'
+
+# The result validates, and aw now runs through the launcher at the pinned version.
+exec aw config validate
+stdout 'workspace.toml: valid'
+exec aw version
+stdout '^aw '$AW_VERSION' '
+exists $XDG_CACHE_HOME/agent-workspace/bin/$AW_VERSION/aw
+
+# --json reports the same.
+exec git init -q $WORK/second
+cd $WORK/second
+exec aw init --name 'Second one' --namespace second --json
+json stdout .namespace second
+json stdout .projects[0] second
+json stdout .files[0] workspace.toml
+grep '^name = "Second one"$' workspace.toml
+grep '^directory = "\."$' workspace.toml

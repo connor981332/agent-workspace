@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"runtime/debug"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -27,13 +28,13 @@ func currentVersion() versionInfo {
 }
 
 // frameworkVersion is the version set at link time, else the module version recorded by
-// go install, else "dev".
+// go install, else "dev". It has no leading "v": 1.4.2, as .aw/version pins it.
 func frameworkVersion() string {
 	if version != "" {
-		return version
+		return strings.TrimPrefix(version, "v")
 	}
 	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" && info.Main.Version != "(devel)" {
-		return info.Main.Version
+		return strings.TrimPrefix(info.Main.Version, "v")
 	}
 	return "dev"
 }

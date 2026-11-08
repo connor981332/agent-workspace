@@ -21,6 +21,8 @@ type Config struct {
 	StubsDir string // acceptance/stubs
 	RealGit  string // absolute path of the real git
 	Repo     string // the repository under test, for scenarios that check its examples
+	Version  string // the version of the binary under test
+	Mirror   string // a release mirror holding it, for AW_MIRROR
 }
 
 // FinalCheck is the command the runner appends to every scenario: the owner checkout must be
@@ -68,6 +70,8 @@ func Setup(cfg Config) func(*testscript.Env) error {
 			"STUB_STATE="+filepath.Join(work, ".stub", "state"),
 			"AW_BIN="+cfg.AWBin,
 			"AW_REPO="+cfg.Repo,
+			"AW_VERSION="+cfg.Version,
+			"AW_MIRROR="+cfg.Mirror,
 			"LC_ALL=C",
 			"PATH="+path,
 		)
