@@ -1,6 +1,34 @@
-# lanes/pool-claim: to be written (plan §3.5).
+# Claiming takes a warm lane from the pool: the lowest numbered one, with no new worktree.
 # req: R24
 # source: spec (no candidate source)
 # milestone: M2
 
-unwritten
+workspace shop --init
+exec aw attach 'one'
+exec aw attach 'two'
+exec aw sweep --apply
+exec aw sweep --json
+json stdout .lanes[0].action pooled
+json stdout .lanes[1].action pooled
+exec sh -c 'git worktree list | wc -l'
+stdout '^ *3$'
+exec aw attach 'three' --json
+json stdout .lane 01
+json stdout .from_pool true
+json stdout .repos[1].branch aw/three
+exec sh -c 'git worktree list | wc -l'
+stdout '^ *3$'
+exec git -C web/.worktrees/01 symbolic-ref --short HEAD
+stdout '^aw/three$'
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 3
+
+[projects.web]
+[projects.api]

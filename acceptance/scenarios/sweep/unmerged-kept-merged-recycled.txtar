@@ -1,6 +1,43 @@
-# sweep/unmerged-kept-merged-recycled: to be written (plan §3.5).
-# req: R21 R25 R30 R36
-# source: C1 HostLaneTests.test_single_repo_lane_from_init_to_cleanup
+# Unmerged work keeps the lane; once the human merges it, sweep recycles it into the warm pool, and
+# the next claim takes the warm lane.
+# req: R25 R26
+# source: C1 test_generic.py::HostLaneTests::test_single_repo_lane_from_init_to_cleanup
 # milestone: M2
 
-unwritten
+workspace solo --single --init
+exec aw attach 'add feature flag' --json
+json stdout .name feature-flag
+lane-commit 01 file.txt 'work'
+
+exec aw sweep --json
+json stdout .lanes[0].action keep
+json stdout .lanes[0].reason 'solo: not proven merged: 1 commit not in refs/remotes/origin/main'
+exec aw sweep
+stdout '^01 feature-flag +keep +solo: not proven merged'
+
+git-merge . aw/feature-flag
+exec aw sweep --json
+json stdout .lanes[0].action recycle
+json stdout .lanes[0].repos[0].proof ancestor
+json stdout .applied false
+exec aw sweep
+stdout 'Nothing was changed\. Run aw sweep --apply to recycle or remove 1 lane'
+
+exec aw sweep --apply --json
+json stdout .lanes[0].action recycle
+json stdout .lanes[0].result done
+! exec git rev-parse --verify --quiet refs/heads/aw/feature-flag
+exec git -C .worktrees/01 status --porcelain
+! stdout .
+
+exec aw sweep --json
+json stdout .lanes[0].action pooled
+json stdout .lanes[0].state pool
+
+# The next claim takes the warm lane, under a new name.
+exec aw attach 'fix login redirect' --json
+json stdout .lane 01
+json stdout .name login-redirect
+json stdout .from_pool true
+exec git -C .worktrees/01 symbolic-ref --short HEAD
+stdout '^aw/login-redirect$'

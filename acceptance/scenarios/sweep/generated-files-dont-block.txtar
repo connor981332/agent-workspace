@@ -1,6 +1,26 @@
-# sweep/generated-files-dont-block: to be written (plan §3.5).
+# Ignored files under the project's generated paths do not block recycling, and they stay in the
+# warm lane as caches.
 # req: R25
-# source: C1 test_plain_removal_and_ignored_artifacts
+# source: C1 test_lanes.py::test_plain_removal_and_ignored_artifacts
 # milestone: M2
 
-unwritten
+workspace shop --init
+exec sh -c 'printf "node_modules/\ntmp/\n" > web/.gitignore && git -C web add .gitignore && git -C web commit -qm ignore && git -C web push -q'
+owner-snapshot
+exec aw attach 'add feature flag'
+exec sh -c 'mkdir -p web/.worktrees/01/node_modules/x web/.worktrees/01/tmp && echo 1 > web/.worktrees/01/node_modules/x/i.js && echo 1 > web/.worktrees/01/tmp/cache'
+exec aw sweep --apply --json
+json stdout .lanes[0].action recycle
+json stdout .lanes[0].result done
+exists web/.worktrees/01/node_modules/x/i.js
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[projects.web]
+generated = ["node_modules", "tmp"]
+
+[projects.api]

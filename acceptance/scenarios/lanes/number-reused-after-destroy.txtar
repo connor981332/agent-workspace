@@ -1,7 +1,14 @@
-# lanes/number-reused-after-destroy: to be written (plan §3.5).
+# Lane numbers are stable; a number freed by removing a lane is reused by the next new lane.
 # req: R46
-# source: t_lane_slots_and_limits
+# source: C2 tests::t_lane_slots_and_limits
 # milestone: M2
-# changed: slots become lanes plus seats.
 
-unwritten
+workspace solo --single --init
+exec aw attach 'one'
+exec aw attach 'two'
+exec aw attach 'three'
+exec aw discard two --yes
+! exists .worktrees/02
+exec aw attach 'four' --json
+json stdout .lane 02
+json stdout .name four

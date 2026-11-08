@@ -1,6 +1,29 @@
-# finish/idempotent: to be written (plan §3.5).
+# aw finish hands the lane off as ready; finishing again at the same heads changes nothing.
 # req: R78
-# source: C1 test_finish_no_plan_idempotence_and_session
+# source: C1 test_lanes.py::test_finish_no_plan_idempotence_and_session
 # milestone: M2
 
-unwritten
+workspace shop --init
+exec aw attach 'add feature flag'
+lane-commit 01 web/flag.txt 'flag'
+cd .worktrees/01
+exec aw finish --summary 'Adds the flag. Verify the toggle by hand.' --json
+json stdout .lane.state ready
+json stdout .already false
+json stdout .summary 'Adds the flag. Verify the toggle by hand.'
+json stdout .heads.web
+json stdout .heads.api
+exec aw finish --summary 'Adds the flag. Verify the toggle by hand.'
+stdout 'already handed off at these heads'
+
+# More work after a handoff can be handed off again.
+lane-commit 01 web/flag.txt 'more'
+exec aw finish --summary 'Adds the flag, with tests.' --json
+json stdout .already false
+
+# And from the owner checkout, by name.
+cd $OWNER
+exec aw finish feature-flag --summary 'Adds the flag, with tests.' --json
+json stdout .already true
+! exec aw finish --summary 'x'
+stderr 'this runs in the owner checkout, not in a lane → name the lane'

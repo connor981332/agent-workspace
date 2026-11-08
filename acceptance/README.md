@@ -76,12 +76,14 @@ root, which can write where the scenario expects a permission error.
 | `stubs <name>…` | Puts the named stubs from `stubs/` first on `PATH`. |
 | `json <file> <path> [value]` | `<file>` is `stdout`, `stderr` or a file. `<path>` is `.` or a sequence of `.key` and `[n]`. With a value, the value at the path must equal it: a JSON string compares as its text, anything else as compact JSON (`0`, `true`, `null`, `[]`). Without a value, the path must exist. `!` negates. |
 | `owner-snapshot` | Records the owner checkout now: for each repository, its files outside `.git` and `.worktrees` (content, mode, symlink target; ignored files included), the index (`git ls-files --stage`), `HEAD`, every ref, `refs/stash` and `.git/config` (without the `branch.<b>.*` sections of branches the owner did not have, which belong to lanes). |
-| `owner-unchanged` | The owner checkout is as the last snapshot recorded it. New refs are allowed (lanes' branches, `refs/aw/*`), except a new stash. `!` asserts that something changed. |
+| `owner-unchanged` | The owner checkout is as the last snapshot recorded it. Lane branches (`refs/heads/aw/*`) and aw's own refs (`refs/aw/*`) are not the owner's and are not compared; other new refs are allowed, except a new stash. `!` asserts that something changed. |
 | `owner-may-change` | Skips the automatic owner check at the end. |
 | `git-fail <args-regexp>` | Fault injection: a `git` wrapper first on `PATH` fails, with `git-fail: injected failure for: git …` on stderr, when its arguments match the extended regexp, and runs the real Git otherwise. Patterns accumulate. |
 | `unwritten` | Fails. The body of a pending scenario not yet written. |
+| `lane-commit <NN> [<project>/]<file> <message>` | As the lane's agent: appends the message to the file in lane NN's worktree (the lane root, or the project's), then adds and commits it. |
+| `git-merge <repo> <branch>`, `git-squash …`, `git-cherry-pick …` | As the human, in the owner checkout's repository (`.` or a project directory): merge the branch into the current branch (a merge commit, one squashed commit, or the commits cherry-picked), then push. The owner snapshot is taken again afterwards. |
 
-The custom commands still to come (`session`, `hook`, `decision`, `lane-commit`, `git-merge`, …)
+The custom commands still to come (`session`, `hook`, `decision`, …)
 are listed in plan §3.3 and are added with the milestones that need them.
 
 ## Test tools

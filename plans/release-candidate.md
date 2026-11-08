@@ -16,7 +16,8 @@ milestone named in its row.
 
 **Branches / MRs:** PRs [#5](https://github.com/connor981332/agent-workspace/pull/5) to
 [#15](https://github.com/connor981332/agent-workspace/pull/15), merged: the plan and settled
-questions (#5, #6), M0 (#7 to #11), M1 (#12 to #16). `m2/lanes` (M2 lanes and `aw attach`, open).
+questions (#5, #6), M0 (#7 to #11), M1 (#12 to #16), M2 lanes (#17). `m2/sweep` (M2 merge proof,
+sweep, discard, park, finish; open).
 `spike/hot-path` (T3 and the ref-hook spike, never merged).
 
 **Done:** Read the spec and both candidates and wrote this plan. Settled the spec's five open
@@ -39,15 +40,16 @@ are recorded).
   `requirements.toml` gained `in_progress`, so a milestone's written scenarios and benchmarks run
   in CI from the PR that adds them.
 
-**In progress:** M2. The M2 rows of §3.5 are pending scenario files (73), with seven rows that
-need hooks, seats or `aw open` moved to M3 and M4. S4 and S17 are recorded in the spec. First PR
-(`m2/lanes`): state schema 2 (lanes, lane repositories, sessions, journal), lane names from
-purpose, `aw attach` with worktrees, links, the owner pointer, secret links, lane guards, the lane
-limit, `--branch`, and claiming from the pool.
+**In progress:** M2. The M2 rows of §3.5 are pending scenario files, with seven rows that need
+hooks, seats or `aw open` moved to M3 and M4. S4 and S17 are recorded in the spec. Done: state
+schema 2, lane names from purpose, `aw attach` with worktrees, links, the owner pointer, secret
+links, lane guards, the lane limit, `--branch` and the pool (PR #17). Now (`m2/sweep`): local merge
+proof (ancestry, patch equivalence), `aw sweep [--apply] [--retry]` with the warm pool, retention
+and a journal, `aw discard` with archived refs, `aw park`/`unpark`, and `aw finish` with handoffs
+(state schema 3). 45 of the 73 M2 scenarios are written.
 
-**Next step:** M2 merge proof (ancestry and patch equivalence), `aw sweep`, `aw discard`,
-`aw park`, `aw finish`, then forge proof, sessions, `aw new`, `aw run`, the dashboard and the
-first pre-release.
+**Next step:** forge proof (`gh`, `glab`), sessions (liveness, interruption, handoff reading),
+`aw new`, `aw run`, the dashboard and `aw recap`, the M2 budgets, then the first pre-release.
 
 **Pending manual checks:** the hot-path and budget benchmarks on an Apple Silicon laptop (T3, M1;
 docs/dev/benchmarks.md).

@@ -1,6 +1,20 @@
-# finish/offline-no-network: to be written (plan §3.5).
-# req: R2 R25
-# source: C1 test_local_delivery_offline_idempotent_preserves_unmerged_work
+# aw finish needs no network, no forge and no push: it records heads and a note locally.
+# req: R2 R78
+# source: C1 test_lanes.py::test_local_delivery_offline_idempotent_preserves_unmerged_work
 # milestone: M2
 
-unwritten
+workspace solo --single --init
+exec aw attach 'add feature flag'
+lane-commit 01 file.txt 'work'
+exec sh $WORK/forbid.sh
+cd .worktrees/01
+env PATH=$WORK/forbid:$PATH
+exec aw finish --summary 'Done; not pushed yet.'
+! exists $WORK/forbidden.log
+
+-- forbid.sh --
+mkdir -p "$WORK/forbid"
+for tool in gh glab curl wget ssh; do
+	printf '#!/bin/sh\necho "%s $*" >> "$WORK/forbidden.log"\nexit 97\n' "$tool" > "$WORK/forbid/$tool"
+	chmod +x "$WORK/forbid/$tool"
+done

@@ -1,6 +1,19 @@
-# sweep/preview-writes-nothing: to be written (plan §3.5).
+# aw sweep without --apply writes nothing: not in the owner checkout, its Git directory, the lanes,
+# or the home directory.
 # req: R25 R79
-# source: C1 test_classifier_and_observational_cli
+# source: C1 test_lanes.py::test_classifier_and_observational_cli
 # milestone: M2
 
-unwritten
+workspace shop --init
+exec aw attach 'first thing'
+exec aw attach 'second thing'
+lane-commit 02 web/x.txt 'unmerged'
+exec sh $WORK/tree.sh
+cp stdout $WORK/before
+exec aw sweep
+exec aw sweep --json
+exec sh $WORK/tree.sh
+cmp stdout $WORK/before
+
+-- tree.sh --
+find "$OWNER" "$HOME" -type f -not -path '*/.git/aw/state.db-shm' -not -path '*/.git/aw/state.db-wal' | LC_ALL=C sort | while IFS= read -r f; do cksum < "$f" | tr '\n' ' '; echo "$f"; done

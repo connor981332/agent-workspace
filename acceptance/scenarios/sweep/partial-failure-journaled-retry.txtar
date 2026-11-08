@@ -1,6 +1,37 @@
-# sweep/partial-failure-journaled-retry: to be written (plan §3.5).
+# A cleanup that fails part-way is journaled, the lane is kept, and --retry finishes it.
 # req: R25 R31
-# source: C1 test_change_before_apply_and_partial_failure
+# source: C1 test_lanes.py::test_change_before_apply_and_partial_failure
 # milestone: M2
 
-unwritten
+workspace shop --init
+exec aw attach 'one'
+exec aw attach 'two'
+git-fail '^worktree remove .*/\.worktrees/02$'
+! exec aw sweep --apply --json
+json stdout .lanes[1].action destroy
+json stdout .lanes[1].result failed
+stdout 'aw sweep --apply --retry 2'
+json stdout .unfinished[0].id 2
+
+# Until it is retried, the lane is kept, and sweep says why.
+exec aw sweep --json
+json stdout .lanes[1].action keep
+stdout 'an earlier destroy failed'
+
+exec rm $WORK/.git-fail/git
+exec aw sweep --apply --retry 2 --json
+json stdout .lanes[1].result done
+! json stdout .unfinished[0]
+! exists .worktrees/02 web/.worktrees/02
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 1
+
+[projects.web]
+[projects.api]

@@ -1,6 +1,19 @@
-# evidence/patch-equivalence: to be written (plan §3.5).
+# Commits cherry-picked onto the base, so their patches are there but not the commits themselves,
+# are proven merged by patch equivalence.
 # req: R25
-# source: C1 test_patch_and_squash_proofs
+# source: C1 test_lanes.py::test_patch_and_squash_proofs
 # milestone: M2
 
-unwritten
+workspace solo --single --init
+exec aw attach 'add feature flag'
+lane-commit 01 a.txt 'first'
+lane-commit 01 b.txt 'second'
+# The base moves on first, so the cherry-picked commits are new commits.
+exec sh -c 'echo other >> README.md && git commit -qam other'
+git-cherry-pick . aw/feature-flag
+exec aw sweep --json
+json stdout .lanes[0].action recycle
+json stdout .lanes[0].repos[0].proof patch-equivalent
+exec aw sweep --apply --json
+json stdout .lanes[0].result done
+! exec git rev-parse --verify --quiet refs/heads/aw/feature-flag

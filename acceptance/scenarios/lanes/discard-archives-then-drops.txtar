@@ -1,6 +1,28 @@
-# lanes/discard-archives-then-drops: to be written (plan §3.5).
+# aw discard archives every branch of the lane under refs/aw/archive/ before removing it, refuses
+# uncommitted work, and asks for confirmation (here, --yes).
 # req: R27 R34
-# source: t_lane_rm_force_and_drop_data
+# source: C2 tests::t_lane_rm_force_and_drop_data
 # milestone: M2
 
-unwritten
+workspace shop --init
+exec aw attach 'add feature flag'
+lane-commit 01 web/flag.txt 'unmerged work'
+exec git -C web rev-parse aw/feature-flag
+cp stdout $WORK/head
+
+exec sh -c 'echo wip >> web/.worktrees/01/flag.txt'
+! exec aw discard feature-flag --yes
+stderr 'has uncommitted work in web \(1\), which aw discard would lose; nothing was changed'
+exec git -C web/.worktrees/01 checkout -- flag.txt
+
+! exec aw discard feature-flag
+stderr 'confirm with --yes'
+exec aw discard feature-flag --yes --json
+json stdout .lane feature-flag
+! exists .worktrees/01 web/.worktrees/01
+exec git -C web for-each-ref --format='%(refname) %(objectname)' refs/aw/archive/feature-flag
+stdout '^refs/aw/archive/feature-flag/[0-9]{8}-[0-9]{6} '
+exec sh -c 'git -C web for-each-ref --format="%(objectname)" refs/aw/archive/feature-flag | cmp - "$WORK/head"'
+! exec git -C web rev-parse --verify --quiet refs/heads/aw/feature-flag
+exec aw sweep --json
+! json stdout .lanes[0]

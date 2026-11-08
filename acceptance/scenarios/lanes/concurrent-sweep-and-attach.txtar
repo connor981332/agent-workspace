@@ -1,6 +1,17 @@
-# lanes/concurrent-sweep-and-attach: to be written (plan §3.5).
+# A sweep applied while another session claims lanes never removes a lane someone holds: each claim
+# ends with a working lane, and every lane left is either working or warm.
 # req: R25
-# source: C1 test_gate_and_held_session_allocation
+# source: C1 test_lanes.py::test_gate_and_held_session_allocation
 # milestone: M2
+# changed: C1's gate is dropped; the property is that a held lane cannot be swept.
 
-unwritten
+workspace solo --single --init
+exec aw attach 'one'
+exec aw attach 'two'
+exec aw sweep --apply
+exec sh -c 'for i in 1 2 3 4; do aw attach "work $i" --harness claude --session "s$i" --json > "$WORK/a$i.json" & aw sweep --apply --json > "$WORK/s$i.json" & done; wait'
+exec sh -c 'for i in 1 2 3 4; do grep -c "\"state\": \"working\"" "$WORK/a$i.json"; done'
+stdout -count=4 '^1$'
+exec aw sweep --json
+! stdout '"action": "recycle"'
+! stdout '"action": "destroy"'

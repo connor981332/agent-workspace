@@ -1,6 +1,16 @@
-# state/corrupt-database-protects-all: to be written (plan §3.5).
+# A state database that cannot be read protects everything: nothing is swept, discarded or claimed.
 # req: R19 R23
-# source: C1 test_attachment_records
+# source: C1 test_lanes.py::test_attachment_records
 # milestone: M2
 
-unwritten
+workspace solo --single --init
+exec aw attach 'add feature flag'
+exec sh -c 'cp .git/aw/state.db "$WORK/good.db" && echo "this is not a SQLite database at all, but long enough" > .git/aw/state.db && rm -f .git/aw/state.db-wal .git/aw/state.db-shm'
+! exec aw sweep --apply
+stderr 'cannot be read .*treated as protected'
+! exec aw discard feature-flag --yes
+stderr 'treated as protected'
+! exec aw attach 'another'
+stderr 'treated as protected'
+exists .worktrees/01
+! exists .worktrees/02

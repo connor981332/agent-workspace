@@ -1,6 +1,15 @@
-# sweep/finished-unmerged-kept: to be written (plan §3.5).
+# A lane handed off with aw finish is kept while its work is not merged.
 # req: R2 R25
-# source: C1 test_local_delivery_offline_idempotent_preserves_unmerged_work
+# source: C1 test_lanes.py::test_local_delivery_offline_idempotent_preserves_unmerged_work
 # milestone: M2
 
-unwritten
+workspace solo --single --init
+exec aw attach 'add feature flag'
+lane-commit 01 file.txt 'work'
+cd .worktrees/01
+exec aw finish --summary 'Adds the flag. Verify the toggle by hand.'
+cd $OWNER
+exec aw sweep --apply --json
+json stdout .lanes[0].state ready
+json stdout .lanes[0].action keep
+stdout 'ready for review, but solo: not proven merged'

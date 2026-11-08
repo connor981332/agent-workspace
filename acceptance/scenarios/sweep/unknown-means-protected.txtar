@@ -1,6 +1,27 @@
-# sweep/unknown-means-protected: to be written (plan §3.5).
+# Whatever cannot be read protects the lane: a lane marker that does not match, a locked worktree,
+# a detached HEAD, a lane directory replaced by a symlink.
 # req: R25
-# source: C1 test_backup_locked_symlink_detached_and_unknown_session
+# source: C1 test_lanes.py::test_backup_locked_symlink_detached_and_unknown_session
 # milestone: M2
 
-unwritten
+workspace solo --single --init
+exec aw attach 'one'
+exec aw attach 'two'
+exec aw attach 'three'
+exec aw attach 'four'
+
+exec sh -c 'echo /somewhere/else > .worktrees/01/.aw/owner'
+exec git worktree lock .worktrees/02
+exec git -C .worktrees/03 switch -q --detach
+exec sh -c 'mv .worktrees/04 $WORK/moved && ln -s $WORK/moved .worktrees/04'
+
+exec aw sweep --apply --json
+json stdout .lanes[0].action keep
+json stdout .lanes[0].reason 'its lane marker (.aw/owner) does not name this owner checkout'
+json stdout .lanes[1].action keep
+stdout 'worktree is locked'
+json stdout .lanes[2].action keep
+stdout 'detached HEAD, not on its branch, so it is protected'
+json stdout .lanes[3].action keep
+stdout 'is a symlink, not the lane aw made'
+exists .worktrees/01 .worktrees/02 .worktrees/03 $WORK/moved

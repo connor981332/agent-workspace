@@ -1,6 +1,11 @@
-# sweep/foreign-worktrees-report-only: to be written (plan §3.5).
+# Worktrees aw did not make are never touched, even inside .worktrees.
 # req: R25
-# source: C1 test_stale_worktree_and_branch_refusal
+# source: C1 test_lanes.py::test_stale_worktree_and_branch_refusal
 # milestone: M2
 
-unwritten
+workspace solo --single --init
+exec git worktree add -q -b mine .worktrees/99
+exec aw sweep --apply --json
+! json stdout .lanes[0]
+exists .worktrees/99
+exec git rev-parse --verify mine

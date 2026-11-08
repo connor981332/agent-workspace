@@ -186,7 +186,7 @@ func TestEveryTableExists(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	for _, table := range []string{"meta", "lanes", "lane_repos", "sessions", "journal"} {
+	for _, table := range []string{"meta", "lanes", "lane_repos", "sessions", "journal", "handoffs"} {
 		var n int
 		if err := s.DB().QueryRow(`SELECT count(*) FROM sqlite_schema WHERE type = 'table' AND name = ?`, table).Scan(&n); err != nil || n != 1 {
 			t.Errorf("table %s: %d, %v", table, n, err)

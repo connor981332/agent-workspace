@@ -1,6 +1,11 @@
-# sweep/active-session-keeps: to be written (plan §3.5).
-# req: R25 R79
-# source: C1 test_classifier_and_observational_cli
+# A lane with an active session attached is kept, even when its work is merged.
+# req: R25
+# source: C1 test_lanes.py::test_classifier_and_observational_cli
 # milestone: M2
 
-unwritten
+workspace solo --single --init
+exec aw attach 'add feature flag' --harness claude --session s-1
+exec aw sweep --apply --json
+json stdout .lanes[0].action keep
+json stdout .lanes[0].reason 'session s-1 (claude) is attached'
+exists .worktrees/01

@@ -1,6 +1,36 @@
-# sweep/changed-since-preview-aborts: to be written (plan §3.5).
-# req: R25 R31
-# source: C1 test_change_before_apply_and_partial_failure
+# --apply checks each lane again immediately before acting; a lane that changed after it was
+# judged recyclable is skipped, not recycled.
+# req: R25
+# source: C1 test_lanes.py::test_change_before_apply_and_partial_failure
 # milestone: M2
 
-unwritten
+workspace solo --single --init
+exec aw attach 'add feature flag'
+exec sh $WORK/mover.sh
+env PATH=$WORK/mover:$PATH
+exec aw sweep --apply --json
+json stdout .lanes[0].action recycle
+json stdout .lanes[0].result skipped
+stdout 'it changed since it was checked'
+exec git -C .worktrees/01 symbolic-ref --short HEAD
+stdout '^aw/feature-flag$'
+exists .worktrees/01/moved.txt
+
+-- mover.sh --
+# A git wrapper that commits in the lane after sweep's first ancestry check, as an agent might.
+mkdir -p "$WORK/mover"
+real=$(command -v git)
+cat > "$WORK/mover/git" <<EOS
+#!/bin/sh
+"$real" "\$@"
+status=\$?
+case "\$PWD:\$*" in
+*/.worktrees/01:merge-base\ --is-ancestor*)
+	if [ ! -e "$WORK/mover/done" ]; then
+		touch "$WORK/mover/done"
+		echo moved >> moved.txt; "$real" add moved.txt; "$real" -c user.name=x -c user.email=x@x commit -qm moved
+	fi ;;
+esac
+exit \$status
+EOS
+chmod +x "$WORK/mover/git"

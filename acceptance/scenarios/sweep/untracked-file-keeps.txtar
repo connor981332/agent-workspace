@@ -1,6 +1,15 @@
-# sweep/untracked-file-keeps: to be written (plan §3.5).
-# req: R25 R79
-# source: C1 test_classifier_and_observational_cli
+# An untracked file keeps a lane, even when its commits are merged.
+# req: R25
+# source: C1 test_lanes.py::test_classifier_and_observational_cli
 # milestone: M2
 
-unwritten
+workspace solo --single --init
+exec aw attach 'add feature flag'
+lane-commit 01 file.txt 'work'
+git-merge . aw/feature-flag
+exec sh -c 'echo notes > .worktrees/01/notes.txt'
+exec aw sweep --json
+json stdout .lanes[0].action keep
+stdout '1 changed or untracked \(\?\? notes\.txt\)'
+exec aw sweep --apply
+exists .worktrees/01/notes.txt

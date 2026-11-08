@@ -1,6 +1,20 @@
-# finish/lists-every-problem: to be written (plan §3.5).
+# aw finish refuses with every problem at once, not one at a time.
 # req: R78
-# source: C1 test_finish_errors_and_validation
+# source: C1 test_lanes.py::test_finish_errors_and_validation
 # milestone: M2
 
-unwritten
+workspace shop --init
+exec aw attach 'add feature flag'
+exec sh -c 'echo edit >> web/.worktrees/01/README.md'
+exec git -C api/.worktrees/01 switch -q --detach
+cd .worktrees/01
+! exec aw finish --summary 'done' --plan nowhere.md
+stderr 'lane feature-flag was not finished:'
+stderr 'the plan nowhere.md cannot be read → give a file inside the lane'
+stderr 'api is on a detached HEAD → check out the lane''s branch aw/feature-flag'
+stderr 'web has 1 uncommitted changes → commit or remove them'
+! exec aw finish
+stderr 'aw finish needs a summary'
+cd $OWNER
+exec aw sweep --json
+json stdout .lanes[0].state working
