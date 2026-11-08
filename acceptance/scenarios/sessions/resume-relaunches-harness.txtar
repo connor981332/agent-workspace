@@ -1,0 +1,34 @@
+# aw resume relaunches the right harness in the right lane with its own resume flag and the recorded
+# session ID. When the harness cannot resume, it falls back to a new session given the handoff.
+# req: R77
+# source: spec (no candidate source)
+# milestone: M3
+
+workspace solo --single --init
+stubs claude codex
+session s-1 codex
+exec aw attach 'add feature flag'
+end-session s-1
+
+! exec aw resume
+stdout 'feature-flag +codex +interrupted'
+stderr 'name the session to resume'
+
+exec aw resume feat
+stderr 'resuming codex in'
+exec cat $STUB_LOG
+stdout '^codex \[resume\] \[s-1\]$'
+stdout '^codex cwd .*/\.worktrees/01$'
+stdout '^codex AW_SESSION=codex:s-1$'
+
+# The harness refuses: a new session opens on the same lane.
+env STUB_HARNESS_EXIT=1
+! exec aw resume feature-flag
+stderr 'could not resume the session'
+stderr 'opening lane feature-flag with codex'
+env STUB_HARNESS_EXIT=
+exec cat $STUB_LOG
+stdout 'picking up existing work'
+
+! exec aw resume nothere
+stderr 'no lane named'

@@ -193,3 +193,31 @@ func TestEveryTableExists(t *testing.T) {
 		}
 	}
 }
+
+// An archived handoff stays on record, marked, so aw open can give it to another session.
+func TestArchivedHandoffStaysOnRecord(t *testing.T) {
+	s, err := Open(t.TempDir(), ReadWrite)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx := context.Background()
+	if err := s.Write(ctx, func(tx *sql.Tx) error {
+		if err := InsertLane(tx, Lane{Number: 1, State: LaneReady, Generation: 1, Created: now(), Updated: now()}); err != nil {
+			return err
+		}
+		return AddHandoff(tx, Handoff{Lane: 1, Generation: 1, Summary: "done", Heads: "{}"})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	h, err := LatestHandoff(s.DB(), 1, 1)
+	if err != nil || h.Archived != "" {
+		t.Fatalf("before: %+v, %v", h, err)
+	}
+	if err := s.Write(ctx, func(tx *sql.Tx) error { return ArchiveHandoff(tx, h.ID) }); err != nil {
+		t.Fatal(err)
+	}
+	if h, err = LatestHandoff(s.DB(), 1, 1); err != nil || h.Archived == "" || h.Summary != "done" {
+		t.Fatalf("after: %+v, %v", h, err)
+	}
+}

@@ -89,6 +89,9 @@ var migrations = []string{
 	// which the session's commands still carry in AW_SESSION.
 	`ALTER TABLE sessions ADD COLUMN pair INTEGER NOT NULL DEFAULT 0;
 	ALTER TABLE sessions ADD COLUMN issued_session TEXT NOT NULL DEFAULT ''`,
+
+	// 6: when a handoff was picked up by aw open. It stays on record, but no longer describes the lane.
+	`ALTER TABLE handoffs ADD COLUMN archived TEXT NOT NULL DEFAULT ''`,
 }
 
 // BackupPath is where the database is copied before migrating from schema version v.
