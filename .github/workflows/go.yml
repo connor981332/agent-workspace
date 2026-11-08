@@ -169,8 +169,13 @@ jobs:
         include:
           - os: ubuntu-24.04
             mode: absolute
+            scale: 1
+          # Relative mode compares medians, which need fewer samples than a p99; and every sample
+          # is taken twice (this binary and master's) on a slow virtual machine. At full scale
+          # the job took over 15 minutes.
           - os: macos-15
             mode: relative
+            scale: 0.3
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
@@ -200,9 +205,9 @@ jobs:
         env:
           AW_BENCH_HOST: ${{ matrix.os }}
         run: |
-          args=(-on ci -mode "${{ matrix.mode }}" -out "$RUNNER_TEMP/bench.json")
+          args=(-on ci -mode "${{ matrix.mode }}" -scale "${{ matrix.scale }}" -out "$RUNNER_TEMP/bench.json")
           if [ -x "$RUNNER_TEMP/aw-baseline" ]; then args+=(-baseline-aw "$RUNNER_TEMP/aw-baseline");
-          elif [ "${{ matrix.mode }}" = relative ]; then args=(-on ci -mode absolute -out "$RUNNER_TEMP/bench.json"); echo "No baseline: reporting only"; fi
+          elif [ "${{ matrix.mode }}" = relative ]; then args=(-on ci -mode absolute -scale "${{ matrix.scale }}" -out "$RUNNER_TEMP/bench.json"); echo "No baseline: reporting only"; fi
           set +e
           go run ./bench "${args[@]}" | tee -a "$GITHUB_STEP_SUMMARY"
           status=${PIPESTATUS[0]}

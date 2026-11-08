@@ -962,7 +962,9 @@ summary for the CI job page.
   process start alone costs 8 ms p99 (docs/dev/spikes.md), so there an operation fails when its p99
   grows more than 25 % over master's, with the same rerun rule. (Implemented in M1 as an A/B run:
   the job builds master's binary and measures it interleaved with the PR's on the same machine,
-  comparing medians, because separate macOS runs differed by more than 2× at p99.)
+  comparing medians, because separate macOS runs differed by more than 2× at p99. It runs at 0.3 of
+  each operation's iterations: medians need fewer samples, and at full scale the job took over 15
+  minutes once the lane operations were measured on both binaries.)
 - **One CI ceiling differs from its budget:** the dashboard and `aw recap` fail on `ubuntu-24.04`
   above 200 ms p99, while their 100 ms budget is checked on the laptops (speed.md, "Enforcement").
   `budgets.toml` records it as `ci_budget_ms`, and CI runs the bench with `-on ci`.
