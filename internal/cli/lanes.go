@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -16,7 +17,15 @@ import (
 )
 
 func manager(w *writeContext) *lanes.Manager {
-	return &lanes.Manager{WS: w.ws, Cfg: w.cfg, Store: w.store}
+	m := &lanes.Manager{WS: w.ws, Cfg: w.cfg, Store: w.store}
+	m.Seats = func(ctx context.Context, l state.Lane, needs []string) (func(), error) {
+		h, err := ownHolder(l)
+		if err != nil {
+			return nil, err
+		}
+		return holdSeats(ctx, w, m, newBroker(w), h, needs, os.Stderr)
+	}
+	return m
 }
 
 // laneArg resolves the lane a command names, or the lane it runs in.

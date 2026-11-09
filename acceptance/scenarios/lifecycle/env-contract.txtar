@@ -1,0 +1,36 @@
+# Every documented variable reaches a hook.
+# req: R30
+# source: C2 t_lane_new_makes_worktree_env_and_links
+# milestone: M5
+
+workspace shop --init
+exec aw attach 'add feature flag'
+cd .worktrees/01
+exec aw run web sh -c 'cat "$AW_LANE_STATE/env"'
+stdout '^AW_LANE=01$'
+stdout '^AW_LANE_NAME=feature-flag$'
+stdout '^AW_LANE_ROOT=.*/\.worktrees/01$'
+stdout '^AW_LANE_STATE=.*/\.git/aw/lanes/01$'
+stdout '^AW_PROJECT=web$'
+stdout '^AW_PROJECT_PATH=.*/web/\.worktrees/01$'
+stdout '^AW_OWNER=.*/shop$'
+stdout '^AW_NAMESPACE=shop$'
+stdout '^AW_HOSTNAME=lane-01\.localhost$'
+stdout '^AW_FRESH=0$'
+stdout '^AW_PHASE=setup$'
+stdout '^AW_TOOL=.*/\.worktrees/01/bin/aw$'
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[projects.web]
+directory = "web"
+
+[projects.web.lifecycle]
+setup = 'env | grep ^AW_ > "$AW_LANE_STATE/env"'

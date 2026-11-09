@@ -180,6 +180,9 @@ func ownerOnlyRule(s Scope, c shell.Command) Decision {
 	if c.Nested {
 		where = " (inside a substitution)"
 	}
+	if sub == "setup" && ownLaneSetup(s, rest) {
+		return allow()
+	}
 	if why, ok := ownerOnly[sub]; ok {
 		return deny("owner-only", "aw %s %s, which only the human does%s → ask the human to run it", sub, why, where)
 	}
@@ -187,6 +190,16 @@ func ownerOnlyRule(s Scope, c shell.Command) Decision {
 		return deny("owner-only", "aw sweep --apply removes lanes, which only the human does%s → aw sweep, without --apply, shows what it would do", where)
 	}
 	return allow()
+}
+
+// ownLaneSetup reports whether this is a lane agent retrying its own lane's setup: its hooks are the
+// team's reviewed configuration, and a failed step's error tells the agent to run this. A lane is
+// named exactly here. aw checks the lane again when the command runs.
+func ownLaneSetup(s Scope, rest []shell.Word) bool {
+	if s.LaneRoot == "" || len(rest) != 1 || !rest[0].Known {
+		return false
+	}
+	return rest[0].Text == s.LaneName || rest[0].Text == filepath.Base(s.LaneRoot)
 }
 
 // gitGlobal splits git's global options from the subcommand.

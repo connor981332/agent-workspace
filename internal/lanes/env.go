@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/connor981332/agent-workspace/internal/config"
 	"github.com/connor981332/agent-workspace/internal/state"
 )
 
@@ -31,19 +32,30 @@ func (m *Manager) StateDir(n int) (string, error) {
 // project (or the owner's checkout of a shared project) with the lane's variables; in the owner
 // checkout, the owner's checkout of the project.
 func (m *Manager) Locate(project string) (*Where, error) {
-	p, ok := m.Cfg.Projects[project]
-	if !ok {
-		names := sortedKeys(m.Cfg.Projects)
-		return nil, fmt.Errorf("there is no project named %q → known: %s", project, strings.Join(names, ", "))
+	return m.LocateIn(m.CallerLane(), project)
+}
+
+// LocateIn returns where a project's commands run in lane n, or in the owner checkout for lane 0.
+// The project "" is the lane root, for the steps that belong to no one project.
+func (m *Manager) LocateIn(n int, project string) (*Where, error) {
+	var p *config.Project
+	ownerDir := m.WS.Owner
+	if project != "" {
+		var ok bool
+		if p, ok = m.Cfg.Projects[project]; !ok {
+			names := sortedKeys(m.Cfg.Projects)
+			return nil, fmt.Errorf("there is no project named %q → known: %s", project, strings.Join(names, ", "))
+		}
+		ownerDir = filepath.Join(m.WS.Owner, p.Directory)
 	}
-	ownerDir := filepath.Join(m.WS.Owner, p.Directory)
 	env := []string{
 		"AW_OWNER=" + m.WS.Owner,
 		"AW_NAMESPACE=" + m.Cfg.Workspace.Namespace,
-		"AW_PROJECT=" + project,
 		"AW_TOOL=" + filepath.Join(m.WS.Owner, "bin", "aw"),
 	}
-	n := m.CallerLane()
+	if project != "" {
+		env = append(env, "AW_PROJECT="+project)
+	}
 	if n == 0 {
 		return &Where{Dir: ownerDir, Env: append(env, "AW_PROJECT_PATH="+ownerDir)}, nil
 	}
@@ -51,8 +63,10 @@ func (m *Manager) Locate(project string) (*Where, error) {
 	if err != nil {
 		return nil, fmt.Errorf("lane %s has no record in the state → run aw doctor", Dir(n, m.Cfg.Lanes.Max))
 	}
-	dir := ownerDir
-	if p.Lanes != "shared" {
+	dir := m.Root(n)
+	if p != nil && p.Lanes == "shared" {
+		dir = ownerDir
+	} else if p != nil {
 		repos, err := state.LaneRepos(m.Store.DB(), n)
 		if err != nil {
 			return nil, err
@@ -71,8 +85,10 @@ func (m *Manager) Locate(project string) (*Where, error) {
 	if err != nil {
 		return nil, err
 	}
+	if project != "" {
+		env = append(env, "AW_PROJECT_PATH="+dir)
+	}
 	env = append(env,
-		"AW_PROJECT_PATH="+dir,
 		"AW_LANE="+Dir(n, m.Cfg.Lanes.Max),
 		"AW_LANE_NAME="+l.Name,
 		"AW_LANE_ROOT="+m.Root(n),
@@ -81,10 +97,12 @@ func (m *Manager) Locate(project string) (*Where, error) {
 		"AW_TOOL="+filepath.Join(m.Root(n), "bin", "aw"),
 	)
 	// The project's env file, written by the prepare hook: plain KEY=VALUE lines.
-	if extra, err := readEnvFile(filepath.Join(laneState, project+".env")); err == nil {
-		env = append(env, extra...)
-	} else if !os.IsNotExist(err) {
-		return nil, err
+	if project != "" {
+		if extra, err := readEnvFile(filepath.Join(laneState, project+".env")); err == nil {
+			env = append(env, extra...)
+		} else if !os.IsNotExist(err) {
+			return nil, err
+		}
 	}
 	return &Where{Dir: dir, Env: env, Lane: &l}, nil
 }

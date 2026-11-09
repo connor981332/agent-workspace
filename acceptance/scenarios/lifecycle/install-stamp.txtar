@@ -1,0 +1,52 @@
+# A recycled lane skips an install whose stamp did not change, runs reset instead of setup, and
+# installs again when a stamp file changes.
+# req: R29 R26
+# source: spec S11
+# milestone: M5
+
+owner-may-change
+workspace solo --single --init
+exec aw attach 'one'
+cd .worktrees/01
+exec aw run solo true
+cd ../..
+exec aw sweep --apply --json
+json stdout .lanes[0].action recycle
+
+exec aw attach 'two'
+cd .worktrees/01
+exec aw run solo sh -c 'cat "$AW_LANE_STATE/log"'
+stdout -count=1 '^install$'
+stdout -count=1 '^setup$'
+stdout -count=1 '^reset$'
+cd ../..
+exec aw sweep --apply --json
+json stdout .lanes[0].action recycle
+
+exec sh -c 'echo v2 > lock.txt'
+exec git add lock.txt
+exec git -c user.name=t -c user.email=t@t commit -q -m 'new lock'
+exec git push -q origin HEAD:main
+exec aw attach 'three'
+cd .worktrees/01
+exec aw run solo sh -c 'cat "$AW_LANE_STATE/log"'
+stdout -count=2 '^install$'
+stdout -count=2 '^reset$'
+
+-- workspace.toml --
+[workspace]
+name = "Solo"
+namespace = "solo"
+schema = 1
+
+[lanes]
+pool = 1
+
+[projects.solo]
+directory = "."
+install = 'echo install >> "$AW_LANE_STATE/log"'
+install_stamp = ["lock.txt"]
+
+[projects.solo.lifecycle]
+setup = 'echo setup >> "$AW_LANE_STATE/log"'
+reset = 'echo reset >> "$AW_LANE_STATE/log"'

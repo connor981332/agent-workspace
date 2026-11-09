@@ -1,0 +1,42 @@
+# Setup runs in order, in the background: workspace prepare, then each project's prepare, install and
+# setup. Hooks get the environment contract in the right working directory, and a command waits for it.
+# req: R29 R30 R5
+# source: C2 t_lane_setup_hook_and_custom_resource
+# milestone: M5
+
+workspace shop --init
+exec aw attach 'add feature flag'
+cd .worktrees/01
+exec aw run web sh -c 'cat "$AW_LANE_STATE/order"'
+stdout '^prepare .*/\.worktrees/01$'
+stdout '^web.prepare web /.*/web/\.worktrees/01 prepare 0$'
+stdout '^web.install /.*/web/\.worktrees/01 install 0$'
+stdout '^web.setup 01 feature-flag web shop lane-01\.localhost /.*/\.git/aw/lanes/01 setup 0$'
+exec aw run web sh -c 'grep -n . "$AW_LANE_STATE/order" | cut -d: -f2 | cut -d" " -f1 | tr "\n" " "'
+stdout '^prepare web.prepare web.install web.setup '
+cd ../..
+exec aw --json
+json stdout .lanes[0].state working
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[lifecycle]
+prepare = 'echo "prepare $PWD" >> "$AW_LANE_STATE/order"'
+
+[projects.web]
+directory = "web"
+install = 'echo "web.install $PWD $AW_PHASE $AW_FRESH" >> "$AW_LANE_STATE/order"'
+
+[projects.web.lifecycle]
+prepare = 'echo "web.prepare $AW_PROJECT $AW_PROJECT_PATH $AW_PHASE $AW_FRESH" >> "$AW_LANE_STATE/order"'
+setup = 'echo "web.setup $AW_LANE $AW_LANE_NAME $AW_PROJECT $AW_NAMESPACE $AW_HOSTNAME $AW_LANE_STATE $AW_PHASE $AW_FRESH" >> "$AW_LANE_STATE/order"'
+
+[projects.api]
+directory = "api"

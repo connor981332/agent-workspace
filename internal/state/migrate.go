@@ -143,6 +143,29 @@ var migrations = []string{
 
 	// 8: when a holder over its maximum hold was warned.
 	`ALTER TABLE leases ADD COLUMN warned TEXT NOT NULL DEFAULT ''`,
+
+	// 9: the lifecycle journal (M5): a lane's setup steps, and the process running them.
+	`CREATE TABLE lane_setups (
+		lane       INTEGER PRIMARY KEY,
+		generation INTEGER NOT NULL,
+		from_pool  INTEGER NOT NULL DEFAULT 0,
+		pid        INTEGER NOT NULL DEFAULT 0,
+		pid_start  TEXT NOT NULL DEFAULT '',
+		created    TEXT NOT NULL
+	) STRICT;
+	CREATE TABLE lane_steps (
+		lane        INTEGER NOT NULL,
+		generation  INTEGER NOT NULL,
+		step        TEXT NOT NULL,
+		seq         INTEGER NOT NULL,
+		status      TEXT NOT NULL,
+		detail      TEXT NOT NULL DEFAULT '',
+		log         TEXT NOT NULL DEFAULT '',
+		exit_status INTEGER,
+		started     TEXT NOT NULL DEFAULT '',
+		ended       TEXT NOT NULL DEFAULT '',
+		PRIMARY KEY (lane, generation, step)
+	) STRICT`,
 }
 
 // BackupPath is where the database is copied before migrating from schema version v.

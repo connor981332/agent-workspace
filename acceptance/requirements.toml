@@ -5,7 +5,7 @@
 # The latest milestone whose scenarios must pass. Scenarios of later milestones are pending.
 current = "M4"
 # The milestone being built: its written scenarios run and must pass, its unwritten ones are pending.
-in_progress = ""
+in_progress = "M5"
 
 [req.R1] # Guard decision < 5 ms p99
 milestone = "M1"

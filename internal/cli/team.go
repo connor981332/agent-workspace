@@ -15,6 +15,7 @@ import (
 
 	"github.com/connor981332/agent-workspace/internal/broker"
 	"github.com/connor981332/agent-workspace/internal/config"
+	"github.com/connor981332/agent-workspace/internal/lanes"
 	"github.com/connor981332/agent-workspace/internal/platform"
 	"github.com/connor981332/agent-workspace/internal/procs"
 	"github.com/connor981332/agent-workspace/internal/runners"
@@ -57,58 +58,19 @@ func runTeamCommand(name string, c *config.Command, args []string, stdout, stder
 			return ExitError, err
 		}
 	}
-	var resources []broker.Resource
-	for _, need := range c.Needs {
-		r, err := b.Lookup(need)
-		if err != nil {
-			return ExitError, err
+	if err := awaitSetup(ctx, w, m, c.Project, c.After, stderr); err != nil {
+		if errors.Is(err, context.Canceled) {
+			return 130, nil
 		}
-		resources = append(resources, r)
-	}
-	release := func() {
-		for _, r := range resources {
-			if stopping, grace, err := b.Release(context.Background(), h.Lane, r.Name); err == nil {
-				for _, p := range stopping {
-					procs.Stop(p, grace)
-				}
-			} else if !errors.Is(err, broker.ErrNotHeld) {
-				fmt.Fprintf(stderr, "aw: warning: releasing %s: %v\n", r.Name, err)
-			}
-		}
+		return ExitError, err
 	}
 	if len(c.Needs) > 0 {
-		said := false
-		for {
-			out, err := b.Request(ctx, h, c.Needs)
-			if err != nil {
-				return ExitError, err
-			}
-			broker.Stop(ctx, out.Evicted)
-			if out.Granted {
-				for i := range out.Leases {
-					l := &out.Leases[i]
-					r, err := b.Lookup(l.Resource)
-					if err != nil {
-						release()
-						return ExitError, err
-					}
-					if err := provision(ctx, w, m, b, r, l); err != nil {
-						release()
-						return ExitError, err
-					}
-				}
-				break
-			}
-			if !said {
-				said = true
-				fmt.Fprintf(stderr, "aw: waiting for %v\n", c.Needs)
-			}
-			select {
-			case <-ctx.Done():
-				release()
+		release, err := holdSeats(ctx, w, m, b, h, c.Needs, stderr)
+		if err != nil {
+			if errors.Is(err, context.Canceled) {
 				return 130, nil
-			case <-time.After(100 * time.Millisecond):
 			}
+			return ExitError, err
 		}
 		defer release()
 	}
@@ -127,4 +89,61 @@ func runTeamCommand(name string, c *config.Command, args []string, stdout, stder
 		return ExitError, err
 	}
 	return code, nil
+}
+
+// holdSeats waits for the resources, makes the seats real, and returns how to give them back. A
+// cancelled wait leaves the queue and returns the context's error.
+func holdSeats(ctx context.Context, w *writeContext, m *lanes.Manager, b *broker.Broker, h broker.Holder, needs []string, stderr io.Writer) (func(), error) {
+	var resources []broker.Resource
+	for _, need := range needs {
+		r, err := b.Lookup(need)
+		if err != nil {
+			return nil, err
+		}
+		resources = append(resources, r)
+	}
+	release := func() {
+		for _, r := range resources {
+			if stopping, grace, err := b.Release(context.Background(), h.Lane, r.Name); err == nil {
+				for _, p := range stopping {
+					procs.Stop(p, grace)
+				}
+			} else if !errors.Is(err, broker.ErrNotHeld) {
+				fmt.Fprintf(stderr, "aw: warning: releasing %s: %v\n", r.Name, err)
+			}
+		}
+	}
+	said := false
+	for {
+		out, err := b.Request(ctx, h, needs)
+		if err != nil {
+			return nil, err
+		}
+		broker.Stop(ctx, out.Evicted)
+		if out.Granted {
+			for i := range out.Leases {
+				l := &out.Leases[i]
+				r, err := b.Lookup(l.Resource)
+				if err != nil {
+					release()
+					return nil, err
+				}
+				if err := provision(ctx, w, m, b, r, l); err != nil {
+					release()
+					return nil, err
+				}
+			}
+			return release, nil
+		}
+		if !said {
+			said = true
+			fmt.Fprintf(stderr, "aw: waiting for %v\n", needs)
+		}
+		select {
+		case <-ctx.Done():
+			release()
+			return nil, ctx.Err()
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
 }

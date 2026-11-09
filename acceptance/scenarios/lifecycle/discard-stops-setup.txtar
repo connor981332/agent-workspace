@@ -1,0 +1,26 @@
+# Discarding a lane stops the setup still running in it, and the lane's record goes.
+# req: R27 R31
+# source: spec
+# milestone: M5
+
+workspace shop --init
+exec aw attach 'add feature flag'
+exec aw discard feature-flag --yes
+! exists .worktrees/01
+exec aw --json
+! stdout 'feature-flag'
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[projects.web]
+directory = "web"
+
+[projects.web.lifecycle]
+setup = "sleep 30"

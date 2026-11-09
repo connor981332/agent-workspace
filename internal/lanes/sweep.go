@@ -15,6 +15,7 @@ import (
 	"github.com/connor981332/agent-workspace/internal/evidence"
 	"github.com/connor981332/agent-workspace/internal/forge"
 	"github.com/connor981332/agent-workspace/internal/gitx/run"
+	"github.com/connor981332/agent-workspace/internal/lifecycle"
 	"github.com/connor981332/agent-workspace/internal/state"
 )
 
@@ -431,6 +432,10 @@ func (m *Manager) destroy(ctx context.Context, l state.Lane, stored []state.Lane
 			return err
 		}
 	}
+	lifecycle.Stop(ctx, m.Store, l.Number)
+	if err := m.teardown(ctx, l); err != nil {
+		return err
+	}
 	slices.SortFunc(stored, func(a, b state.LaneRepo) int { return strings.Compare(b.Project, a.Project) }) // the root ("") last
 	for _, r := range stored {
 		owner := filepath.Join(m.WS.Owner, m.relOf(r))
@@ -460,12 +465,52 @@ func (m *Manager) destroy(ctx context.Context, l state.Lane, stored []state.Lane
 		}
 	}
 	os.Remove(m.Root(l.Number))
-	return m.Store.Write(ctx, func(tx *sql.Tx) error {
+	if err := m.Store.Write(ctx, func(tx *sql.Tx) error {
 		if _, err := tx.Exec(`UPDATE sessions SET lane = NULL, lane_generation = NULL WHERE lane = ?`, l.Number); err != nil {
 			return err
 		}
+		if err := state.ForgetSetup(tx, l.Number); err != nil {
+			return err
+		}
 		return state.DeleteLane(tx, l.Number)
-	})
+	}); err != nil {
+		return err
+	}
+	// The next lane with this number starts empty: no env files, and no stamps of installs it has not had.
+	return os.RemoveAll(filepath.Join(filepath.Dir(m.Store.Path()), "lanes", Dir(l.Number, m.Cfg.Lanes.Max)))
+}
+
+// teardown runs the workspace's teardown hook. It must be safe to rerun: a failure keeps the lane,
+// and aw sweep --apply --retry runs it again.
+func (m *Manager) teardown(ctx context.Context, l state.Lane) error {
+	h := m.Cfg.Lifecycle.Teardown
+	if h == nil {
+		return nil
+	}
+	if _, err := os.Stat(m.Root(l.Number)); err != nil {
+		return nil // already removed by an earlier attempt, which got past this
+	}
+	release := func() {}
+	if len(h.Needs) > 0 {
+		var err error
+		if release, err = m.Seats(ctx, l, h.Needs); err != nil {
+			return fmt.Errorf("teardown of lane %s: %w", l.Name, err)
+		}
+	}
+	defer release()
+	where, err := m.LocateIn(l.Number, "")
+	if err != nil {
+		return err
+	}
+	dir, err := m.StateDir(l.Number)
+	if err != nil {
+		return err
+	}
+	log := filepath.Join(dir, "logs", "setup", "teardown.log")
+	if _, err := lifecycle.Exec(ctx, lifecycle.Command{Dir: where.Dir, Env: where.Env, Run: h.Run, Timeout: time.Duration(h.Timeout), Log: log, Phase: lifecycle.PhaseTeardown}); err != nil {
+		return fmt.Errorf("teardown of lane %s failed: %v (log %s)", l.Name, err, log)
+	}
+	return nil
 }
 
 // removeRootLinks removes what aw put in a lane root (project links and the owner pointer), which

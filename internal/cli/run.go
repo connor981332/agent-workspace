@@ -41,6 +41,11 @@ runs the project's [projects.<p>] run.`,
 				return err
 			}
 			m := manager(w)
+			// Before Locate: the env file it reads is what prepare writes.
+			if err := awaitSetup(cmd.Context(), w, m, args[0], nil, cmd.ErrOrStderr()); err != nil {
+				w.Close()
+				return err
+			}
 			where, err := m.Locate(args[0])
 			if err != nil {
 				w.Close()
@@ -130,6 +135,8 @@ against the lane.`,
 			fmt.Fprintf(cmd.ErrOrStderr(), "aw: lane %s %s, starting %s\n", c.Dir, c.Lane.Name, harness)
 			mx := w.cfg.User.Multiplexer
 			t.Mark("claim")
+			startSetup(cmd.ErrOrStderr(), w, c)
+			t.Mark("setup")
 			w.Close()
 			t.Mark("close")
 			if timing.Debug() {

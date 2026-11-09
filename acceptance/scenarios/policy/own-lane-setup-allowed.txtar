@@ -1,0 +1,17 @@
+# The guard lets a lane agent retry its own lane's setup, and nothing wider.
+# req: R31 R64
+# source: spec owner decision 2026-11-08
+# milestone: M5
+
+workspace shop --init
+env CLAUDE_CODE_SESSION_ID=s-1
+exec aw attach 'first'
+cd .worktrees/01
+exec awtest-hook bash 'aw setup first'
+! stdout 'deny'
+exec awtest-hook bash 'aw setup 01'
+! stdout 'deny'
+! exec awtest-hook bash 'aw setup'
+stderr 'only the human'
+! exec awtest-hook bash 'aw setup other'
+stderr 'only the human'

@@ -1,0 +1,37 @@
+# An agent may rerun its own lane's setup. Plain aw setup and any other lane's setup stay with the human.
+# req: R31 R64
+# source: spec owner decision 2026-11-08
+# milestone: M5
+
+workspace shop --init
+env CLAUDE_CODE_SESSION_ID=s-1
+exec aw attach 'first'
+env CLAUDE_CODE_SESSION_ID=s-2
+exec aw attach 'second'
+env CLAUDE_CODE_SESSION_ID=s-1
+cd .worktrees/01
+exec aw setup first
+stdout 'Lane first is set up'
+! exec aw setup second
+stderr 'an agent may only rerun its own lane'
+! exec aw setup
+stderr 'only for the human'
+cd ../..
+env CLAUDE_CODE_SESSION_ID=
+exec aw setup second
+stdout 'Lane second is set up'
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[projects.web]
+directory = "web"
+
+[projects.web.lifecycle]
+setup = "true"

@@ -3,7 +3,9 @@
 ## States
 
 ```
-          claim                    finish                  proven merged
+                     setting-up ──(a step fails)──▶ incomplete
+                         │                              │ aw setup <lane>
+          claim          ▼         finish               ▼  proven merged
  pool ──────────────▶ working ──────────────▶ ready ──────────────────────▶ recyclable
   ▲                  │      ▲                  │                               │
   │             park │      │ unpark           │ more work                     │ recycle
@@ -45,8 +47,11 @@ them (for example, a database configuration that ignores `AW_LANE`) is refused w
 
 ## Lifecycle hooks
 
-Hooks are team (or module) commands run at fixed points. They live per project or at the workspace
-level.
+Hooks are team (or module) commands run at fixed points. `prepare` can be set at both levels, and
+the workspace's runs first. `setup`, `reset` and `restore` are per project. `teardown` is at the
+workspace level. `install` is not a hook but a per-project key with a stamp, journaled like one: a
+lane reinstalls when the command or the contents of the files in `install_stamp` change. A project
+whose lanes are `shared` runs the owner's checkout, so its lanes do not install.
 
 ```toml
 [lifecycle]                         # workspace level
@@ -69,7 +74,12 @@ setup = { run = "npm run build:assets", needs = ["build-slot"] }
 | `reset` | Instead of `setup`, for a lane recycled from the pool | project worktree |
 | `teardown` | Before data is dropped, when a lane is destroyed | lane root |
 
-- Hooks must be safe to rerun. `aw setup <lane>` reruns from the first incomplete step.
+- Hooks must be safe to rerun. `aw setup <lane>` reruns from the first incomplete step, in the
+  foreground. An agent may run it for its own lane; every other use of `aw setup` is the human's.
+- By default, `aw run <project>` and team commands wait for the workspace's `prepare` and their
+  project's own steps. A team command can name others in `after = ["api.setup"]`. `aw serve` waits
+  for the steps of its servers' projects. A command that a hook runs is part of setup, so it does
+  not wait.
 - `needs` makes a step queue for resources like any command.
 - Each step's start, end, exit status and log path are journaled. A failed step marks the lane
   `incomplete` and names the retry command. A failed teardown is resumable with
@@ -91,8 +101,8 @@ Every hook, team command and server receives:
 | `AW_OWNER` | Owner checkout of the workspace |
 | `AW_NAMESPACE` | Workspace namespace |
 | `AW_HOSTNAME` | The lane's hostname, e.g. `lane-03.localhost` |
-| `AW_FRESH` | `1` when the lane's data was just created or reset |
-| `AW_PHASE` | `prepare`, `install`, `setup`, `reset` or `teardown` |
+| `AW_FRESH` | Hooks only: `1` when the lane's data was just created or reset |
+| `AW_PHASE` | Hooks only: `prepare`, `install`, `setup`, `reset` or `teardown` |
 | `AW_<DATA>_*` | Variables from each provider, e.g. `AW_DB_URL`, `AW_CACHE_URL` |
 | `AW_SEAT_<RESOURCE>`, `AW_PORT_<SERVER>`, `AW_TOKEN_<RESOURCE>` | Set while the lane holds a seat |
 | `AW_TOOL` | Path to `bin/aw`, so hooks can call `"$AW_TOOL" run <project> …` |

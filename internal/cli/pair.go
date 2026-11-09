@@ -43,7 +43,7 @@ func agentContext() string {
 
 // refuseAgent refuses an owner-only command in agent context, for a harness without hooks or a
 // command the guard did not see (S10). Delegations (M9) will be able to cover a command.
-func refuseAgent(cmd *cobra.Command) error {
+func refuseAgent(cmd *cobra.Command, args []string) error {
 	if cmd.Parent() == nil || cmd.Parent().Parent() != nil {
 		return nil // aw alone, or a subcommand group's member
 	}
@@ -56,6 +56,9 @@ func refuseAgent(cmd *cobra.Command) error {
 	}
 	if !policy.OwnerOnly(name) && !sweeping {
 		return nil
+	}
+	if name == "setup" && len(args) == 1 {
+		return nil // retrying a lane's setup: the command itself checks that it is the agent's own lane
 	}
 	if why := agentContext(); why != "" {
 		return &commandError{fmt.Errorf("aw %s is only for the human, and this looks like an agent session (%s) → ask the human to run it in their own terminal", name, why)}

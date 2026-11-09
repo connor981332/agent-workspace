@@ -98,7 +98,11 @@ Speed enforcement changed at the M3 exit, by the spec owner (§5.2): CI checks r
 
 The bench had been running on a RAM disk. It now uses the real disk, where every budget holds after writers began keeping SQLite's log between commands (`docs/dev/benchmarks.md`).
 
-**Next step:** the M4 pre-release (v0.0.5), then M5.
+**M4 complete (v0.0.5).**
+
+**In progress:** M5. Spec decisions from the spec owner on 2026-11-08, recorded in lifecycle.md and ux.md as each part lands: an agent may rerun its own lane's setup; snapshots are shared across the workspace and open to agents for their own lane, and copy all the lane's configured databases; data blocks say where their server is with a `url` key; `prepare` is allowed at both levels.
+
+(`m5/lifecycle`.) Now: journaled setup steps (state schema 9), the `incomplete` state, background setup with progress in `aw`, `aw setup <lane>`, waiting for exactly the needed steps (S11, S12), parallel projects, install stamps, teardown.
 
 **Pending manual checks:** the hot-path and budget benchmarks on an Apple Silicon laptop (T3, M1, M2;
 docs/dev/benchmarks.md).

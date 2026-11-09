@@ -1,0 +1,30 @@
+# Setup whose process dies leaves an incomplete lane, not one that waits forever.
+# req: R31 R80
+# source: spec
+# milestone: M5
+
+workspace shop --init
+exec aw attach 'add feature flag'
+exec sh -c 'i=0; until test -s .git/runner; do i=$((i+1)); test $i -lt 400 || exit 1; sleep 0.02; done; kill -9 $(cat .git/runner)'
+cd .worktrees/01
+! exec aw run web true
+stderr 'setup incomplete'
+stderr 'aw setup feature-flag'
+cd ../..
+exec aw --json
+json stdout .lanes[0].state incomplete
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[projects.web]
+directory = "web"
+
+[projects.web.lifecycle]
+setup = 'echo $PPID > "$AW_OWNER/.git/runner"; sleep 3'
