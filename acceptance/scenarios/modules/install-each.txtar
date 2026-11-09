@@ -1,0 +1,26 @@
+# Every first-party module installs and is recorded, leaves no placeholder behind, cannot be
+# installed twice, and can be ejected. Unknown modules are refused.
+# req: R73 R75
+# source: C2 test_kit.sh t_every_module_installs
+# milestone: M10
+
+owner-may-change
+workspace solo --single --init
+exec sh $WORK/each.sh
+! exec aw add module nope
+stderr 'no module named'
+exec aw modules
+stdout 'mail-catcher'
+stdout 'webhook-forward'
+exec aw check-docs
+
+-- each.sh --
+set -e
+for m in mail-catcher object-store dns-standin pgadmin postgres webhook-forward browser-mcp implementer plans; do
+	aw add module "$m" > "$WORK/out"
+	grep -qx "$m" .aw/modules
+	if aw add module "$m" 2>/dev/null; then echo "$m installed twice" >&2; exit 1; fi
+	aw eject "$m" >> "$WORK/out"
+done
+if grep -rn '{{' infra scripts plans .claude .mcp.json 2>/dev/null; then echo "a placeholder was left" >&2; exit 1; fi
+aw config get workspace.name

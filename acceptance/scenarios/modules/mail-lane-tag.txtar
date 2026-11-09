@@ -1,0 +1,21 @@
+# Each lane sends mail with its own tag and has its own filtered inbox URL, offset with the machine's
+# ports.
+# req: R75
+# source: C2 finding F15; spec owner decision 2026-11-09
+# milestone: M10
+
+owner-may-change
+workspace solo --single --init
+exec aw add module mail-catcher
+exec git add -A
+exec git -c user.name=t -c user.email=t@t commit -q -m mail
+exec git push -q origin HEAD:main
+grep 'MP_TAGS_USERNAME' infra/compose.d/mailpit.yaml
+exec aw attach 'one'
+exec aw attach 'two'
+cd .worktrees/01
+exec aw run solo sh -c 'echo "$AW_MAIL_SMTP_URL $AW_MAIL_INBOX_URL"'
+stdout '^smtp://lane-01:x@localhost:1025 http://localhost:8025/search\?q=tag%3Alane-01$'
+cd ../02
+exec aw run solo sh -c 'echo "$AW_MAIL_SMTP_URL"'
+stdout 'lane-02'

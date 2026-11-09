@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/connor981332/agent-workspace/internal/config"
@@ -55,6 +57,11 @@ func (m *Manager) LocateIn(n int, project string) (*Where, error) {
 	}
 	if project != "" {
 		env = append(env, "AW_PROJECT="+project)
+	}
+	for _, group := range sortedKeys(m.Cfg.LaneEnv) {
+		for _, name := range sortedKeys(m.Cfg.LaneEnv[group]) {
+			env = append(env, name+"="+m.expandLaneEnv(m.Cfg.LaneEnv[group][name], n))
+		}
 	}
 	if n == 0 {
 		return &Where{Dir: ownerDir, Env: append(env, "AW_PROJECT_PATH="+ownerDir)}, nil
@@ -137,4 +144,19 @@ func readEnvFile(path string) ([]string, error) {
 		out = append(out, text)
 	}
 	return out, s.Err()
+}
+
+var portTemplate = regexp.MustCompile(`\{port:(\d+)\}`)
+
+// expandLaneEnv fills in a lane_env value. The owner's checkout is lane "owner".
+func (m *Manager) expandLaneEnv(value string, n int) string {
+	lane := "owner"
+	if n > 0 {
+		lane = Dir(n, m.Cfg.Lanes.Max)
+	}
+	value = strings.NewReplacer("{lane}", lane, "{namespace}", m.Cfg.Workspace.Namespace).Replace(value)
+	return portTemplate.ReplaceAllStringFunc(value, func(match string) string {
+		p, _ := strconv.Atoi(portTemplate.FindStringSubmatch(match)[1])
+		return strconv.Itoa(p + m.Cfg.Ports.Offset)
+	})
 }

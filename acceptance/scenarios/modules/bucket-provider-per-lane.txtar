@@ -1,0 +1,17 @@
+# The object store gives each lane its own bucket through a provider, dropped by name.
+# req: R33 R75
+# source: C2 finding F16
+# milestone: M10
+
+owner-may-change
+stubs docker
+workspace solo --single --init
+exec aw add module object-store
+exec sh -c 'mkdir -p $STUB_STATE/ps $STUB_STATE/running; echo garage > $STUB_STATE/running/solo-infra; echo g > $STUB_STATE/ps/solo-infra__garage'
+exec git add -A
+exec git -c user.name=t -c user.email=t@t commit -q -m store
+exec git push -q origin HEAD:main
+exec aw attach 'one'
+cd .worktrees/01
+exec aw run solo sh -c 'echo "$AW_UPLOADS_BUCKET"'
+stdout '^uploads-lane-1$'

@@ -1,0 +1,25 @@
+; Fixture zone (dns-standin module). One record set per scenario, with fixed
+; tokens tests can set on their records. Bump the serial when editing.
+$ORIGIN {{NAME}}-dev.test.
+$TTL 5
+@       IN SOA ns.{{NAME}}-dev.test. admin.{{NAME}}-dev.test. ( 1 60 60 600 5 )
+@       IN NS  ns.{{NAME}}-dev.test.
+ns      IN A   10.9.8.1
+
+; The target customer domains must point at, and a host that isn't it.
+target  IN A   10.9.8.7
+other   IN A   10.9.8.99
+
+; Right setup: a CNAME to the target and the TXT proof.
+good                     IN CNAME target
+_verify.good             IN TXT   "verify=fixture-token-a"
+; Wrong setups, one thing wrong each.
+wrongtoken               IN CNAME target
+_verify.wrongtoken       IN TXT   "verify=not-the-token"
+notxt                    IN CNAME target
+_verify.nocname          IN TXT   "verify=fixture-token-a"
+elsewhere                IN CNAME other
+_verify.elsewhere        IN TXT   "verify=fixture-token-a"
+; Flattened apex: no CNAME, but the target's address.
+flat                     IN A     10.9.8.7
+_verify.flat             IN TXT   "verify=fixture-token-a"

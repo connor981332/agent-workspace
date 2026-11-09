@@ -1,0 +1,26 @@
+# Two lanes under one plan are one effort, and a next step that is the owner's says so.
+# req: R5 R81
+# source: C1 test_deduplication_owner_action_and_remote_budget
+# milestone: M10
+
+owner-may-change
+workspace solo --single --init
+exec sh -c 'for n in 1 2; do aw attach "effort $n" >/dev/null; done'
+exec sh -c 'for d in .worktrees/01 .worktrees/02; do (cd $d; mkdir plans; sed "s/Run the dry/The owner runs the dry/" $WORK/effort.md > plans/effort.md; git add plans; git -c user.name=t -c user.email=t@t commit -q -m plan; aw finish --summary x --plan plans/effort.md); done'
+exec aw recap --json
+json stdout .efforts[0].attention 'Your action'
+json stdout .efforts[0].lanes[1] 2
+! stdout 'efforts.*efforts'
+
+-- effort.md --
+# Effort
+
+## Status
+
+**State:** PARTIALLY IMPLEMENTED
+**Updated:** 2026-11-01
+**Branches / MRs:** none
+**Done:** a
+**In progress:** b
+**Next step:** Run the dry run.
+

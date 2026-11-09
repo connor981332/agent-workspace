@@ -1,0 +1,9 @@
+# A stand-in for public DNS (dns-standin module), serving infra/dns/ fixture
+# zones. Containers ask it by name (dns:53); it is not the machine's resolver.
+services:
+  dns:
+    image: coredns/coredns:1.12.1
+    restart: unless-stopped
+    command: ["-conf", "/etc/coredns/Corefile"]
+    volumes:
+      - ./dns:/etc/coredns:ro

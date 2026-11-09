@@ -135,6 +135,33 @@ func subcommand(args []shell.Word) (string, []shell.Word) {
 	return "", nil
 }
 
+// subcommandAfter is subcommand for a tool whose options can stand before it and take a value in the
+// next word, so that the value is not mistaken for the subcommand: docker compose -p shop down.
+func subcommandAfter(args []shell.Word, valueOptions map[string]bool) (string, []shell.Word) {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if !a.Known {
+			continue
+		}
+		if valueOptions[a.Text] {
+			i++
+			continue
+		}
+		if !strings.HasPrefix(a.Text, "-") {
+			return a.Text, args[i+1:]
+		}
+	}
+	return "", nil
+}
+
+var (
+	dockerValueOptions = map[string]bool{"-H": true, "--host": true, "-c": true, "--context": true, "--config": true, "-l": true, "--log-level": true,
+		"--tlscacert": true, "--tlscert": true, "--tlskey": true}
+	composeValueOptions = map[string]bool{"-p": true, "--project-name": true, "-f": true, "--file": true, "--env-file": true, "--profile": true,
+		"--project-directory": true, "--ansi": true, "--parallel": true, "--progress": true}
+	forgeValueOptions = map[string]bool{"-R": true, "--repo": true, "--hostname": true}
+)
+
 func hasArg(args []shell.Word, names ...string) bool {
 	return slices.ContainsFunc(args, func(a shell.Word) bool {
 		for _, n := range names {
@@ -162,6 +189,8 @@ var ownerOnly = map[string]string{
 	"setup": "sets up the workspace", "rehearse": "rehearses onboarding", "delegate": "grants authority",
 	"upgrade": "changes the pinned version", "init": "creates a workspace",
 	"containers": "starts, recreates or stops shared containers",
+	"infra":      "takes down the shared infrastructure",
+	"add":        "changes the workspace's modules or projects", "eject": "changes what aw manages",
 }
 
 // OwnerOnly reports whether an aw command is one only the human runs.
@@ -192,6 +221,12 @@ func ownerOnlyRule(s Scope, c shell.Command) Decision {
 	}
 	if sub == "serve" && slices.Contains(s.RoleDeny, "servers") {
 		return deny("role", "this lane's role may not hold servers → ask the human, or hand this to a session in another role")
+	}
+	if sub == "infra" {
+		// Starting and reading are safe from any session; taking it down is the human's (R73).
+		if cs, _ := subcommand(rest); cs != "down" {
+			return allow()
+		}
 	}
 	if sub == "containers" {
 		// The claim step only removes a dead leftover, and a harness's devcontainer up runs it.
@@ -416,10 +451,10 @@ func containerRule(s Scope, c shell.Command) Decision {
 	}
 	switch name {
 	case "docker", "podman", "nerdctl":
-		sub, rest := subcommand(args)
+		sub, rest := subcommandAfter(args, dockerValueOptions)
 		switch sub {
 		case "compose":
-			if cs, _ := subcommand(rest); containerChanging[cs] || cs == "create" {
+			if cs, _ := subcommandAfter(rest, composeValueOptions); containerChanging[cs] || cs == "create" {
 				return refuse("compose " + cs)
 			}
 		case "container", "volume", "network", "system", "image":
@@ -432,7 +467,7 @@ func containerRule(s Scope, c shell.Command) Decision {
 			}
 		}
 	case "docker-compose", "podman-compose":
-		if cs, _ := subcommand(args); containerChanging[cs] {
+		if cs, _ := subcommandAfter(args, composeValueOptions); containerChanging[cs] {
 			return refuse(cs)
 		}
 	case "devcontainer":
@@ -898,6 +933,10 @@ func publicationRule(s Scope, c shell.Command) Decision {
 	}
 	sub, rest := subcommand(args)
 	sub2, _ := subcommand(rest)
+	if name == "gh" || name == "glab" {
+		sub, rest = subcommandAfter(args, forgeValueOptions)
+		sub2, _ = subcommandAfter(rest, forgeValueOptions)
+	}
 	what := ""
 	switch name {
 	case "git":

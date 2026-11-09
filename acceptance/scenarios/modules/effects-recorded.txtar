@@ -1,0 +1,23 @@
+# A module writes its files, instructions and ignore entries, and records their hashes. A module that
+# would replace someone's file installs nothing.
+# req: R73 R18
+# source: C2 test_kit.sh t_module_effects
+# milestone: M10
+
+owner-may-change
+workspace solo --single --init
+exec aw add module mail-catcher browser-mcp
+exists infra/compose.yaml
+exists infra/compose.d/mailpit.yaml
+grep 'AW_PORT_1025:-1025' infra/compose.d/mailpit.yaml
+grep 'infra/compose.d/mailpit.yaml' .aw/managed
+grep 'Email \(mail-catcher module\)' .aw/instructions.md
+grep 'Email' AGENTS.md
+grep '/.playwright-mcp/' .gitignore
+exists .mcp.json
+
+mkdir infra/compose.d
+exec sh -c 'echo mine > infra/compose.d/pgadmin.yaml'
+! exec aw add module pgadmin
+stderr 'already exists'
+! grep pgadmin .aw/modules

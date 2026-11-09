@@ -1,0 +1,23 @@
+# An option's value is not the subcommand: the guard still sees through options placed first.
+# req: R49 R72 R73
+# source: M10 scenario, a gap in the guards found by infra-down-refused
+# milestone: M10
+
+workspace shop --init
+exec aw attach 'one'
+cd .worktrees/01
+! exec awtest-hook bash 'docker compose -p shop-infra down'
+stderr 'changes shared containers'
+! exec awtest-hook bash 'docker compose -f a.yaml --project-name x down -v'
+! exec awtest-hook bash 'docker --context prod compose up -d'
+! exec awtest-hook bash 'docker -H tcp://x stop web'
+stderr 'changes shared containers'
+! exec awtest-hook bash 'docker-compose -p x restart'
+exec awtest-hook bash 'docker compose -p x ps'
+! stdout deny
+exec awtest-hook bash 'gh --repo a/b pr merge 3'
+stdout '"permissionDecision":"ask"'
+exec awtest-hook bash 'gh pr -R a/b create --fill'
+stdout '"permissionDecision":"ask"'
+exec awtest-hook bash 'glab -R a/b mr merge 3'
+stdout '"permissionDecision":"ask"'

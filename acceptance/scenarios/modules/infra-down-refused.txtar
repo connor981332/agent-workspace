@@ -1,0 +1,19 @@
+# Agents cannot take the shared stack down, by aw or by Docker. They may start it and read it.
+# req: R73
+# source: C2 test_ws.sh t_ws_rejects_unknown
+# milestone: M10
+
+owner-may-change
+workspace solo --single --init
+exec aw add module mail-catcher
+exec aw attach 'one'
+cd .worktrees/01
+! exec awtest-hook bash 'aw infra down'
+stderr 'takes down the shared infrastructure, which only the human does'
+exec awtest-hook bash 'aw infra up'
+exec awtest-hook bash 'aw infra ps'
+! exec awtest-hook bash 'docker compose -p solo-infra down'
+stderr 'changes shared containers'
+env CLAUDE_CODE_SESSION_ID=s-1
+! exec aw infra down
+stderr 'only for the human'

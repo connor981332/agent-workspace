@@ -1,0 +1,24 @@
+# Plans start in your own area, stay out of the team's repository, and can be promoted. A team can
+# opt out of the mechanism altogether.
+# req: R83 R84 R66
+# source: wishlist 21
+# milestone: M10
+
+owner-may-change
+workspace solo --single --init
+exec aw add module plans
+exec aw plan new my-idea
+stdout 'agent-workspace/solo/plans/my-idea.md'
+! exists plans/my-idea.md
+exec git status --porcelain
+! stdout my-idea
+exec aw plan list
+stdout '^my-idea  DRAFT'
+exec aw plan promote my-idea
+exists plans/my-idea.md
+grep 'my-idea.md' plans/README.md
+exec aw check-docs
+! exec aw plan promote my-idea
+exec sh -c 'printf "\n[plans]\nenabled = false\n" >> workspace.toml'
+! exec aw plan new other
+stderr 'opted out of plans'

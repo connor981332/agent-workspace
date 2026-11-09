@@ -37,6 +37,10 @@ type Config struct {
 	Roles        map[string]*Role `json:"roles"`
 	Publication  Publication      `json:"publication"`
 	Delegation   Delegation       `json:"delegation"`
+	// LaneEnv are variables lanes receive, by the module or team that adds them.
+	LaneEnv  map[string]map[string]string `json:"lane_env"`
+	Webhooks map[string]*Webhook          `json:"webhooks"`
+	Plans    Plans                        `json:"plans"`
 
 	// Values is the merged configuration as decoded TOML values, for aw config get.
 	Values map[string]any `json:"-"`
@@ -93,6 +97,18 @@ func (c *Config) RoleNamed(name string) (*Role, bool) {
 		return &Role{Deny: []string{"publish", "merge"}}, true
 	}
 	return nil, false
+}
+
+// Webhook is how one provider's sandbox events reach a lane.
+type Webhook struct {
+	Listen string `json:"listen"`
+	Server string `json:"server"`
+	Path   string `json:"path"`
+}
+
+// Plans is the plan mechanism's setting.
+type Plans struct {
+	Enabled bool `json:"enabled"`
 }
 
 // Publication is what a team has pre-authorized (R72).

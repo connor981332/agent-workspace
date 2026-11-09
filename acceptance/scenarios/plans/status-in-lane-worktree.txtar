@@ -1,0 +1,26 @@
+# Plans are read in a lane's worktree, whose .git is a file.
+# req: R82
+# source: C1 test_plan_status_recognizes_linked_git_file
+# milestone: M10
+
+owner-may-change
+workspace solo --single --init
+exec aw attach 'one'
+cd .worktrees/01
+mkdir plans
+cp $WORK/effort.md plans/effort.md
+exec aw plan list
+stdout '^effort  PARTIALLY IMPLEMENTED · next: Run the dry run.$'
+
+-- effort.md --
+# Effort
+
+## Status
+
+**State:** PARTIALLY IMPLEMENTED
+**Updated:** 2026-11-01
+**Branches / MRs:** none
+**Done:** a
+**In progress:** b
+**Next step:** Run the dry run.
+

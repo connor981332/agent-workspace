@@ -1,0 +1,56 @@
+# A provider's webhooks go to the most recent lane to register. Registering stops the previous
+# forwarder and tells that lane, and any lane can see who holds it.
+# req: R75
+# source: C2 finding F17; spec owner decision 2026-11-09
+# milestone: M10
+
+owner-may-change
+workspace shop --init
+exec aw attach 'one'
+exec aw attach 'two'
+cd .worktrees/01
+! exec aw webhook stripe
+stderr 'holds no seat'
+exec aw serve stack
+exec aw webhook stripe
+stdout 'stripe webhooks now come to one, at http://localhost:3100/hooks'
+grep 'forward http://localhost:3100/hooks' $WORK/listen.log
+cd ../02
+exec aw serve stack
+exec aw webhook stripe
+stdout 'now come to two, at http://localhost:3200/hooks'
+exec aw webhook --list
+stdout '^stripe → two$'
+cd ../01
+exec awtest-hook bash 'ls'
+stdout 'now receives the stripe webhooks'
+exec aw webhook stripe --stop
+exec aw stop stack
+cd ../02
+exec aw stop stack
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[projects.web]
+directory = "web"
+
+[projects.web.servers.app]
+command = "exec sleep 30 # {port}"
+port = 3000
+
+[resources.stack]
+kind = "process"
+capacity = 2
+servers = ["web.app"]
+
+[webhooks.stripe]
+listen = "echo forward {url} >> $WORK/listen.log; exec sleep 30"
+server = "web.app"
+path = "/hooks"

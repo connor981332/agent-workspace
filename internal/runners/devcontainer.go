@@ -40,6 +40,8 @@ type Devcontainer struct {
 	cli     []string // the devcontainer CLI
 	cliEnv  []string
 	lock    string // serializes starting the container
+	// BeforeStart brings up what the projects share. It also runs for VS Code, in the claim step.
+	BeforeStart func(context.Context, io.Writer) error
 }
 
 // devcontainerJSON is what aw reads of devcontainer.json.
@@ -380,6 +382,11 @@ func nonEmptyDir(path string) bool {
 func (d *Devcontainer) Claim(ctx context.Context, out io.Writer) error {
 	if err := d.WriteFragment(); err != nil {
 		return err
+	}
+	if d.BeforeStart != nil {
+		if err := d.BeforeStart(ctx, out); err != nil {
+			return err
+		}
 	}
 	text, err := docker(ctx, append([]string{"ps", "-aq"}, d.labels()...)...)
 	if err != nil {

@@ -233,6 +233,32 @@ What the human's aw delegate --scope maintenance covers, beyond aw's own mainten
 |---|---|---|---|
 | `maintenance` | array of strings | — | Commands, as their first word, that a delegated session in the owner checkout may run. |
 
+## `[lane_env.<name>]`
+
+Variables lanes receive, grouped by whoever adds them, usually a module. {lane}, {namespace} and {port:N} are filled in.
+
+Each value: table of string.
+
+## `[webhooks.<name>]`
+
+Forwarders of a provider's sandbox webhooks. The most recent lane to run aw webhook <provider> receives them.
+
+`<name>`: lowercase letters, digits and hyphens, starting with a letter.
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `listen` | string | — | Runs the forwarder. {url} is where it should send events. |
+| `server` | string | — | The server that receives them, as <project>.<server>. |
+| `path` | string | `"/"` | The path on that server. |
+
+## `[plans]`
+
+The plan mechanism.
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `enabled` | boolean | `true` | Set false to opt out: aw plan refuses and aw check-docs skips the plan rules. |
+
 ## `[devcontainer]`
 
 The devcontainer CLI, for projects whose runner is devcontainer. Pin it: a CLI that drifts breaks builds.
