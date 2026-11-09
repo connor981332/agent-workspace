@@ -1,0 +1,37 @@
+# With cosign installed the launcher verifies the release's signed checksums against the release's
+# own workflow identity, and a signature that fails installs nothing. Without a bundle, the
+# checksum alone decides, and says so.
+# req: R15 R16
+# source: plan §6
+# milestone: M7
+
+env GOOD_MIRROR=$AW_MIRROR
+env CACHED=$XDG_CACHE_HOME/agent-workspace/bin/$AW_VERSION/aw
+workspace shop
+exec aw init
+owner-snapshot
+stubs cosign
+exec sh -c 'rm -rf "$XDG_CACHE_HOME/agent-workspace"; mkdir $WORK/m && cp "$GOOD_MIRROR"/* $WORK/m/'
+env AW_MIRROR=$WORK/m
+
+exec bin/aw version
+stderr 'has no signature to verify'
+! exists $STUB_LOG
+exists $CACHED
+
+exec sh -c 'rm -rf "$XDG_CACHE_HOME/agent-workspace"; echo bundle > $WORK/m/checksums.txt.sigstore.json'
+exec bin/aw version
+grep 'cosign verify-blob --bundle .* --certificate-oidc-issuer https://token.actions.githubusercontent.com' $STUB_LOG
+grep 'release..yml@refs/tags/v' $STUB_LOG
+exists $CACHED
+
+exec sh -c 'rm -rf "$XDG_CACHE_HOME/agent-workspace"; mkdir -p $STUB_STATE; touch $STUB_STATE/cosign-fails'
+! exec bin/aw version
+stderr 'signature of .* did not verify'
+! exists $CACHED
+
+# Signed checksums that disagree with the lock are refused too.
+exec sh -c 'rm -f $STUB_STATE/cosign-fails; sed "s/^[0-9a-f]\{64\}/$(printf "%064d" 0)/" "$GOOD_MIRROR"/checksums.txt > $WORK/m/checksums.txt'
+! exec bin/aw version
+stderr 'differs from .aw/lock'
+! exists $CACHED

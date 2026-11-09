@@ -1,0 +1,23 @@
+# install.sh puts a verified aw in the install directory, and refuses a download with the wrong
+# checksum, leaving nothing behind.
+# req: R15
+# source: plan §6
+# milestone: M7
+
+env AW_INSTALL_DIR=$WORK/inst
+exec sh $AW_REPO/install.sh
+stdout 'Installed aw '$AW_VERSION
+exists $WORK/inst/aw
+exec $WORK/inst/aw version
+stdout '^aw '$AW_VERSION' '
+
+exec sh -c 'rm -f $WORK/inst/aw; mkdir $WORK/bad; cp "$AW_MIRROR"/* $WORK/bad/; for f in $WORK/bad/aw_*; do printf x >> "$f"; done'
+env AW_MIRROR=$WORK/bad
+! exec sh $AW_REPO/install.sh
+stderr 'checksum mismatch'
+! exists $WORK/inst/aw
+
+env AW_MIRROR=$WORK/nowhere
+env AW_VERSION=not-a-version
+! exec sh $AW_REPO/install.sh
+stderr 'not an exact version'

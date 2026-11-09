@@ -78,7 +78,7 @@ jobs:
         with:
           distribution: goreleaser
           version: v2.20.0
-          args: release --snapshot --clean
+          args: release --snapshot --clean --skip=sign
       - name: Check the assets
         run: sh .github/scripts/check-release-assets.sh dist
       - name: Keep the first build's checksums
@@ -88,7 +88,7 @@ jobs:
         with:
           distribution: goreleaser
           version: v2.20.0
-          args: release --snapshot --clean
+          args: release --snapshot --clean --skip=sign
       - name: Reproducible
         run: diff "$RUNNER_TEMP/first.txt" dist/checksums.txt && echo "Two builds gave identical binaries."
 

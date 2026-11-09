@@ -8,12 +8,19 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
+	"syscall"
 
 	"github.com/spf13/cobra"
+
+	"github.com/connor981332/agent-workspace/internal/launcher"
+	"github.com/connor981332/agent-workspace/internal/workspace"
 )
 
 // Main runs the command line in args (without the program name) and returns the exit code.
 func Main(args []string, stdout, stderr io.Writer) int {
+	proxyToPin(args)
 	root := newRoot(stdout, stderr)
 	if c, ok := teamCommandNamed(root, args); ok {
 		code, err := runTeamCommand(args[0], c, args[1:], stdout, stderr)
@@ -110,4 +117,30 @@ func run(fn func(cmd *cobra.Command, args []string) error) func(*cobra.Command, 
 		}
 		return nil
 	}
+}
+
+// proxyToPin makes a globally installed aw run the workspace's own launcher when it is used inside a
+// workspace, so that aw and bin/aw behave identically and upgrading the global aw changes no
+// workspace (distribution.md). The launcher marks what it starts; the variable goes no further, so a
+// command run by aw can still proxy. A failed exec falls through to this binary.
+func proxyToPin(args []string) {
+	if os.Getenv("AW_LAUNCHED") != "" {
+		os.Unsetenv("AW_LAUNCHED")
+		return
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return
+	}
+	ws, err := workspace.Find(cwd)
+	if err != nil {
+		return
+	}
+	launcherPath := filepath.Join(ws.Owner, launcher.ScriptPath)
+	if info, err := os.Stat(launcherPath); err != nil || info.Mode()&0o111 == 0 {
+		return
+	}
+	os.Setenv("AW_LAUNCHED", "1") // also stops a loop with a launcher older than this binary
+	_ = syscall.Exec(launcherPath, append([]string{launcherPath}, args...), os.Environ())
+	os.Unsetenv("AW_LAUNCHED")
 }

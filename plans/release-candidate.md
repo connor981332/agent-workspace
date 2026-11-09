@@ -112,6 +112,10 @@ The bench had been running on a RAM disk. It now uses the real disk, where every
 
 (`m6/runner`.) Now: `internal/runners` devcontainer (Compose identity, claim, mount and port checks, a pinned CLI), keepers (`procs.Keep`, S8), `aw containers up|recreate|down|claim`, hooks and servers in containers, the `doctor` checks, 20 scenarios, and `e2e/devcontainer-smoke` against real Docker and the real CLI, which passes locally. `requirements.toml` moved to `current = "M6"`. Known limit: in a container, `AW_LANE_ROOT`, `AW_LANE_STATE`, `AW_OWNER` and `AW_TOOL` name host paths that are not mounted there.
 
+**M6 complete (v0.0.7)**, apart from the macOS checklist below.
+
+**In progress:** M7. (`m7/distribution`.) Now: keyless signing of `checksums.txt`, SLSA provenance, `install.sh`, `go install` checked at release, the launcher verifying the signature when `cosign` is installed, and the global `aw` as a proxy for the workspace's pin. Until 1.0 every release is a pre-release, which GitHub's `releases/latest` URLs skip, so `install.sh`'s stable URL is the raw file on master, and it picks the newest release through the API.
+
 **Pending manual checks:** the macOS devcontainer checklist on Docker Desktop and OrbStack (`docs/dev/macos-devcontainer-checklist.md`, M6); the hot-path and budget benchmarks on an Apple Silicon laptop (T3, M1, M2;
 docs/dev/benchmarks.md).
 

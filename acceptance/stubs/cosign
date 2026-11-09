@@ -1,0 +1,5 @@
+#!/bin/sh
+# Test double for cosign: logs its arguments, and fails when $STUB_STATE/cosign-fails exists.
+set -eu
+echo "cosign $*" >> "$STUB_LOG"
+[ ! -e "$STUB_STATE/cosign-fails" ]
