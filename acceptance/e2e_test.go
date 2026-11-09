@@ -37,7 +37,12 @@ func TestE2E(t *testing.T) {
 		env.Setenv("E2E_PG", pg)
 		env.Setenv("E2E_REDIS", redis)
 		env.Defer(func() { exec.Command("docker", "rm", "-f", pg, redis).Run() })
+		// Scenarios run in parallel, so only the scenario that makes this container may remove it.
+		_, statErr := os.Stat(filepath.Join(env.WorkDir, ".devcontainer"))
 		env.Defer(func() {
+			if statErr != nil {
+				return
+			}
 			out, _ := exec.Command("docker", "ps", "-aq", "--filter", "label=com.docker.compose.project=awsmoke_devcontainer").Output()
 			if ids := strings.Fields(string(out)); len(ids) > 0 {
 				exec.Command("docker", append([]string{"rm", "-f"}, ids...)...).Run()
