@@ -9,7 +9,7 @@ stubs docker devcontainer npx
 workspace solo --single --init
 exec sh -c 'cp -R $WORK/.devcontainer . && git add .devcontainer && git -c user.name=t -c user.email=t@t commit -q -m devcontainer && git push -q origin HEAD:main'
 exec aw serve stack --json
-exists $WORK/server.pid
+exec sh -c 'i=0; until test -s $WORK/server.pid; do i=$((i+1)); test $i -lt 100 || exit 1; sleep 0.1; done'
 cp $WORK/server.pid $WORK/old.pid
 exec sh -c 'find "$WORK" -name "solo.app.log.container" | grep .'
 exec sh -c 'pkill -KILL -f "__kee[p].*$WORK"; sleep 0.3'

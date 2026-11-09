@@ -8,7 +8,7 @@ stubs docker devcontainer npx
 workspace solo --single --init
 exec sh -c 'cp -R $WORK/.devcontainer . && git add .devcontainer && git -c user.name=t -c user.email=t@t commit -q -m devcontainer && git push -q origin HEAD:main'
 exec aw serve stack --json
-exists $WORK/server.pid
+exec sh -c 'i=0; until test -s $WORK/server.pid; do i=$((i+1)); test $i -lt 100 || exit 1; sleep 0.1; done'
 grep 'docker exec -i -u dev' $STUB_LOG
 exec aw stop stack
 grep 'kill -TERM' $STUB_LOG
