@@ -104,7 +104,7 @@ The bench had been running on a RAM disk. It now uses the real disk, where every
 
 (`m5/lifecycle`.) Now: journaled setup steps (state schema 9), the `incomplete` state, background setup with progress in `aw`, `aw setup <lane>`, waiting for exactly the needed steps (S11, S12), parallel projects, install stamps, teardown.
 
-(`m5/providers`.) Now: providers (state schema 10), Postgres and Redis through their own clients, external providers over the extension protocol, shared named snapshots, the `restore` hook (S18, S19), and the end-to-end suite against real Postgres and Redis in the new `e2e-docker` job.
+(`m5/providers`.) Now: providers (state schema 10), Postgres and Redis through their own clients, external providers over the extension protocol, shared named snapshots, the `restore` hook (S18, S19), and the end-to-end suite against real Postgres and Redis in the new `e2e-docker` job. `requirements.toml` moved to `current = "M5"`, and the laptop benchmarks pass.
 
 **Pending manual checks:** the hot-path and budget benchmarks on an Apple Silicon laptop (T3, M1, M2;
 docs/dev/benchmarks.md).

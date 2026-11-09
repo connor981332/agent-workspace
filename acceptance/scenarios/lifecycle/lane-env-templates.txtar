@@ -1,0 +1,40 @@
+# A data block's env table names the variables a project reads, with the lane's number and name, and
+# the provider's URLs. Hooks, team commands and aw run all receive them.
+# req: R30
+# source: C2 t_lane_var_alias
+# milestone: M5
+
+stubs psql
+workspace solo --single --init
+exec aw attach 'add feature flag'
+cd .worktrees/01
+exec aw run solo sh -c 'echo "$APP_LANE $APP_NAME $DATABASE_URL"; cat "$AW_LANE_STATE/hook"'
+stdout '^01 feature-flag postgres://postgres@localhost:5432/shop_01$'
+stdout '^hook 01$'
+exec aw show
+stdout '^command 01$'
+
+-- workspace.toml --
+[workspace]
+name = "Solo"
+namespace = "solo"
+schema = 1
+
+[lanes]
+pool = 0
+
+[lanes.data.db]
+provider = "postgres"
+url = "postgres://postgres@localhost:5432"
+databases = ["shop"]
+env = { APP_LANE = "{lane}", APP_NAME = "{name}", DATABASE_URL = "{url:shop}" }
+
+[projects.solo]
+directory = "."
+
+[projects.solo.lifecycle]
+setup = 'echo "hook $APP_LANE" > "$AW_LANE_STATE/hook"'
+
+[commands.show]
+project = "solo"
+run = 'echo "command $APP_LANE"'

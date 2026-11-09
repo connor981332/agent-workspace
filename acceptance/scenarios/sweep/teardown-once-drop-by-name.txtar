@@ -1,0 +1,40 @@
+# Destroying a lane runs teardown once, before its data is dropped by exact recorded name.
+# req: R31 R34
+# source: C1 test_cli_apply_callbacks_and_idempotence
+# milestone: M5
+
+stubs psql
+workspace solo --single --init
+exec aw attach 'one'
+cd .worktrees/01
+exec aw run solo true
+cd ../..
+exec aw sweep --apply --json
+json stdout .lanes[0].action destroy
+exec sh -c 'grep -c "^teardown one$" $STUB_LOG'
+stdout '^1$'
+exec sh -c 'grep -n "^teardown one$\|DROP DATABASE" $STUB_LOG | cut -d: -f2- | cut -c1-20'
+stdout -count=1 '^teardown one'
+exec sh -c 'grep "^teardown one$\|DROP DATABASE" $STUB_LOG | head -1'
+stdout '^teardown one$'
+grep 'DROP DATABASE IF EXISTS "shop_01"' $STUB_LOG
+
+-- workspace.toml --
+[workspace]
+name = "Solo"
+namespace = "solo"
+schema = 1
+
+[lanes]
+pool = 0
+
+[lifecycle]
+teardown = 'echo "teardown $AW_LANE_NAME" >> "$STUB_LOG"'
+
+[lanes.data.db]
+provider = "postgres"
+url = "postgres://postgres@localhost:5432"
+databases = ["shop"]
+
+[projects.solo]
+directory = "."
