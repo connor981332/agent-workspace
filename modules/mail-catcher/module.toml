@@ -1,0 +1,5 @@
+summary = "Mailpit catches development email. Each lane has its own tag and a filtered inbox."
+services = ["mailpit"]
+ports = [1025, 8025]
+instructions = "agents.md"
+fragment = "workspace.toml"

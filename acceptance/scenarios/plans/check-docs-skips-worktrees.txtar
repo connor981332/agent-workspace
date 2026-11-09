@@ -1,0 +1,14 @@
+# aw check-docs checks relative links and ignores nested worktrees.
+# req: R82
+# source: C1 test_docs_excludes_nested_worktrees
+# milestone: M10
+
+owner-may-change
+workspace solo --single --init
+exec sh -c 'mkdir -p .worktrees/x .lanes/x; echo "[broken](missing.md)" > .worktrees/x/a.md; echo "[broken](missing.md)" > .lanes/x/a.md; echo "[ok](workspace.toml)" > README.md'
+exec aw check-docs
+stdout 'passed'
+exec sh -c 'echo "[bad](missing.md) and `[fine](nothing.md)`" > README.md'
+! exec aw check-docs
+stderr 'README.md: broken link missing.md'
+! stderr 'nothing.md'

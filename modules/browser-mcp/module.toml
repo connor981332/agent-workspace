@@ -1,0 +1,3 @@
+summary = "A Playwright MCP server, so each session checks pages in its own isolated browser."
+instructions = "agents.md"
+gitignore = ["/.playwright-mcp/"]

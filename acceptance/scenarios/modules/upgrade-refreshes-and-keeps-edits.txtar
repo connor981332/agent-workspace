@@ -1,0 +1,19 @@
+# aw upgrade refreshes module files, leaves one edited by hand, and leaves an ejected one alone.
+# req: R18
+# source: architecture.md, "Modules"
+# milestone: M10
+
+owner-may-change
+workspace solo --single --init
+exec aw add module mail-catcher pgadmin
+exec sh -c 'echo "# my change" >> infra/compose.d/mailpit.yaml'
+exec sh -c 'rm infra/compose.d/pgadmin.yaml'
+env AW_MIRROR=$AW_NEW_MIRROR
+! exec aw upgrade --to $AW_NEW_VERSION
+stderr 'infra/compose.d/mailpit.yaml was edited by hand'
+grep '# my change' infra/compose.d/mailpit.yaml
+exists infra/compose.d/pgadmin.yaml
+exec aw upgrade --to $AW_NEW_VERSION --eject infra/compose.d/mailpit.yaml
+grep '# my change' infra/compose.d/mailpit.yaml
+exec aw upgrade --to $AW_NEW_VERSION
+stdout 'Next: commit this'

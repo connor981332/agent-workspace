@@ -1,0 +1,3 @@
+[lane_env.mail]
+AW_MAIL_SMTP_URL = "smtp://lane-{lane}:x@localhost:{port:1025}"
+AW_MAIL_INBOX_URL = "http://localhost:{port:8025}/search?q=tag%3Alane-{lane}"

@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/connor981332/agent-workspace/internal/lanes"
+	"github.com/connor981332/agent-workspace/internal/plans"
 	"github.com/connor981332/agent-workspace/internal/state"
 	"github.com/connor981332/agent-workspace/internal/ui"
 	"github.com/connor981332/agent-workspace/internal/workspace"
@@ -314,7 +315,7 @@ state, within a deadline. It writes nothing.`,
 			}
 			out := cmd.OutOrStdout()
 			if asJSON {
-				data, err := json.Marshal(map[string]any{"lanes": ss, "pair_sessions": pairs})
+				data, err := json.Marshal(map[string]any{"lanes": ss, "pair_sessions": pairs, "efforts": efforts(m.WS, ss)})
 				if err != nil {
 					return err
 				}
@@ -330,4 +331,52 @@ state, within a deadline. It writes nothing.`,
 	cmd.Flags().BoolVar(&remote, "remote", false, "also show each change's state on the forge")
 	cmd.Flags().BoolVar(&all, "all", false, "in a lane, show every lane, not only this one")
 	return cmd
+}
+
+// effort is one plan's work across lanes: a plan several lanes hand off to is one line of attention.
+type effort struct {
+	Identity  string `json:"identity"`
+	Lanes     []int  `json:"lanes"`
+	State     string `json:"state"`
+	NextStep  string `json:"next_step"`
+	Attention string `json:"attention"`
+}
+
+// efforts groups the lanes' handoffs by the plan they name. A plan's own state says whether it is
+// finished: merging its lanes does not (R82).
+func efforts(ws *workspace.Workspace, ss []*lanes.LaneStatus) []effort {
+	byPlan := map[string]*effort{}
+	var order []string
+	for _, s := range ss {
+		if s.Handoff == nil || s.Handoff.Plan == "" {
+			continue
+		}
+		id := "plan:" + s.Handoff.Plan
+		e, seen := byPlan[id]
+		if !seen {
+			e = &effort{Identity: id}
+			byPlan[id] = e
+			order = append(order, id)
+			for _, dir := range []string{ws.Owner, filepath.Join(ws.Owner, ".worktrees", s.Dir)} {
+				if p, err := plans.Parse(filepath.Join(dir, filepath.FromSlash(s.Handoff.Plan))); err == nil {
+					e.State, e.NextStep = p.Fields["State"], p.Fields["Next step"]
+					break
+				}
+			}
+			switch {
+			case strings.HasPrefix(strings.ToLower(e.NextStep), "the owner"):
+				e.Attention = "Your action"
+			case e.State == "FULLY VERIFIED":
+				e.Attention = "Done"
+			default:
+				e.Attention = "Verify"
+			}
+		}
+		e.Lanes = append(e.Lanes, s.Number)
+	}
+	out := make([]effort, 0, len(order))
+	for _, id := range order {
+		out = append(out, *byPlan[id])
+	}
+	return out
 }

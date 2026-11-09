@@ -12,7 +12,7 @@ milestone named in its row.
 
 **State:** PARTIALLY IMPLEMENTED
 
-**Updated:** 2026-11-07
+**Updated:** 2026-11-09
 
 **Branches / MRs:** PRs [#5](https://github.com/connor981332/agent-workspace/pull/5) to
 [#15](https://github.com/connor981332/agent-workspace/pull/15), merged: the plan and settled
@@ -132,8 +132,14 @@ v0.0.11 passed the whole release workflow: Sigstore signature, SLSA provenance, 
 
 **In progress:** M9, on `m9/owner`. Decided by the spec owner on 2026-11-09 and recorded in owner-checkout.md and architecture.md: one `maintenance` delegation scope; roles as fixed capabilities in both directions; publication pre-authorization by a fixed action list; a lane is the change set, with `depends_on` and `generated_contracts`. State schema 11.
 
+**M9 complete.** (No tag, per §7.)
+
+**In progress:** M10, on `m10/modules`. First-party modules with managed files and eject, shared infrastructure (`aw infra`), per-lane mail tags, a bucket per lane, webhooks to the most recent registrant, the browser MCP module, plans (`aw plan`, `aw check-docs`), and plan efforts in `aw recap`. Decided by the spec owner on 2026-11-09: one shared catcher with a per-lane tag; webhooks go to the lane that registered last.
+
 **Pending manual checks:** the v0.1 dogfooding (M7); the macOS devcontainer checklist on Docker Desktop and OrbStack (`docs/dev/macos-devcontainer-checklist.md`, M6); the hot-path and budget benchmarks on an Apple Silicon laptop (T3, M1, M2;
 docs/dev/benchmarks.md).
+
+**Next step:** Finish M10, then M11 and M12. v0.1.0 waits on the spec owner's dogfooding.
 
 ## How to use this plan
 

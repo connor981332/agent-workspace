@@ -1,0 +1,10 @@
+# The browser MCP module gives each session its own isolated browser, separate from the human's.
+# req: R76
+# source: C2 finding F19
+# milestone: M10
+
+owner-may-change
+workspace solo --single --init
+exec aw add module browser-mcp
+grep '"--isolated"' .mcp.json
+grep 'never the owner' .aw/instructions.md

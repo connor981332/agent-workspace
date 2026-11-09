@@ -1,0 +1,32 @@
+# A lane handing off under a plan shows that plan's own state, and recap writes nothing.
+# req: R81 R82
+# source: C1 test_recap_is_observational_and_merging_does_not_complete_plan
+# milestone: M10
+
+owner-may-change
+workspace solo --single --init
+exec aw attach 'one'
+cd .worktrees/01
+mkdir plans
+cp $WORK/effort.md plans/effort.md
+exec git add plans/effort.md
+exec git -c user.name=t -c user.email=t@t commit -q -m plan
+exec aw finish --summary 'done' --plan plans/effort.md
+cd ../..
+exec aw recap --json
+json stdout .efforts[0].identity plan:plans/effort.md
+json stdout .efforts[0].attention Verify
+json stdout .efforts[0].next_step 'Run the dry run.'
+
+-- effort.md --
+# Effort
+
+## Status
+
+**State:** PARTIALLY IMPLEMENTED
+**Updated:** 2026-11-01
+**Branches / MRs:** none
+**Done:** a
+**In progress:** b
+**Next step:** Run the dry run.
+

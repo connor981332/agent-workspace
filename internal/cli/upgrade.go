@@ -18,6 +18,7 @@ import (
 	"github.com/connor981332/agent-workspace/internal/config"
 	"github.com/connor981332/agent-workspace/internal/doctor"
 	"github.com/connor981332/agent-workspace/internal/launcher"
+	"github.com/connor981332/agent-workspace/internal/modules"
 	"github.com/connor981332/agent-workspace/internal/ui"
 	"github.com/connor981332/agent-workspace/internal/upgrade"
 	"github.com/connor981332/agent-workspace/internal/workspace"
@@ -238,12 +239,17 @@ func migrateConfig(cmd *cobra.Command, owner string) error {
 
 // regenerate refreshes the managed files, and returns those left alone because of a hand edit.
 func regenerate(cmd *cobra.Command, owner string, c *config.Config, eject, take []string) ([]string, error) {
-	for _, f := range append(slices.Clone(eject), take...) {
+	for _, f := range eject {
 		if f != launcher.ScriptPath {
-			return nil, &usageError{fmt.Errorf("%s is not a managed file that aw upgrade can eject or replace → the one is %s; a generated AGENTS.md block is fixed by moving the edit to .aw/instructions.md", f, launcher.ScriptPath)}
+			if _, err := modules.Eject(owner, c.Workspace.Namespace, c.Workspace.Name, f); err != nil {
+				return nil, err
+			}
 		}
 	}
-	var edited []string
+	edited, err := modules.Refresh(owner, c.Workspace.Namespace, c.Workspace.Name, take)
+	if err != nil {
+		return nil, err
+	}
 	path := filepath.Join(owner, launcher.ScriptPath)
 	recorded := upgrade.Recorded(owner, launcher.ScriptPath)
 	data, err := os.ReadFile(path)

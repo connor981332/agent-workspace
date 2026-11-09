@@ -1,0 +1,3 @@
+[lanes.data.uploads]
+provider = "external"
+command = "scripts/bucket-provider"

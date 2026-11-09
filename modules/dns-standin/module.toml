@@ -1,0 +1,2 @@
+summary = "CoreDNS serving a fixture zone, so code that reads real DNS gets real answers."
+services = ["dns"]

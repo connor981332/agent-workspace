@@ -1,0 +1,2 @@
+summary = "Forwards a provider's sandbox webhooks to the lane that most recently registered."
+instructions = "agents.md"

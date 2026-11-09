@@ -248,6 +248,9 @@ func detectProjects(dir, base string) ([]initProject, error) {
 	return out, nil
 }
 
+// EnsureIgnored appends the entries missing from a .gitignore.
+func EnsureIgnored(path string, entries []string) (bool, error) { return ensureIgnored(path, entries) }
+
 // ensureIgnored appends the entries missing from a .gitignore.
 func ensureIgnored(path string, entries []string) (bool, error) {
 	data, err := os.ReadFile(path)

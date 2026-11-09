@@ -30,7 +30,13 @@ func devcontainerIn(ws *workspace.Workspace, c *config.Config, project string) (
 	if err != nil {
 		return nil, err
 	}
-	return runners.NewDevcontainer(c, ws.Owner, project, dir)
+	d, err := runners.NewDevcontainer(c, ws.Owner, project, dir)
+	if err != nil {
+		return nil, err
+	}
+	// Whichever project starts first brings up what the projects share (F7).
+	d.BeforeStart = infraOf(ws, c).Up
+	return d, nil
 }
 
 func devcontainerOf(w *writeContext, project string) (*runners.Devcontainer, error) {

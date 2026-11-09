@@ -1,0 +1,16 @@
+# When every service is running, starting is one docker ps. A leftover container of some other
+# service cannot stand in for a missing one.
+# req: R73
+# source: C2 test_ws.sh t_init_skips_compose_when_infra_runs; finding F7
+# milestone: M10
+
+owner-may-change
+stubs docker
+workspace solo --single --init
+exec aw add module mail-catcher pgadmin
+exec sh -c 'mkdir -p $STUB_STATE/running; printf "mailpit\npgadmin\n" > $STUB_STATE/running/solo-infra'
+exec aw infra up
+! grep 'compose -p solo-infra up' $STUB_LOG
+exec sh -c 'printf "mailpit\nminio\n" > $STUB_STATE/running/solo-infra'
+exec aw infra up
+grep 'compose -p solo-infra up' $STUB_LOG

@@ -1,0 +1,34 @@
+# aw check-docs enforces the Status block and that the index agrees with it.
+# req: R82
+# source: C1 docs/plans.md
+# milestone: M10
+
+owner-may-change
+workspace solo --single --init
+exec aw add module plans
+exec aw check-docs
+stdout 'passed'
+cp $WORK/effort.md plans/effort.md
+! exec aw check-docs
+stderr 'plans/README.md: no row for effort.md'
+exec sh -c 'echo "| [effort.md](effort.md) | DRAFT | 2026-11-01 | x |" >> plans/README.md'
+! exec aw check-docs
+stderr 'does not say PARTIALLY IMPLEMENTED'
+exec sh -c 'sed -i.bak "s/| DRAFT |/| PARTIALLY IMPLEMENTED |/" plans/README.md; rm plans/README.md.bak'
+exec aw check-docs
+exec sh -c 'grep -v "Next step" plans/effort.md > e && mv e plans/effort.md'
+! exec aw check-docs
+stderr 'missing \*\*Next step:\*\*'
+
+-- effort.md --
+# Effort
+
+## Status
+
+**State:** PARTIALLY IMPLEMENTED
+**Updated:** 2026-11-01
+**Branches / MRs:** none
+**Done:** a
+**In progress:** b
+**Next step:** Run the dry run.
+

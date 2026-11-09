@@ -174,10 +174,10 @@ the stand-in modules are built (see [README.md](README.md#settled-questions)):
 
 | Service | First release | Later |
 |---|---|---|
-| Mail catcher | Shared inbox; lanes can filter by a per-lane tag or recipient | A real per-lane inbox |
+| Mail catcher | One shared catcher; each lane sends with its own SMTP username, which tags its mail, and has a filtered inbox URL (decided 2026-11-09) | A real per-lane inbox |
 | Object store | A bucket per lane through a provider | — |
 | DNS stand-in | A fixture zone, with lane hostnames | Per-lane zones |
-| Webhook forwarding | Forward a provider's sandbox webhooks to the lane that registered | Routing when several lanes share one sandbox account |
+| Webhook forwarding | The most recent lane to run `aw webhook <provider>` receives its sandbox events, and the lane before is told (decided 2026-11-09) | Routing when several lanes share one sandbox account |
 | Provider sandbox accounts | Shared; snapshots keep onboarded state | One account per lane |
 
 ## Finishing

@@ -1,0 +1,16 @@
+# Starting the shared infrastructure creates its network and passes every module's fragment to
+# Compose, with this machine's port offset.
+# req: R73
+# source: C2 test_ws.sh t_init_claims_stale_container_and_starts_infra
+# milestone: M10
+
+owner-may-change
+stubs docker
+workspace solo --single --init
+exec aw add module mail-catcher pgadmin
+exec aw infra up
+grep 'docker network create solo-dev-net' $STUB_LOG
+grep 'docker compose -p solo-infra up -d --remove-orphans' $STUB_LOG
+grep 'COMPOSE_FILE=.*infra/compose.yaml:.*infra/compose.d/mailpit.yaml:.*infra/compose.d/pgadmin.yaml' $STUB_LOG
+exec aw infra ps
+grep 'compose -p solo-infra ps' $STUB_LOG

@@ -39,6 +39,10 @@ The CLI is part of the design, not an afterthought. Most of the tool's value is 
 | `aw snapshot <name>` / `aw restore <name>` / `aw snapshots` | both | Named copies of a lane's data, shared across the workspace |
 | `aw setup <lane>` | both | Rerun a lane's setup from its first incomplete step; an agent may do this for its own lane |
 | `aw config explain <key>` | both | Effective value and where it came from |
+| `aw add module <name>…` / `aw modules` / `aw eject <module or file>` | human | Install, list and stop managing modules |
+| `aw infra up\|ps\|logs` / `aw infra down` | both / human | The shared infrastructure |
+| `aw webhook <provider>` | both | Send a provider's sandbox webhooks to this lane |
+| `aw plan new\|list\|promote` / `aw check-docs` | both | Plans and their conventions |
 | `aw delegate` | human | Expiring, scoped maintenance authority ([owner-checkout.md](owner-checkout.md#delegation)) |
 | `aw changeset --title t` | both | Open this lane's linked merge requests in merge order; the publication policy applies |
 | `aw upgrade` | human | Change the pinned framework version |

@@ -1,0 +1,5 @@
+summary = "Garage, an S3-compatible store, with a bucket per lane through a provider."
+services = ["garage"]
+ports = [3900]
+instructions = "agents.md"
+fragment = "workspace.toml"

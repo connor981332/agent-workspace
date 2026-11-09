@@ -1,0 +1,3 @@
+summary = "pgAdmin for the shared Postgres."
+services = ["pgadmin"]
+ports = [5050]

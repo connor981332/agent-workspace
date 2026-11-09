@@ -1,0 +1,47 @@
+# S3-compatible object storage (object-store module). Every lane shares the
+# bucket; see the module README.
+services:
+  garage:
+    image: dxflrs/garage:v2.4.1
+    restart: unless-stopped
+    # --single-node sets up the layout; --default-bucket creates the key and
+    # bucket below on first start and leaves them alone afterwards.
+    command: ["/garage", "server", "--single-node", "--default-bucket"]
+    ports:
+      - "{{PORT:3900}}:3900"   # S3 API; browsers upload here
+    environment:
+      GARAGE_DEFAULT_ACCESS_KEY: GK000000000000000000000001
+      GARAGE_DEFAULT_SECRET_KEY: "0000000000000000000000000000000000000000000000000000000000000001"
+      GARAGE_DEFAULT_BUCKET: {{NAME}}-uploads
+    volumes:
+      - ./object-store/garage.toml:/etc/garage.toml:ro
+      - garage-data:/var/lib/garage
+    healthcheck:
+      # The image has no shell. `garage status` exits 0 once the node answers RPC.
+      test: ["CMD", "/garage", "status"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # One-shot: lets browsers upload straight to the bucket with presigned URLs.
+  # Idempotent; exits when done. Header names are lowercase: Garage matches them
+  # case-sensitively, and browsers send lowercase names in the preflight.
+  garage-cors:
+    image: amazon/aws-cli:2.27.49
+    depends_on:
+      garage:
+        condition: service_healthy
+    environment:
+      AWS_ACCESS_KEY_ID: GK000000000000000000000001
+      AWS_SECRET_ACCESS_KEY: "0000000000000000000000000000000000000000000000000000000000000001"
+      AWS_DEFAULT_REGION: garage
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >
+        for attempt in 1 2 3 4 5 6 7 8 9 10; do
+        aws s3api put-bucket-cors --endpoint-url http://garage:3900 --bucket {{NAME}}-uploads
+        --cors-configuration '{"CORSRules":[{"AllowedOrigins":["*"],"AllowedMethods":["PUT"],"AllowedHeaders":["content-type","content-md5","content-disposition","x-amz-*"],"ExposeHeaders":["ETag"],"MaxAgeSeconds":3600}]}'
+        && echo "CORS set on {{NAME}}-uploads" && exit 0; sleep 2; done; exit 1
+
+volumes:
+  garage-data:

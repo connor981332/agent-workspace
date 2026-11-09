@@ -141,6 +141,15 @@ func installOwner(cmd *cobra.Command, ws *workspace.Workspace, c *config.Config,
 		startContainers = confirm(cmd.InOrStdin(), out, fmt.Sprintf("Start the containers for %s now?", strings.Join(containers, ", ")))
 	}
 	stateDir := filepath.Dir(w.store.Path())
+	infra := infraOf(ws, c)
+	if infra.Configured() && len(containers) == 0 && !startContainers {
+		startContainers = confirm(cmd.InOrStdin(), out, "Start the shared infrastructure now?")
+	}
+	if infra.Configured() && startContainers {
+		if err := infra.Up(ctx, errOut); err != nil {
+			fmt.Fprintf(errOut, "warning: the shared infrastructure did not start: %v\n", err)
+		}
+	}
 	var first error
 	fail := func(project string, err error) {
 		fmt.Fprintf(errOut, "warning: %s did not install: %v\n", project, err)
