@@ -184,6 +184,15 @@ func ownerOnlyRule(s Scope, c shell.Command) Decision {
 	if sub == "setup" && ownLaneSetup(s, rest) {
 		return allow()
 	}
+	if s.Delegated && delegable(sub, rest) {
+		return allow()
+	}
+	if sub == "delegate" && (hasArg(rest, "--status") || hasArg(rest, "--revoke")) {
+		return allow() // these never widen anyone's authority
+	}
+	if sub == "serve" && slices.Contains(s.RoleDeny, "servers") {
+		return deny("role", "this lane's role may not hold servers → ask the human, or hand this to a session in another role")
+	}
 	if sub == "containers" {
 		// The claim step only removes a dead leftover, and a harness's devcontainer up runs it.
 		if cs, _ := subcommand(rest); cs == "claim" {
@@ -193,10 +202,41 @@ func ownerOnlyRule(s Scope, c shell.Command) Decision {
 	if why, ok := ownerOnly[sub]; ok {
 		return deny("owner-only", "aw %s %s, which only the human does%s → ask the human to run it", sub, why, where)
 	}
-	if sub == "sweep" && (hasArg(rest, "--apply") || hasArg(rest, "--retry")) {
+	if sub == "sweep" && !s.Delegated && (hasArg(rest, "--apply") || hasArg(rest, "--retry")) {
 		return deny("owner-only", "aw sweep --apply removes lanes, which only the human does%s → aw sweep, without --apply, shows what it would do", where)
 	}
 	return allow()
+}
+
+func wordTexts(rest []shell.Word) []string {
+	out := make([]string, 0, len(rest))
+	for _, w := range rest {
+		if !w.Known {
+			return nil
+		}
+		out = append(out, w.Text)
+	}
+	return out
+}
+
+func delegable(sub string, rest []shell.Word) bool {
+	words := wordTexts(rest)
+	if words == nil {
+		return false
+	}
+	return Delegable(sub, words)
+}
+
+// Delegable reports whether an aw command is covered by a maintenance delegation. Starting agents,
+// discarding work, granting anything, changing the pin and removing containers never are.
+func Delegable(command string, args []string) bool {
+	switch command {
+	case "setup", "park", "unpark", "sweep":
+		return true
+	case "containers":
+		return len(args) > 0 && args[0] == "up"
+	}
+	return false
 }
 
 // ownLaneSetup reports whether this is a lane agent retrying its own lane's setup: its hooks are the
@@ -366,6 +406,9 @@ var containerChanging = map[string]bool{
 // containerRule refuses creating, restarting or stopping containers (F5, R49): they are shared,
 // and their ports and mounts are fixed when they are created.
 func containerRule(s Scope, c shell.Command) Decision {
+	if slices.Contains(s.RoleAllow, "containers") {
+		return allow()
+	}
 	name := c.Name()
 	args := c.Args[1:]
 	refuse := func(what string) Decision {
@@ -428,7 +471,7 @@ func killRule(s Scope, c shell.Command) Decision {
 
 // serverRule refuses starting a configured server directly: aw serve takes a seat for it.
 func serverRule(s Scope, c shell.Command) Decision {
-	if len(c.Args) == 0 {
+	if len(c.Args) == 0 || slices.Contains(s.RoleAllow, "servers") {
 		return allow()
 	}
 	words := make([]string, 0, len(c.Args))
@@ -756,11 +799,93 @@ func unattachedRule(s Scope, c shell.Command) Decision {
 	if s.Role != Unattached || isAW(c) || isReadOnly(c) {
 		return allow()
 	}
+	if s.Delegated && len(c.Args) > 0 && c.Args[0].Known && slices.Contains(s.DelegatedCommands, c.Args[0].Text) {
+		return allow()
+	}
 	what := "this command"
 	if n := c.Name(); n != "" {
 		what = n
 	}
 	return deny("attach", "%s may change files, and this session is not attached to a lane: the owner checkout belongs to the human %s", what, s.attachHint())
+}
+
+// publishAction classifies a command as one of the actions a team can pre-authorize, or "".
+func publishAction(name, sub, sub2 string, c shell.Command, args []shell.Word) string {
+	switch {
+	case name == "git":
+		if _, gs, _, _ := gitGlobal(args); gs == "push" {
+			return "push"
+		}
+	case name == "gh" && sub == "pr" && sub2 == "create", name == "glab" && sub == "mr" && sub2 == "create":
+		return "open-merge-request"
+	case name == "gh" && sub == "pr" && sub2 == "merge", name == "glab" && sub == "mr" && sub2 == "merge":
+		return "merge"
+	case isAW(c) && sub == "changeset":
+		return "open-merge-request"
+	}
+	return ""
+}
+
+// publishDecision applies the lane's role and the team's pre-authorization. nil means neither has a
+// say, and the default applies.
+func (s Scope) publishDecision(action string, c shell.Command, args []shell.Word) *Decision {
+	capability := "publish"
+	if action == "merge" {
+		capability = "merge"
+	}
+	if s.Role == Lane && slices.Contains(s.RoleDeny, capability) {
+		d := deny("role", "this lane's role does not %s → commit your work and report back; a session in another role, or the human, does that", capability)
+		return &d
+	}
+	if s.Role != Lane {
+		return nil
+	}
+	allowed := slices.Contains(s.RoleAllow, capability) || slices.Contains(s.Publication, action)
+	for dir, list := range s.ProjectPublication {
+		if within(c.Dir.Physical, dir) && slices.Contains(list, action) {
+			allowed = true
+		}
+	}
+	if !allowed || (action == "push" && !s.pushesOwnBranch(args)) {
+		return nil
+	}
+	d := allow()
+	return &d
+}
+
+// pushesOwnBranch reports whether a git push can only touch this lane's own branches. Anything it
+// cannot be sure of is not pre-authorized, and so asks.
+func (s Scope) pushesOwnBranch(args []shell.Word) bool {
+	_, _, rest, unknown := gitGlobal(args)
+	if unknown {
+		return false
+	}
+	var positional []string
+	for _, w := range rest {
+		if !w.Known {
+			return false
+		}
+		switch {
+		case w.Text == "-u" || w.Text == "--set-upstream" || w.Text == "-q" || w.Text == "--quiet":
+		case strings.HasPrefix(w.Text, "-"):
+			return false
+		default:
+			positional = append(positional, w.Text)
+		}
+	}
+	if len(positional) < 2 {
+		return true // the remote's default: the current branch, which is the lane's
+	}
+	for _, ref := range positional[1:] {
+		src, dst, mapped := strings.Cut(ref, ":")
+		if !mapped {
+			dst = src
+		}
+		if strings.HasPrefix(src, "+") || (dst != "HEAD" && !slices.Contains(s.LaneBranches, strings.TrimPrefix(dst, "refs/heads/"))) {
+			return false
+		}
+	}
+	return true
 }
 
 // publicationRule asks before anything outward-facing (R72, its default): pushing, opening or
@@ -811,6 +936,14 @@ func publicationRule(s Scope, c shell.Command) Decision {
 	case "cargo", "gem", "twine", "poetry", "flit", "hatch":
 		if sub == "publish" || sub == "push" || sub == "upload" || sub == "yank" {
 			what = name + " " + sub + " publishes a package"
+		}
+	}
+	if isAW(c) && sub == "changeset" {
+		what = "aw changeset pushes branches and opens merge requests"
+	}
+	if action := publishAction(name, sub, sub2, c, args); action != "" {
+		if d := s.publishDecision(action, c, args); d != nil {
+			return *d
 		}
 	}
 	if what == "" {

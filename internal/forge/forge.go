@@ -260,3 +260,31 @@ func str(m map[string]any, keys ...string) string {
 
 // ErrNoForge means no adapter applies.
 var ErrNoForge = errors.New("no forge")
+
+// Open opens a change request and returns its URL. Everything else in this package only reads; this
+// runs when a change set is opened, which the publication policy has already allowed.
+func (c *Client) Open(ctx context.Context, id Identity, branch, title, body string) (string, error) {
+	args := []string{"pr", "create", "--repo", id.Project, "--head", branch, "--base", id.Target, "--title", title, "--body", body}
+	tool := "gh"
+	if c.kind == "gitlab" {
+		tool, args = "glab", []string{"mr", "create", "--repo", id.Project, "--source-branch", branch, "--target-branch", id.Target, "--title", title, "--description", body, "--yes"}
+	}
+	out, err := exec.CommandContext(ctx, tool, args...).Output()
+	if err != nil {
+		return "", fmt.Errorf("%s could not open a merge request for %s: %w", tool, id.Project, err)
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// Describe replaces a change request's description.
+func (c *Client) Describe(ctx context.Context, id Identity, url, branch, body string) error {
+	args := []string{"pr", "edit", url, "--body", body}
+	tool := "gh"
+	if c.kind == "gitlab" {
+		tool, args = "glab", []string{"mr", "update", branch, "--repo", id.Project, "--description", body, "--yes"}
+	}
+	if err := exec.CommandContext(ctx, tool, args...).Run(); err != nil {
+		return fmt.Errorf("%s could not link the merge request in %s: %w", tool, id.Project, err)
+	}
+	return nil
+}

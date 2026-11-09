@@ -182,6 +182,19 @@ func resolveScope(p Payload, version string, t *timing.Recorder) (*policy.Scope,
 		scope.Guards = append(scope.Guards, tg)
 	}
 
+	for _, name := range slices.Sorted(maps.Keys(cfg.Projects)) {
+		pr := cfg.Projects[name]
+		if len(pr.Contracts) == 0 {
+			continue
+		}
+		tg := policy.TeamGuard{Name: "generated-contract-" + name, Message: "this file is generated from a contract, and is never edited by hand → change the contract, and regenerate it"}
+		for _, c := range pr.Contracts {
+			tg.Paths = append(tg.Paths, filepath.ToSlash(filepath.Join(pr.Directory, c)))
+		}
+		scope.Guards = append(scope.Guards, tg)
+	}
+	scope.Publication = cfg.Publication.Allow
+
 	s, err := state.Open(stateDir, state.ReadOnly)
 	switch {
 	case errors.Is(err, state.ErrNoState):
@@ -201,6 +214,9 @@ func resolveScope(p Payload, version string, t *timing.Recorder) (*policy.Scope,
 		at, err := attachment(s, stateDir, p)
 		if err != nil {
 			return nil, pendingNotes{}, err
+		}
+		if ws.LaneRoot == "" && state.DelegationActive(s.DB()) {
+			scope.Delegated, scope.DelegatedCommands = true, cfg.Delegation.Maintenance
 		}
 		if at.pair && ws.LaneRoot == "" {
 			scope.Role = policy.Pair
@@ -236,8 +252,24 @@ func resolveScope(p Payload, version string, t *timing.Recorder) (*policy.Scope,
 	scope.LaneRoot = root
 	scope.LaneName = lane.Name
 	scope.LaneDirs = []string{shell.Resolve(root), shell.Resolve(filepath.Join(stateDir, "lanes", dirName))}
+	// A lane's own work: a delegation is the owner checkout's.
+	scope.Delegated, scope.DelegatedCommands = false, nil
 	for _, r := range repos {
-		scope.LaneDirs = append(scope.LaneDirs, shell.Resolve(r.Path))
+		dir := shell.Resolve(r.Path)
+		scope.LaneDirs = append(scope.LaneDirs, dir)
+		if !slices.Contains(scope.LaneBranches, r.Branch) {
+			scope.LaneBranches = append(scope.LaneBranches, r.Branch)
+		}
+		if pr := cfg.Projects[r.Project]; pr != nil && len(pr.Publication) > 0 {
+			if scope.ProjectPublication == nil {
+				scope.ProjectPublication = map[string][]string{}
+			}
+			scope.ProjectPublication[dir] = pr.Publication
+		}
+	}
+	if role, ok := cfg.RoleNamed(lane.Role); ok {
+		scope.RoleAllow, scope.RoleDeny = role.Allow, role.Deny
+		scope.RoleName, scope.RoleInstructions = lane.Role, role.Instructions
 	}
 	notes := pendingNotes{stateDir: stateDir}
 	if notes.pending, err = state.PendingNotifications(s.DB(), n); err != nil {
@@ -388,6 +420,22 @@ func personalContext(harness, namespace string) string {
 
 // startContext tells a new session where it is and how to work there. It changes nothing.
 func startContext(s policy.Scope) string {
+	extra := ""
+	if s.RoleName != "" {
+		extra = fmt.Sprintf("\n\nYou work in the %s role.", s.RoleName)
+		if s.RoleInstructions != "" {
+			if data, err := os.ReadFile(filepath.Join(s.Owner, s.RoleInstructions)); err == nil {
+				extra += "\n\n" + string(data)
+			}
+		}
+	}
+	if s.Delegated {
+		extra = "\n\nThe human has delegated routine maintenance to sessions in this checkout, for a limited time: aw setup, park, unpark, sweep --apply and containers up. Run bin/aw delegate --status to see until when."
+	}
+	return startText(s) + extra
+}
+
+func startText(s policy.Scope) string {
 	switch s.Role {
 	case policy.Lane:
 		return fmt.Sprintf("You are working in lane %s, at %s. Stay inside it. If your working directory is elsewhere (your original harness cwd), start every shell command with cd %s && and use absolute paths inside the lane for file tools. Run bin/aw whoami if you are unsure.",

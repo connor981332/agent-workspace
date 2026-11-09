@@ -304,6 +304,17 @@ running, or any exec session is live in it, which covers VS Code, terminals, `aw
 
 Git always runs on the host, because worktree `.git` files name host paths.
 
+## Change sets and publication
+
+A lane has one branch in each repository, so a lane is a change set. Merge order comes from
+`depends_on` on projects, producers first. `aw changeset` pushes each repository with commits and opens
+merge requests linked to each other. `generated_contracts` on a project lists files agents may not
+edit (R70).
+
+`[publication] allow`, or `publication` on a project, pre-authorizes `push` (only the lane's own
+branch), `open-merge-request` and `merge`. Everything else outward-facing asks. A force push, deleting
+a branch, a release or a package is never pre-authorized. (Decided by the spec owner, 2026-11-09.)
+
 ## Modules
 
 A module is a directory with a manifest, configuration fragments, files to install and instructions

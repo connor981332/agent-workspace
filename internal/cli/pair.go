@@ -60,7 +60,18 @@ func refuseAgent(cmd *cobra.Command, args []string) error {
 	if name == "setup" && len(args) == 1 {
 		return nil // retrying a lane's setup: the command itself checks that it is the agent's own lane
 	}
+	if name == "delegate" {
+		if status, _ := cmd.Flags().GetBool("status"); status {
+			return nil
+		}
+		if revoke, _ := cmd.Flags().GetBool("revoke"); revoke {
+			return nil
+		}
+	}
 	if why := agentContext(); why != "" {
+		if delegatedHere(name, args) {
+			return nil
+		}
 		return &commandError{fmt.Errorf("aw %s is only for the human, and this looks like an agent session (%s) → ask the human to run it in their own terminal", name, why)}
 	}
 	return nil

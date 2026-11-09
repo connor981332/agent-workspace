@@ -69,6 +69,20 @@ type Scope struct {
 	MuxProgram string
 	// Guards are the team's own guards, in name order.
 	Guards []TeamGuard
+	// RoleName is the lane's team role, and RoleInstructions the file its sessions receive.
+	RoleName, RoleInstructions string
+	// RoleAllow and RoleDeny are the capabilities of the lane's team role (R65).
+	RoleAllow, RoleDeny []string
+	// Publication are the pre-authorized actions, and ProjectPublication those of each project's
+	// worktree in this lane, by physical directory (R72).
+	Publication        []string
+	ProjectPublication map[string][]string
+	// LaneBranches are the branches a pre-authorized push from this lane may touch.
+	LaneBranches []string
+	// Delegated is whether a maintenance delegation applies to this owner-checkout session, and
+	// DelegatedCommands the team's commands it covers (R64).
+	Delegated         bool
+	DelegatedCommands []string
 	// AskSupported is whether the harness can ask the human; if not, an ask is a deny.
 	AskSupported bool
 }

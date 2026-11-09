@@ -87,6 +87,24 @@ func (n *node) checked(f func(v any) (string, string)) *node {
 }
 
 var (
+	capabilities       = []string{"publish", "merge", "containers", "servers"}
+	publicationActions = []string{"push", "open-merge-request", "merge"}
+)
+
+// oneOfEach checks that every string in a list is one of the allowed values.
+func oneOfEach(allowed ...string) func(v any) (string, string) {
+	return func(v any) (string, string) {
+		list, _ := v.([]any)
+		for _, e := range list {
+			if s, _ := e.(string); !slices.Contains(allowed, s) {
+				return fmt.Sprintf("has %v, which is not one of them", e), "use " + strings.Join(allowed, ", ")
+			}
+		}
+		return "", ""
+	}
+}
+
+var (
 	nameRE      = regexp.MustCompile(`^[a-z][a-z0-9-]{0,39}$`)
 	namespaceRE = regexp.MustCompile(`^[a-z][a-z0-9]{0,19}$`)
 	nameFix     = "use lowercase letters, digits and hyphens, starting with a letter (at most 40 characters)"
@@ -163,6 +181,9 @@ var schema = table("",
 			"install_stamp", strList("Files, relative to the project, whose contents decide whether install reruns, e.g. package-lock.json."),
 			"run", str("The default command for aw run <project> with no command."),
 			"needs", strList("Resources the project's commands need."),
+			"depends_on", strList("Projects this one consumes. A change set merges those first (R69)."),
+			"publication", strList("Actions pre-authorized in this project, as in [publication] allow.").checked(oneOfEach(publicationActions...)),
+			"generated_contracts", strList("Files generated from a contract, from the project root (** matches directories). Agents may not edit them (R70)."),
 			"secrets", strList("Files that are not in Git, such as .env, linked read-only into every lane from the owner "+
 				"checkout, relative to the project."),
 			"generated", strList("Ignored paths (Git pathspecs) that builds create and that do not block recycling a lane, "+
@@ -240,6 +261,20 @@ var schema = table("",
 	"ports", table("Machine-specific port settings.",
 		"offset", integer("Added to every port of this workspace, so two workspaces on one machine do not collide.").
 			between(0, 60000).withDefault(int64(0)),
+	),
+	"roles", mapOf("Team roles (R65). A lane takes one with aw new --role. No role can override path confinement, secrets, destructive "+
+		"Git or owner-only commands. implementer is built in, and denies publish and merge.", nameRE, nameFix,
+		table("",
+			"allow", strList("Capabilities this role has beyond the default: publish, merge, containers, servers.").checked(oneOfEach(capabilities...)),
+			"deny", strList("Capabilities this role does not have: publish, merge, servers.").checked(oneOfEach(capabilities...)),
+			"instructions", str("A file, from the workspace root, whose text a session in this role receives when it starts."),
+		)),
+	"publication", table("What agents may publish without asking. The default asks before anything outward-facing (R72).",
+		"allow", strList("Pre-authorized actions: push (only the lane's own branch), open-merge-request, merge. Force pushes, deleting "+
+			"branches, releases and packages are never pre-authorized.").checked(oneOfEach(publicationActions...)),
+	),
+	"delegation", table("What the human's aw delegate --scope maintenance covers, beyond aw's own maintenance commands.",
+		"maintenance", strList("Commands, as their first word, that a delegated session in the owner checkout may run."),
 	),
 	"devcontainer", table("The devcontainer CLI, for projects whose runner is devcontainer. Pin it: a CLI that drifts breaks builds.",
 		"command", str("Runs the CLI. {version} is replaced by version. aw doctor warns when the command names no version.").

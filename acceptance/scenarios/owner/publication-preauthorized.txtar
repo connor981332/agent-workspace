@@ -1,0 +1,39 @@
+# A team can pre-authorize pushing the lane's own branch and opening merge requests. A push of
+# anything else still asks, and force pushes and releases are never pre-authorized.
+# req: R72
+# source: wishlist 13, spec owner decision 2026-11-09
+# milestone: M9
+
+workspace solo --single --init
+exec aw attach 'one'
+cd .worktrees/01
+exec awtest-hook bash 'git push -u origin aw/one'
+! stdout '"ask"'
+exec awtest-hook bash 'git push'
+! stdout '"ask"'
+exec awtest-hook bash 'git push origin HEAD:aw/one'
+! stdout '"ask"'
+exec awtest-hook bash 'gh pr create --fill'
+! stdout '"ask"'
+exec awtest-hook bash 'git push origin main'
+stdout '"permissionDecision":"ask"'
+exec awtest-hook bash 'git push origin HEAD:main'
+stdout '"permissionDecision":"ask"'
+! exec awtest-hook bash 'git push origin +aw/one'
+exec awtest-hook bash 'gh pr merge 3'
+stdout '"permissionDecision":"ask"'
+exec awtest-hook bash 'gh release create v1'
+stdout '"permissionDecision":"ask"'
+! exec awtest-hook bash 'git push --force origin aw/one'
+
+-- workspace.toml --
+[workspace]
+name = "Solo"
+namespace = "solo"
+schema = 1
+
+[projects.solo]
+directory = "."
+
+[publication]
+allow = ["push", "open-merge-request"]

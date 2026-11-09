@@ -1,0 +1,26 @@
+# Projects that depend on each other have no merge order, and the change set says so.
+# req: R69
+# source: spec owner decision 2026-11-09
+# milestone: M9
+
+workspace shop --init --forge github
+exec aw attach 'one'
+lane-commit 01 web/a.txt 'a'
+lane-commit 01 api/b.txt 'b'
+cd .worktrees/01
+! exec aw changeset --title x
+stderr 'depend on each other'
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[projects.web]
+directory = "web"
+depends_on = ["api"]
+
+[projects.api]
+directory = "api"
+depends_on = ["web"]

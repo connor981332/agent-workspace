@@ -33,7 +33,10 @@ type Config struct {
 	User      User                 `json:"user"`
 	Ports     Ports                `json:"ports"`
 
-	Devcontainer Devcontainer `json:"devcontainer"`
+	Devcontainer Devcontainer     `json:"devcontainer"`
+	Roles        map[string]*Role `json:"roles"`
+	Publication  Publication      `json:"publication"`
+	Delegation   Delegation       `json:"delegation"`
 
 	// Values is the merged configuration as decoded TOML values, for aw config get.
 	Values map[string]any `json:"-"`
@@ -74,6 +77,34 @@ type Data struct {
 	Env       map[string]string `json:"env"`
 }
 
+// Role is a team role's permissions (R65).
+type Role struct {
+	Allow        []string `json:"allow"`
+	Deny         []string `json:"deny"`
+	Instructions string   `json:"instructions"`
+}
+
+// RoleNamed returns a role by name. The implementer role is built in, and a team may redefine it.
+func (c *Config) RoleNamed(name string) (*Role, bool) {
+	if r, ok := c.Roles[name]; ok {
+		return r, true
+	}
+	if name == "implementer" {
+		return &Role{Deny: []string{"publish", "merge"}}, true
+	}
+	return nil, false
+}
+
+// Publication is what a team has pre-authorized (R72).
+type Publication struct {
+	Allow []string `json:"allow"`
+}
+
+// Delegation is what the human's maintenance delegation covers beyond aw's own commands.
+type Delegation struct {
+	Maintenance []string `json:"maintenance"`
+}
+
 // Devcontainer is how aw runs the devcontainer CLI (S16).
 type Devcontainer struct {
 	Command string            `json:"command"`
@@ -95,6 +126,9 @@ type Project struct {
 	InstallStamp []string              `json:"install_stamp"`
 	Run          string                `json:"run"`
 	Needs        []string              `json:"needs"`
+	DependsOn    []string              `json:"depends_on"`
+	Publication  []string              `json:"publication"`
+	Contracts    []string              `json:"generated_contracts"`
 	Secrets      []string              `json:"secrets"`
 	Generated    []string              `json:"generated"`
 	LaneGuards   map[string]*LaneGuard `json:"lane_guards"`

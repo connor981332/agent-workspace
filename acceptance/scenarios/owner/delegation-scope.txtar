@@ -1,0 +1,51 @@
+# A maintenance delegation lets sessions in the owner checkout run routine maintenance, and nothing
+# more. Lanes never use it.
+# req: R64
+# source: C1 test_delegation_lets_owner_checkout_run_only_in_scope_maintenance
+# milestone: M9
+
+workspace solo --single --init
+owner-may-change
+! exec awtest-hook bash 'aw setup'
+stderr 'only the human'
+exec aw delegate --scope maintenance --ttl 1h
+stdout 'Delegated maintenance'
+exec awtest-hook bash 'aw setup'
+exec awtest-hook bash 'aw park one'
+exec awtest-hook bash 'aw sweep --apply'
+exec awtest-hook bash 'aw containers up'
+exec awtest-hook bash 'scripts/reindex now'
+! exec awtest-hook bash 'scripts/other'
+stderr 'not attached to a lane'
+! exec awtest-hook bash 'aw discard one --yes'
+stderr 'only the human'
+! exec awtest-hook bash 'aw new x'
+! exec awtest-hook bash 'aw pair'
+! exec awtest-hook bash 'aw upgrade'
+! exec awtest-hook bash 'aw containers recreate'
+stderr 'only the human'
+
+env CLAUDE_CODE_SESSION_ID=s-1
+exec aw setup --harness claude
+env CLAUDE_CODE_SESSION_ID=
+
+exec aw attach 'one'
+cd .worktrees/01
+! exec awtest-hook bash 'aw sweep --apply'
+stderr 'only the human'
+env CLAUDE_CODE_SESSION_ID=s-2
+! exec aw setup
+stderr 'only for the human'
+env CLAUDE_CODE_SESSION_ID=
+
+-- workspace.toml --
+[workspace]
+name = "Solo"
+namespace = "solo"
+schema = 1
+
+[projects.solo]
+directory = "."
+
+[delegation]
+maintenance = ["scripts/reindex"]

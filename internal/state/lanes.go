@@ -33,6 +33,7 @@ type Lane struct {
 	Claimed    string `json:"claimed,omitempty"`
 	Updated    string `json:"updated"`
 	Pooled     string `json:"pooled,omitempty"`
+	Role       string `json:"role,omitempty"` // the team role the lane's sessions work under, if any
 }
 
 // LaneRepo is a lane's worktree of one repository. Project is "" for the workspace repository in
@@ -173,11 +174,11 @@ type Querier interface {
 	QueryRow(query string, args ...any) *sql.Row
 }
 
-const laneColumns = `number, coalesce(name, ''), purpose, state, generation, created, coalesce(claimed, ''), updated, coalesce(pooled, '')`
+const laneColumns = `number, coalesce(name, ''), purpose, state, generation, created, coalesce(claimed, ''), updated, coalesce(pooled, ''), role`
 
 func scanLane(row interface{ Scan(...any) error }) (Lane, error) {
 	var l Lane
-	err := row.Scan(&l.Number, &l.Name, &l.Purpose, &l.State, &l.Generation, &l.Created, &l.Claimed, &l.Updated, &l.Pooled)
+	err := row.Scan(&l.Number, &l.Name, &l.Purpose, &l.State, &l.Generation, &l.Created, &l.Claimed, &l.Updated, &l.Pooled, &l.Role)
 	return l, err
 }
 

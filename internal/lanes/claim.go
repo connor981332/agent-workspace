@@ -76,7 +76,9 @@ type repoPlan struct {
 	baseRef string
 	baseSHA string
 	track   string // remote branch to track, for --branch
-	secrets []string
+	// existing: --branch named a branch this repository already has locally.
+	existing bool
+	secrets  []string
 	// lacksBranch: --branch named a branch this repository does not have.
 	lacksBranch bool
 }
@@ -382,7 +384,7 @@ func (m *Manager) planRepo(ctx context.Context, project, rel, branch string, sec
 		switch {
 		case ok(g.OK(ctx, "rev-parse", "--verify", "--quiet", "refs/heads/"+branch+"^{commit}")):
 			start = "refs/heads/" + branch
-			p.branch = branch
+			p.branch, p.existing = branch, true
 		case ok(g.OK(ctx, "rev-parse", "--verify", "--quiet", "refs/remotes/origin/"+branch+"^{commit}")):
 			start = "refs/remotes/origin/" + branch
 			p.branch, p.track = branch, "origin/"+branch
@@ -442,7 +444,9 @@ func (m *Manager) build(ctx context.Context, lane state.Lane, plans []repoPlan, 
 		if _, err := os.Stat(p.path); err == nil && fromPool {
 			// A warm lane: its worktree is clean at the base; start the new branch there.
 			args := []string{"switch", "--quiet", "--no-track", "-c", p.branch, p.baseSHA}
-			if p.track != "" {
+			if p.existing {
+				args = []string{"switch", "--quiet", p.branch}
+			} else if p.track != "" {
 				args = []string{"switch", "--quiet", "--track", "-c", p.branch, p.track}
 			}
 			if _, err := run.In(p.path).Run(ctx, args...); err != nil {
@@ -454,6 +458,8 @@ func (m *Manager) build(ctx context.Context, lane state.Lane, plans []repoPlan, 
 			}
 			args := []string{"worktree", "add", "--quiet"}
 			switch {
+			case p.existing:
+				args = append(args, p.path, p.branch)
 			case p.track != "":
 				args = append(args, "--track", "-b", p.branch, p.path, p.track)
 			case strings.HasPrefix(p.branch, m.Cfg.Lanes.BranchPrefix) || !ok(g.OK(ctx, "rev-parse", "--verify", "--quiet", "refs/heads/"+p.branch)):

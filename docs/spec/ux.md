@@ -39,7 +39,8 @@ The CLI is part of the design, not an afterthought. Most of the tool's value is 
 | `aw snapshot <name>` / `aw restore <name>` / `aw snapshots` | both | Named copies of a lane's data, shared across the workspace |
 | `aw setup <lane>` | both | Rerun a lane's setup from its first incomplete step; an agent may do this for its own lane |
 | `aw config explain <key>` | both | Effective value and where it came from |
-| `aw delegate` | human | Expiring, scoped maintenance authority |
+| `aw delegate` | human | Expiring, scoped maintenance authority ([owner-checkout.md](owner-checkout.md#delegation)) |
+| `aw changeset --title t` | both | Open this lane's linked merge requests in merge order; the publication policy applies |
 | `aw upgrade` | human | Change the pinned framework version |
 
 ## Starting a session

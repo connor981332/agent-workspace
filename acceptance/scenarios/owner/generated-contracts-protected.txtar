@@ -1,0 +1,27 @@
+# Generated contracts are never hand-edited: agents cannot write them by file tool or shell, in any
+# lane, and other files in the project are unaffected.
+# req: R70
+# source: wishlist 12
+# milestone: M9
+
+workspace shop --init
+exec aw attach 'one'
+cd .worktrees/01
+! exec awtest-hook write web/gen/api.ts
+stderr 'generated from a contract'
+! exec awtest-hook bash 'echo x > web/gen/deep/client.ts'
+stderr 'generated from a contract'
+exec awtest-hook write web/src/app.ts
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[projects.web]
+directory = "web"
+generated_contracts = ["gen/**"]
+
+[projects.api]
+directory = "api"
