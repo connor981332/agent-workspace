@@ -166,6 +166,22 @@ var migrations = []string{
 		ended       TEXT NOT NULL DEFAULT '',
 		PRIMARY KEY (lane, generation, step)
 	) STRICT`,
+
+	// 10: what providers made for each lane, which is all they may act on, and named snapshots.
+	`CREATE TABLE lane_data (
+		lane   INTEGER NOT NULL,
+		data   TEXT NOT NULL,
+		object TEXT NOT NULL,
+		PRIMARY KEY (lane, data, object)
+	) STRICT;
+	CREATE TABLE snapshots (
+		data    TEXT NOT NULL,
+		name    TEXT NOT NULL,
+		lane    INTEGER NOT NULL,
+		objects TEXT NOT NULL,
+		created TEXT NOT NULL,
+		PRIMARY KEY (data, name)
+	) STRICT`,
 }
 
 // BackupPath is where the database is copied before migrating from schema version v.

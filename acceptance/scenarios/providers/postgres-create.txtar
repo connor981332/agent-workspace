@@ -1,0 +1,43 @@
+# The postgres provider clones each lane database from the template, statements go to the maintenance
+# database only, and the lane's commands get the URLs. No password reaches a command line.
+# req: R33 R34 R30
+# source: C2 t_lane_new_makes_worktree_env_and_links
+# milestone: M5
+
+stubs psql
+exec sh -c 'mkdir -p $STUB_STATE/pg; : > $STUB_STATE/pg/shop_template'
+workspace shop --init
+exec aw attach 'add feature flag'
+cd .worktrees/01
+exec aw run web sh -c 'echo "$DATABASE_URL"; echo "$AW_DB_URL"; echo "$AW_DB_URL_SHOP_TEST"; echo "$SEEN"'
+stdout '^postgres://app:secret@db\.local:5433/shop_development_01$'
+stdout '^postgres://app:secret@db\.local:5433/shop_test_01$'
+exec aw run web sh -c 'cat "$AW_LANE_STATE/fresh"'
+stdout '^1 postgres://app:secret@db\.local:5433/shop_development_01$'
+grep 'CREATE DATABASE "shop_development_01" TEMPLATE "shop_template"' $STUB_LOG
+grep 'CREATE DATABASE "shop_test_01" TEMPLATE "shop_template"' $STUB_LOG
+grep 'host=db.local port=5433 user=app db=postgres' $STUB_LOG
+! grep 'db=shop_template' $STUB_LOG
+! grep 'secret' $STUB_LOG
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[lanes.data.db]
+provider = "postgres"
+url = "postgres://app:secret@db.local:5433"
+template = "shop_template"
+databases = ["shop_development", "shop_test"]
+env = { DATABASE_URL = "{url:shop_development}" }
+
+[projects.web]
+directory = "web"
+
+[projects.web.lifecycle]
+setup = 'echo "$AW_FRESH $DATABASE_URL" > "$AW_LANE_STATE/fresh"'

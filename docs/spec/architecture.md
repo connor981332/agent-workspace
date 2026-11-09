@@ -127,11 +127,13 @@ hostname = "lane-{lane}.localhost"
 
 [lanes.data.db]
 provider = "postgres"
+url = "postgres://postgres@localhost:5432"
 template = "shop_template"
 databases = ["shop_development", "shop_test"]
 
 [lanes.data.cache]
 provider = "redis"
+url = "redis://localhost:6379"
 
 [projects.web]
 repo = "git@github.com:shop/web.git"

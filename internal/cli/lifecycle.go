@@ -120,6 +120,10 @@ func runSetup(ctx context.Context, w *writeContext, m *lanes.Manager, l state.La
 		Seats: func(ctx context.Context, needs []string) (func(), error) {
 			return holdSeats(ctx, w, m, b, h, needs, os.Stderr)
 		},
+		Provision: func(ctx context.Context, data string, fromPool bool) error {
+			return m.Data().Provision(ctx, m.ProviderLane(l), data, fromPool)
+		},
+		After: func(ctx context.Context) error { return m.Data().Discover(ctx, m.ProviderLane(l)) },
 	}
 	return r.Run(ctx)
 }

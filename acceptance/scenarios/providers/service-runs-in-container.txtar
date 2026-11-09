@@ -1,0 +1,30 @@
+# With service set, the client runs in that container, which aw resolves: an ambiguous name is refused.
+# req: R33
+# source: C2 t_lane_new_makes_worktree_env_and_links
+# milestone: M5
+
+stubs docker psql
+exec sh -c 'mkdir -p $STUB_STATE/ps; echo c1 > $STUB_STATE/ps/__db'
+workspace solo --single --init
+exec aw attach 'one'
+cd .worktrees/01
+exec aw run solo true
+grep 'docker exec -i c1 psql -U app -d postgres' $STUB_LOG
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[lanes.data.db]
+provider = "postgres"
+url = "postgres://app@ignored:5432"
+service = "db"
+databases = ["shop"]
+
+[projects.solo]
+directory = "."

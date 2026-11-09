@@ -1,0 +1,4 @@
+#!/bin/sh
+# Test double for redis-cli. It records its arguments in $STUB_LOG and answers OK.
+echo "redis-cli $*" >> "$STUB_LOG"
+echo OK

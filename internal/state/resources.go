@@ -142,8 +142,11 @@ func LeaseProcs(q Querier, id int) ([]LeaseProc, error) {
 	return out, rows.Err()
 }
 
-// SetLeaseProcs records a lease's processes.
+// SetLeaseProcs replaces a lease's processes with these.
 func SetLeaseProcs(tx *sql.Tx, id int, ps []LeaseProc) error {
+	if _, err := tx.Exec(`DELETE FROM lease_procs WHERE lease = ?`, id); err != nil {
+		return err
+	}
 	for _, p := range ps {
 		if _, err := tx.Exec(`INSERT OR REPLACE INTO lease_procs (lease, server, pid, pid_start, log) VALUES (?, ?, ?, ?, ?)`, id, p.Server, p.PID, p.Start, p.Log); err != nil {
 			return err

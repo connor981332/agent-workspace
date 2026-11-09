@@ -1,0 +1,57 @@
+#!/bin/sh
+# Test double for psql. It records each statement and the connection settings in $STUB_LOG, and keeps
+# the server's databases as files under $STUB_STATE/pg. A database named in $STUB_STATE/pg-busy
+# refuses to be copied or dropped, as one with connections does.
+set -eu
+sql=""
+user="${PGUSER:-}"
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -c) sql="$2"; shift 2 ;;
+    -U) user="$2"; shift 2 ;;
+    -d|-v) shift 2 ;;
+    *) shift ;;
+  esac
+done
+echo "psql [host=${PGHOST:-} port=${PGPORT:-} user=$user db=${PGDATABASE:-}] $sql" >> "$STUB_LOG"
+mkdir -p "$STUB_STATE/pg"
+busy() { [ -e "$STUB_STATE/pg-busy" ] && grep -qx "$1" "$STUB_STATE/pg-busy"; }
+in_use() { echo "ERROR:  database \"$1\" is being accessed by other users" >&2; exit 1; }
+name_after() { printf '%s\n' "$sql" | sed -n "s/.*$1 \"\([^\"]*\)\".*/\1/p"; }
+case "$sql" in
+  "SELECT 1 FROM pg_database WHERE datname = "*)
+    name=$(printf '%s\n' "$sql" | sed "s/.*datname = '\([^']*\)'.*/\1/")
+    [ -e "$STUB_STATE/pg/$name" ] && echo 1
+    ;;
+  "SELECT datname FROM pg_database WHERE starts_with"*)
+    prefix=$(printf '%s\n' "$sql" | sed "s/.*starts_with(datname, '\([^']*\)').*/\1/")
+    ls "$STUB_STATE/pg" | grep "^$prefix" || true
+    ;;
+  "SELECT pg_terminate_backend"*)
+    name=$(printf '%s\n' "$sql" | sed "s/.*datname = '\([^']*\)'.*/\1/")
+    if [ -e "$STUB_STATE/pg-busy" ]; then grep -vx "$name" "$STUB_STATE/pg-busy" > "$STUB_STATE/pg-busy.new" || true; mv "$STUB_STATE/pg-busy.new" "$STUB_STATE/pg-busy"; fi
+    ;;
+  "CREATE DATABASE "*)
+    new=$(name_after "CREATE DATABASE")
+    from=$(name_after "TEMPLATE")
+    if [ -e "$STUB_STATE/pg/$new" ]; then echo "ERROR:  database \"$new\" already exists" >&2; exit 1; fi
+    if [ -n "$from" ]; then
+      [ -e "$STUB_STATE/pg/$from" ] || { echo "ERROR:  template database \"$from\" does not exist" >&2; exit 1; }
+      busy "$from" && in_use "$from"
+      cp "$STUB_STATE/pg/$from" "$STUB_STATE/pg/$new"
+    else
+      : > "$STUB_STATE/pg/$new"
+    fi
+    ;;
+  "DROP DATABASE IF EXISTS "*)
+    name=$(name_after "EXISTS")
+    busy "$name" && in_use "$name"
+    rm -f "$STUB_STATE/pg/$name"
+    ;;
+  "ALTER DATABASE "*)
+    old=$(name_after "DATABASE")
+    new=$(name_after "RENAME TO")
+    mv "$STUB_STATE/pg/$old" "$STUB_STATE/pg/$new"
+    ;;
+esac
+exit 0

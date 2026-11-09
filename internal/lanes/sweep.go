@@ -16,6 +16,7 @@ import (
 	"github.com/connor981332/agent-workspace/internal/forge"
 	"github.com/connor981332/agent-workspace/internal/gitx/run"
 	"github.com/connor981332/agent-workspace/internal/lifecycle"
+	"github.com/connor981332/agent-workspace/internal/providers"
 	"github.com/connor981332/agent-workspace/internal/state"
 )
 
@@ -436,6 +437,9 @@ func (m *Manager) destroy(ctx context.Context, l state.Lane, stored []state.Lane
 	if err := m.teardown(ctx, l); err != nil {
 		return err
 	}
+	if err := m.Data().DropLane(ctx, m.ProviderLane(l)); err != nil {
+		return err
+	}
 	slices.SortFunc(stored, func(a, b state.LaneRepo) int { return strings.Compare(b.Project, a.Project) }) // the root ("") last
 	for _, r := range stored {
 		owner := filepath.Join(m.WS.Owner, m.relOf(r))
@@ -469,6 +473,9 @@ func (m *Manager) destroy(ctx context.Context, l state.Lane, stored []state.Lane
 		if _, err := tx.Exec(`UPDATE sessions SET lane = NULL, lane_generation = NULL WHERE lane = ?`, l.Number); err != nil {
 			return err
 		}
+		if _, err := tx.Exec(`DELETE FROM lane_data WHERE lane = ?`, l.Number); err != nil {
+			return err
+		}
 		if err := state.ForgetSetup(tx, l.Number); err != nil {
 			return err
 		}
@@ -478,6 +485,18 @@ func (m *Manager) destroy(ctx context.Context, l state.Lane, stored []state.Lane
 	}
 	// The next lane with this number starts empty: no env files, and no stamps of installs it has not had.
 	return os.RemoveAll(filepath.Join(filepath.Dir(m.Store.Path()), "lanes", Dir(l.Number, m.Cfg.Lanes.Max)))
+}
+
+// Data is the workspace's providers.
+func (m *Manager) Data() *providers.Set {
+	return &providers.Set{Cfg: m.Cfg, Store: m.Store, Owner: m.WS.Owner, StateDir: m.StateDir}
+}
+
+// ProviderLane is what a provider is told about a lane.
+func (m *Manager) ProviderLane(l state.Lane) providers.Lane {
+	root := m.Root(l.Number)
+	dir, _ := m.StateDir(l.Number)
+	return providers.Lane{Number: l.Number, Dir: Dir(l.Number, m.Cfg.Lanes.Max), Name: l.Name, Root: root, State: dir}
 }
 
 // teardown runs the workspace's teardown hook. It must be safe to rerun: a failure keeps the lane,

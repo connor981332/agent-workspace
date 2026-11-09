@@ -1,0 +1,45 @@
+# A recycled lane resets its data from the template and runs reset, not setup. A restore runs the
+# restore hook, so data behind the code can be migrated.
+# req: R35 R33 R29
+# source: C2 findings 13
+# milestone: M5
+
+stubs psql
+exec sh -c 'mkdir -p $STUB_STATE/pg; : > $STUB_STATE/pg/shop_template'
+workspace solo --single --init
+exec aw attach 'one'
+cd .worktrees/01
+exec aw run solo true
+exec sh -c ': > $STUB_STATE/pg/shop_01_0'
+cd ../..
+exec aw sweep --apply --json
+json stdout .lanes[0].action recycle
+exec aw attach 'two'
+cd .worktrees/01
+exec aw run solo sh -c 'cat "$AW_LANE_STATE/log"'
+stdout '^setup$'
+stdout '^reset 1$'
+grep 'DROP DATABASE IF EXISTS "shop_01"' $STUB_LOG
+exec sh -c 'test ! -e $STUB_STATE/pg/shop_01_0'
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 1
+
+[lanes.data.db]
+provider = "postgres"
+url = "postgres://postgres@localhost:5432"
+template = "shop_template"
+databases = ["shop"]
+
+[projects.solo]
+directory = "."
+
+[projects.solo.lifecycle]
+setup = 'echo setup >> "$AW_LANE_STATE/log"'
+reset = 'echo "reset $AW_FRESH" >> "$AW_LANE_STATE/log"'

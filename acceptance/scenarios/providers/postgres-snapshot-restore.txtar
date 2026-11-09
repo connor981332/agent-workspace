@@ -1,0 +1,59 @@
+# Snapshots are named copies every lane can restore. A name in use is not overwritten, a restore makes
+# the new copy before it drops the old one, and each project's restore hook runs afterwards.
+# req: R35 R33
+# source: C2 t_lane_snapshot_restore
+# milestone: M5
+
+stubs psql
+exec sh -c 'mkdir -p $STUB_STATE/pg; echo tmpl > $STUB_STATE/pg/shop_template'
+workspace solo --single --init
+exec aw attach 'one'
+exec aw attach 'two'
+cd .worktrees/01
+exec aw run solo true
+exec sh -c 'echo onboarded > $STUB_STATE/pg/shop_01'
+exec aw snapshot onboarded
+stdout 'Took snapshot onboarded of db'
+grep 'CREATE DATABASE "shop_snapshot_onboarded_shop" TEMPLATE "shop_01"' $STUB_LOG
+! exec aw snapshot onboarded
+stderr 'a snapshot named onboarded already exists'
+exec aw snapshots --json
+stdout '"name": "onboarded"'
+
+cd ../02
+exec aw run solo true
+exec aw restore onboarded
+stdout 'Restored db from snapshot onboarded'
+exec sh -c 'cat $STUB_STATE/pg/shop_02'
+stdout '^onboarded$'
+exec aw run solo sh -c 'cat "$AW_LANE_STATE/restored"'
+stdout '^restore 1$'
+exec sh -c 'grep -n "shop_02" $STUB_LOG | grep -E "RENAME|DROP DATABASE IF EXISTS .shop_02.$|__restoring. TEMPLATE" | cut -d" " -f6- | cut -c1-40'
+exec sh -c 'ls $STUB_STATE/pg'
+! stdout restoring
+
+# The owner checkout has no lane data to copy.
+cd ../..
+! exec aw snapshot other
+stderr 'run it in the lane'
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[lanes.data.db]
+provider = "postgres"
+url = "postgres://postgres@localhost:5432"
+template = "shop_template"
+databases = ["shop"]
+
+[projects.solo]
+directory = "."
+
+[projects.solo.lifecycle]
+restore = 'echo "$AW_PHASE $AW_FRESH" > "$AW_LANE_STATE/restored"'

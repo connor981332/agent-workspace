@@ -96,6 +96,16 @@ func (m *Manager) LocateIn(n int, project string) (*Where, error) {
 		"AW_HOSTNAME="+strings.NewReplacer("{lane}", Dir(n, m.Cfg.Lanes.Max), "{namespace}", m.Cfg.Workspace.Namespace).Replace(m.Cfg.Lanes.Hostname),
 		"AW_TOOL="+filepath.Join(m.Root(n), "bin", "aw"),
 	)
+	// What the providers recorded for the lane's commands.
+	if entries, err := os.ReadDir(filepath.Join(laneState, "data")); err == nil {
+		for _, e := range entries { // sorted by name
+			extra, err := readEnvFile(filepath.Join(laneState, "data", e.Name()))
+			if err != nil {
+				return nil, err
+			}
+			env = append(env, extra...)
+		}
+	}
 	// The project's env file, written by the prepare hook: plain KEY=VALUE lines.
 	if project != "" {
 		if extra, err := readEnvFile(filepath.Join(laneState, project+".env")); err == nil {

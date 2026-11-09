@@ -57,8 +57,10 @@ Per-lane data, owned by a provider. The key names the data, e.g. db.
 | `command` | string | — | For provider = "external": the provider executable. |
 | `template` | string | — | postgres: the template database lanes are cloned from. Nothing ever connects to it. |
 | `databases` | array of strings | — | postgres: the databases each lane gets, named <database>_<lane>. |
-| `service` | string | — | Run the provider's client (psql, redis-cli) in this container service instead of on the host. |
-| `env` | table of string | — | Variables the lane's commands receive, e.g. DATABASE_URL = "{url:shop_development}". |
+| `url` | string | — | postgres or redis: where the server is, e.g. postgres://postgres@localhost:5432. Keep a password out of the team layer: put this key in the individual layer, or use PGPASSWORD or REDISCLI_AUTH. |
+| `terminate` | boolean | `false` | postgres: end other connections to a database before dropping or restoring it. |
+| `service` | string | — | Run the provider's client (psql, redis-cli) in this container instead of on the host: a Compose service with one running container, or a container's exact name. |
+| `env` | table of string | — | Variables the lane's commands receive, e.g. DATABASE_URL = "{url:shop_development}". {lane} and {name} are the lane's number and name. |
 
 ## `[lifecycle]`
 

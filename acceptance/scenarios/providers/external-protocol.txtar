@@ -1,0 +1,46 @@
+# An external provider speaks the extension protocol: it is told the lane and the configuration, what
+# it reports is recorded, and it is told to drop exactly that.
+# req: R33 R34
+# source: C2 t_lane_setup_hook_and_custom_resource
+# milestone: M5
+
+env AW_OWNER_PROVIDER=$WORK/provider
+workspace solo --single --init
+exec aw attach 'one'
+cd .worktrees/01
+exec aw run solo sh -c 'echo "$AW_BUCKET_NAME $BUCKET"'
+stdout '^bucket-01 bucket-01$'
+cd ../..
+exec aw discard one --yes
+exec sh -c 'cat $STUB_STATE/provider'
+stdout '^create protocol=1 lane=01$'
+stdout '^env protocol=1 lane=01$'
+stdout '^drop bucket-01$'
+
+-- provider --
+#!/bin/sh
+input=$(cat)
+protocol=$(printf '%s' "$input" | sed 's/.*"protocol":\([0-9]*\).*/\1/')
+lane=$(printf '%s' "$input" | sed 's/.*"lane":"\([0-9]*\)".*/\1/')
+case "$1" in
+  create) echo "create protocol=$protocol lane=$lane" >> "$STUB_STATE/provider"; echo '{"ok":true,"names":["bucket-'$lane'"]}' ;;
+  env) echo "env protocol=$protocol lane=$lane" >> "$STUB_STATE/provider"; echo '{"ok":true,"env":{"NAME":"bucket-'$lane'","{bucket}":"bucket-'$lane'"}}' ;;
+  drop) echo "drop $(printf '%s' "$input" | sed 's/.*"name":"\([^"]*\)".*/\1/')" >> "$STUB_STATE/provider"; echo '{"ok":true}' ;;
+  *) echo '{"ok":true}' ;;
+esac
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[lanes.data.bucket]
+provider = "external"
+command = "sh $AW_OWNER_PROVIDER"
+env = { BUCKET = "{bucket}" }
+
+[projects.solo]
+directory = "."
