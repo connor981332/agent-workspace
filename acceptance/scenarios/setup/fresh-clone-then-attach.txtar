@@ -1,0 +1,15 @@
+# A person joining an existing workspace can claim a lane straight after setup, with no repair.
+# req: R11
+# source: C1 test_fresh_checkout_bootstraps_then_attaches_without_manual_repair
+# milestone: M7
+
+owner-may-change
+workspace solo --single --init
+exec git clone -q $WORK/remotes/solo.git $WORK/fresh/solo
+cd $WORK/fresh/solo
+exec bin/aw setup --harness claude
+exec bin/aw attach 'first task'
+stdout 'Claimed lane 01'
+cd .worktrees/01
+exec bin/aw whoami
+stdout 'location +lane root'

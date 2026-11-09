@@ -1,0 +1,15 @@
+# A Codex configuration someone wrote is left alone, and setup says what to add; aw doctor names it.
+# req: R55
+# source: plan risk 7
+# milestone: M7
+
+owner-may-change
+workspace solo --single --init
+exec sh -c 'mkdir -p .codex; printf "model = \"mine\"\n" > .codex/config.toml'
+exec aw setup --harness claude
+stderr 'someone else.s file, so aw left it alone'
+stderr 'sandbox_workspace_write.writable_roots'
+grep 'model = "mine"' .codex/config.toml
+! grep 'writable_roots' .codex/config.toml
+exec aw doctor
+stdout 'harness sandboxes: .* does not allow'

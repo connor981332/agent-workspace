@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 
@@ -9,17 +10,21 @@ import (
 
 	"github.com/connor981332/agent-workspace/internal/app"
 	"github.com/connor981332/agent-workspace/internal/compose"
+	"github.com/connor981332/agent-workspace/internal/doctor"
 	"github.com/connor981332/agent-workspace/internal/ui"
 )
 
 func newSetupCmd() *cobra.Command {
-	var asJSON bool
+	var asJSON, startContainers bool
+	var harnessName string
 	cmd := &cobra.Command{
 		Use:   "setup [lane]",
-		Short: "Install aw's hooks in this workspace, or rerun a lane's setup from its first incomplete step",
-		Long: `Point every repository's core.hooksPath at aw's hooks dispatcher, which refuses ref updates a lane may
-not make and then runs the team's own hook of the same name. Merge aw's guard hooks into each
-harness's project configuration, keeping other settings. Safe to rerun.
+		Short: "Set up this workspace after cloning it, or rerun a lane's setup from its first incomplete step",
+		Long: `Set up this workspace on this machine: clone the project repositories, create your individual
+configuration, check the secret files, install aw's Git hooks dispatcher and each harness's hooks and
+sandbox settings, install dependencies in the owner checkout, and run aw doctor. Safe to rerun.
+
+Containers start only if you say so: on a terminal aw asks, and otherwise pass --containers.
 
 With a lane, rerun that lane's setup in the foreground, from its first incomplete step. An agent may
 do this for its own lane.`,
@@ -32,6 +37,18 @@ do this for its own lane.`,
 			if err != nil {
 				return err
 			}
+			errOut := cmd.ErrOrStderr()
+			progress := cmd.OutOrStdout()
+			if asJSON {
+				progress = errOut // standard output is the JSON
+			}
+			if err := cloneProjects(cmd.Context(), ws.Owner, c, progress, errOut); err != nil {
+				return err
+			}
+			if err := ensureIndividual(c, harnessName, cmd.InOrStdin(), progress); err != nil {
+				return err
+			}
+			reportSecrets(ws.Owner, c, errOut)
 			results, err := app.InstallGitHooks(context.Background(), ws.Owner, c)
 			if err != nil {
 				return err
@@ -47,8 +64,24 @@ do this for its own lane.`,
 			if err != nil {
 				return err
 			}
+			sandboxes, err := setupSandboxes(ws, c)
+			if err != nil {
+				return err
+			}
+			installFailed := installOwner(cmd, ws, c, startContainers, asJSON)
+			report := doctor.Run(ws.Owner, frameworkVersion(), false)
+			var finish error
+			switch {
+			case !report.OK:
+				finish = &silentError{errors.New("aw doctor found problems")}
+			case installFailed != nil:
+				finish = &silentError{installFailed}
+			}
 			if asJSON {
-				return writeJSON(cmd.OutOrStdout(), map[string]any{"repos": results, "harness_config": configs, "instructions": instructions})
+				if err := writeJSON(cmd.OutOrStdout(), map[string]any{"repos": results, "harness_config": configs, "instructions": instructions, "sandboxes": sandboxes, "doctor": report}); err != nil {
+					return err
+				}
+				return finish
 			}
 			out := cmd.OutOrStdout()
 			for _, r := range results {
@@ -79,12 +112,36 @@ do this for its own lane.`,
 					fmt.Fprintf(out, "%s: wrote your personal instructions (Git ignores this file)\n", r.Path)
 				}
 			}
+			for _, r := range sandboxes {
+				if r.Note != "" {
+					fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s: %s\n", r.Path, r.Note)
+				}
+			}
 			if changed {
 				fmt.Fprintln(out, "Next: commit these files, so lanes get them. Codex asks once to trust project hooks, and Grok to trust the folder (/hooks-trust).")
 			}
-			return nil
+			problems := 0
+			for _, c := range report.Checks {
+				if c.Status == doctor.Warn || c.Status == doctor.Fail {
+					problems++
+					line := fmt.Sprintf("%s: %s", c.Name, ui.Clean(c.Message))
+					if c.Fix != "" {
+						line += " → " + ui.Clean(c.Fix)
+					}
+					fmt.Fprintf(cmd.ErrOrStderr(), "doctor: %s\n", line)
+				}
+			}
+			if problems == 0 {
+				fmt.Fprintln(out, "aw doctor found nothing wrong.")
+			}
+			if finish == nil {
+				fmt.Fprintln(out, "Set up. Next: aw new \"<purpose>\", or start a harness here.")
+			}
+			return finish
 		}),
 	}
 	cmd.Flags().BoolVar(&asJSON, "json", false, "print the result as JSON")
+	cmd.Flags().BoolVar(&startContainers, "containers", false, "start the devcontainers without asking")
+	cmd.Flags().StringVar(&harnessName, "harness", "", "the default harness for your individual configuration, without asking")
 	return cmd
 }

@@ -1,0 +1,50 @@
+# bin/aw setup from a fresh clone, with no aw on PATH and nothing cached: it fetches and verifies the
+# pinned binary, clones the projects, writes the individual layer, reports missing secrets, installs
+# hooks and dependencies, and ends with aw doctor.
+# req: R11 R12
+# source: distribution.md, "Joining a workspace"
+# milestone: M7
+
+owner-may-change
+workspace shop --init
+exec sh -c 'sed -i.bak "s#REMOTES#$WORK/remotes#g" workspace.toml && rm workspace.toml.bak && printf "/web/\n/api/\n" >> .gitignore; git add -A && git -c user.name=t -c user.email=t@t commit -q -m pin --allow-empty && git push -q origin HEAD:main'
+
+exec git clone -q $WORK/remotes/shop.git $WORK/fresh/shop
+cd $WORK/fresh/shop
+exec sh -c 'rm -rf "$XDG_CACHE_HOME/agent-workspace" "$XDG_CONFIG_HOME/agent-workspace/shop.toml"'
+exec bin/aw setup --harness codex
+stdout 'Cloning .*web.git'
+stdout 'Cloning .*api.git'
+stdout 'Wrote .*shop.toml'
+stderr 'secret file .env is missing'
+stdout 'web: installing dependencies'
+stdout 'installed the hooks dispatcher'
+exists web/README.md
+exists api/README.md
+exists web/install.log
+exists $XDG_CACHE_HOME/agent-workspace/bin/$AW_VERSION/aw
+grep 'harness = "codex"' $XDG_CONFIG_HOME/agent-workspace/shop.toml
+stdout 'Set up. Next'
+exec bin/aw attach 'one'
+stdout 'Claimed lane 01'
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[projects.web]
+directory = "web"
+repo = "REMOTES/web.git"
+install = "echo installed >> install.log"
+install_stamp = ["README.md"]
+secrets = [".env"]
+
+[projects.api]
+directory = "api"
+repo = "REMOTES/api.git"
+

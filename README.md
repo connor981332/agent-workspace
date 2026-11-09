@@ -4,6 +4,10 @@ Agent Workspace is a development environment that facilitates parallel agent ses
 
 > **Status: pre-release.** Nothing here is stable yet. Interfaces, file formats and directory layout will change without notice, and nothing is packaged or versioned for outside use. We plan to make this project open source once the design settles. The code is already under the [Apache-2.0 license](LICENSE).
 
+## Getting started
+
+See [Getting started](docs/getting-started.md), the [supported harnesses](docs/harnesses.md), the [configuration reference](docs/reference/config.md) and the [safety model](docs/safety.md).
+
 ## The problem
 
 Running several coding agents against the same product at once goes wrong in predictable ways. They edit the same checkout, fight over one dev server or database, start and stop each other's containers, and leave behind work nobody can safely clean up. Teams patch this with hand-written conventions in agent instruction files, which are easy to ignore and hard to share.

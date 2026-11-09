@@ -17,6 +17,7 @@ import (
 	"github.com/connor981332/agent-workspace/internal/gitx/run"
 	"github.com/connor981332/agent-workspace/internal/lifecycle"
 	"github.com/connor981332/agent-workspace/internal/providers"
+	"github.com/connor981332/agent-workspace/internal/sandbox"
 	"github.com/connor981332/agent-workspace/internal/state"
 )
 
@@ -270,7 +271,7 @@ func repoLabel(r state.LaneRepo) string {
 func (m *Manager) evidenceOptions(r state.LaneRepo) evidence.Options {
 	o := evidence.Options{ExpectBranch: r.Branch}
 	if r.Project == "" {
-		o.Ours = append(o.Ours, ".aw/owner")
+		o.Ours = append(o.Ours, append([]string{".aw/owner"}, sandbox.Ours(r.Path)...)...)
 		for _, name := range sortedKeys(m.Cfg.Projects) {
 			if p := m.Cfg.Projects[name]; p.Directory != "." && p.Lanes != "shared" {
 				o.Ours = append(o.Ours, p.Directory)
@@ -282,7 +283,7 @@ func (m *Manager) evidenceOptions(r state.LaneRepo) evidence.Options {
 		o.Generated = append(o.Generated, p.Generated...)
 		o.Ours = append(o.Ours, p.Secrets...)
 		if p.Directory == "." {
-			o.Ours = append(o.Ours, ".aw/owner")
+			o.Ours = append(o.Ours, append([]string{".aw/owner"}, sandbox.Ours(r.Path)...)...)
 		}
 	}
 	return o
@@ -547,6 +548,7 @@ func (m *Manager) removeRootLinks(root string) {
 	}
 	os.Remove(filepath.Join(root, ".aw", "owner"))
 	os.Remove(filepath.Join(root, ".aw"))
+	sandbox.Remove(root)
 }
 
 // CallerLane is the number of the lane a command runs in, or 0 in the owner checkout.

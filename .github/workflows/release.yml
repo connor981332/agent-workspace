@@ -137,3 +137,25 @@ jobs:
       - name: Acceptance suite against the published assets
         working-directory: acceptance
         run: go test -count=1 ./...
+
+  # bin/aw setup from a fresh clone against the published release: a clean Ubuntu container, with
+  # only what R11 allows plus cosign, and a macOS runner.
+  fresh-clone:
+    needs: publish
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: sigstore/cosign-installer@v4
+      - name: Clean ubuntu:24.04 container
+        if: runner.os == 'Linux'
+        run: |
+          docker run --rm -v "$PWD:/src:ro" -v "$(command -v cosign):/usr/local/bin/cosign:ro" ubuntu:24.04 sh -c \
+            "apt-get update -qq >/dev/null && apt-get install -y -qq git curl ca-certificates >/dev/null && sh /src/.github/scripts/fresh-clone.sh ${GITHUB_REF_NAME#v}"
+      - name: macOS
+        if: runner.os == 'macOS'
+        run: sh .github/scripts/fresh-clone.sh "${GITHUB_REF_NAME#v}"
