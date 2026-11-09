@@ -207,7 +207,7 @@ func decideShell(s Scope, src string, cwd shell.Dir) Decision {
 	var asks []Decision
 	for _, c := range p.Commands {
 		for _, rule := range []func(Scope, shell.Command) Decision{
-			pathsRule, ownerOnlyRule, gitRule, containerRule, killRule, serverRule, secretRule, muxRule, selfModRule, unattachedRule, publicationRule, teamGuardRule,
+			computedRule, pathsRule, ownerOnlyRule, gitRule, containerRule, killRule, serverRule, secretRule, muxRule, selfModRule, unattachedRule, publicationRule, teamGuardRule,
 		} {
 			switch d := rule(s, c); d.Verdict {
 			case Deny:

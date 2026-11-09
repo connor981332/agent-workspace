@@ -55,7 +55,8 @@ func hook(args []string, version string, stdin io.Reader, stdout, stderr io.Writ
 	if len(args) < 2 {
 		return refuse(errors.New("usage: aw hook <harness> <event> → check the harness's hook configuration (aw setup writes it)"))
 	}
-	if !slices.Contains(Harnesses, args[0]) {
+	declared := declarativeAdapter(args[0], version)
+	if declared == nil && !slices.Contains(Harnesses, args[0]) {
 		return refuse(fmt.Errorf("%q is not a supported harness (%v) → check the harness's hook configuration", args[0], Harnesses))
 	}
 	raw, err := io.ReadAll(io.LimitReader(stdin, maxPayload+1))
@@ -66,6 +67,9 @@ func hook(args []string, version string, stdin io.Reader, stdout, stderr io.Writ
 		return refuse(errors.New("the hook payload is larger than 4 MB"))
 	}
 	p, a, err := Normalize(args[0], args[1], raw)
+	if declared != nil {
+		p, a, err = normalizeWith(declared, args[1], raw)
+	}
 	if err != nil {
 		return refuse(err)
 	}

@@ -5,7 +5,7 @@
 Agent Workspace has three levels of specialization, and every item below should be read in that light:
 
 - **Framework** (generic): lives in this repository and knows nothing about any particular product.
-- **Team / organization**: a product's workspace, such as RideTracker or FabWorks. It adds repos, commands, rules and shared infrastructure.
+- **Team / organization**: a product's workspace. It adds repos, commands, rules and shared infrastructure.
 - **Individual**: one developer's overrides, plans, notes and skills.
 
 1. **Three layers: framework, team, individual.** The team layer adds repos, commands, instructions and rules. The personal layer can override the team, except for settings the team locks. You can see where any setting came from.

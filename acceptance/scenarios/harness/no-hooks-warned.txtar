@@ -1,0 +1,15 @@
+# A harness without hooks still gets the composed instructions and bin/aw, and aw says plainly that
+# nothing confines it.
+# req: R57
+# source: spec
+# milestone: M12
+
+owner-may-change
+stubs claude
+workspace solo --single --init
+exec aw setup --harness claude
+exists AGENTS.md
+exec cp $WORK/.stubs/claude $WORK/.stubs/plainagent
+exec aw new --harness plainagent 'one'
+stderr 'plainagent has no hooks here, so nothing confines it'
+grep 'nothing guards' $AW_REPO/docs/harnesses.md

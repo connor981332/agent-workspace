@@ -140,10 +140,14 @@ v0.0.11 passed the whole release workflow: Sigstore signature, SLSA provenance, 
 
 **In progress:** M11, on `m11/onboarding`. `aw inspect`, `aw doctor --projects`, `aw rehearse`, the two onboarding skills composed for each harness, `aw onboard` and `aw add project`. Known limits: the skills' output has not been judged against a real project by a person; rehearsal does not detect shared temporary files.
 
-**Pending manual checks:** the v0.1 dogfooding (M7); the macOS devcontainer checklist on Docker Desktop and OrbStack (`docs/dev/macos-devcontainer-checklist.md`, M6); the hot-path and budget benchmarks on an Apple Silicon laptop (T3, M1, M2;
+**M11 complete.** (No tag, per §7.)
+
+**M12 is built.** Declarative adapters, `aw supervise`, the tier-2 warning (R57), documentation for outsiders, contribution guidelines, and a security pass (`docs/dev/security-review.md`). Every requirement now has a passing scenario. Candidate archiving and scrubbing their names from this plan and the spec wait for v0.1.0.
+
+**Pending manual checks:** an independent security review, the public announcement, `v0.1.0` and `v1.0.0`, the Homebrew tap's token, and the v0.1 dogfooding (M7); the macOS devcontainer checklist on Docker Desktop and OrbStack (`docs/dev/macos-devcontainer-checklist.md`, M6); the hot-path and budget benchmarks on an Apple Silicon laptop (T3, M1, M2;
 docs/dev/benchmarks.md).
 
-**Next step:** Finish M10, then M11 and M12. v0.1.0 waits on the spec owner's dogfooding.
+**Next step:** The spec owner dogfoods a release candidate on two real workspaces, then `v0.1.0` is tagged and the candidates are archived.
 
 ## How to use this plan
 

@@ -12,6 +12,10 @@ a guard that cannot run refuses the call rather than allowing it.
 
 A harness without hooks still gets the composed `AGENTS.md`, but nothing guards its calls.
 
+## Adding another harness
+
+A team can add a hooked harness without a new release of `aw`, with a mapping from its payload fields and tool names in `[harnesses.<name>]` of `workspace.toml`, and point its hooks at `bin/aw hook <name> <event>`. A tool the mapping does not list is refused. The [configuration reference](reference/config.md) lists the keys.
+
 When a harness changes its hook format, its adapter refuses calls until a release of `aw` supports the
 new format, and the error says so.
 
