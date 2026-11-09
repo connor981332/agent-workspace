@@ -73,6 +73,7 @@ setup = { run = "npm run build:assets", needs = ["build-slot"] }
 | `setup` | After installs, for a newly created lane | project worktree |
 | `reset` | Instead of `setup`, for a lane recycled from the pool | project worktree |
 | `teardown` | Before data is dropped, when a lane is destroyed | lane root |
+| `restore` | After a snapshot is restored into the lane (optional; the place to migrate) | project worktree |
 
 - Hooks must be safe to rerun. `aw setup <lane>` reruns from the first incomplete step, in the
   foreground. An agent may run it for its own lane; every other use of `aw setup` is the human's.
@@ -102,7 +103,7 @@ Every hook, team command and server receives:
 | `AW_NAMESPACE` | Workspace namespace |
 | `AW_HOSTNAME` | The lane's hostname, e.g. `lane-03.localhost` |
 | `AW_FRESH` | Hooks only: `1` when the lane's data was just created or reset |
-| `AW_PHASE` | Hooks only: `prepare`, `install`, `setup`, `reset` or `teardown` |
+| `AW_PHASE` | Hooks only: `prepare`, `install`, `setup`, `reset`, `restore` or `teardown` |
 | `AW_<DATA>_*` | Variables from each provider, e.g. `AW_DB_URL`, `AW_CACHE_URL` |
 | `AW_SEAT_<RESOURCE>`, `AW_PORT_<SERVER>`, `AW_TOKEN_<RESOURCE>` | Set while the lane holds a seat |
 | `AW_TOOL` | Path to `bin/aw`, so hooks can call `"$AW_TOOL" run <project> …` |
@@ -117,13 +118,18 @@ Providers own per-lane data, where getting teardown wrong destroys something.
 ```toml
 [lanes.data.db]
 provider = "postgres"
+url = "postgres://postgres@localhost:5432"   # a password belongs in the individual layer or PGPASSWORD
 template = "shop_template"            # protected: nothing may connect to it
 databases = ["shop_development", "shop_test"]
 env = { DATABASE_URL = "{url:shop_development}" }
 
 [lanes.data.cache]
 provider = "redis"
+url = "redis://localhost:6379"
 ```
+
+`service` runs the provider's client in a container instead of on the host: a Compose service with one
+running container, or a container's exact name. An ambiguous name is refused.
 
 | Verb | Does |
 |---|---|
@@ -142,8 +148,21 @@ protocol ([architecture.md](architecture.md#extension-protocol)).
 Rules for every provider: drop by exact recorded name, never through project code; never connect to
 the template; refuse to act on data not recorded as belonging to the lane.
 
+Project code can make databases of its own, such as Rails' parallel test databases. The provider
+records every database whose name begins with one of the lane's recorded names followed by `_`: at
+`create`, after each `setup` and `reset`, and again before `reset` and `drop`. After that they are
+recorded names like any other. A name recorded as another lane's, the template and snapshots are
+never picked up this way.
+
+`aw snapshot <name>`, `aw restore <name>` and `aw snapshots` work on the lane they run in, and agents
+may use them. Snapshot names are shared across the workspace, so one onboarded snapshot can seed other
+lanes, and a name in use is never overwritten. A Postgres snapshot copies the lane's configured
+databases, not the copies project code made of them. Both commands stop the lane's servers first and
+start them again afterwards, because Postgres cannot copy a database in use (candidate 2, finding 14);
+`terminate = true` ends other connections before a restore or drop. Redis takes no snapshots.
+
 Restoring a snapshot taken on an older schema leaves the data behind the code. Teams run migrations in
-`reset` or in a `restore` hook (candidate 2, finding 13).
+a `restore` hook (candidate 2, finding 13).
 
 ## External-service stand-ins
 

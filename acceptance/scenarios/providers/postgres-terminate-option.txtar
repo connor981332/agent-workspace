@@ -1,0 +1,46 @@
+# A database in use cannot be restored over: the error names the option, and with terminate = true
+# aw ends the other connections first.
+# req: R35
+# source: C2 findings 14
+# milestone: M5
+
+stubs psql
+exec sh -c 'mkdir -p $STUB_STATE/pg'
+workspace solo --single --init
+exec aw attach 'one'
+cd .worktrees/01
+exec aw run solo true
+exec aw snapshot base
+exec sh -c 'echo shop_01 > $STUB_STATE/pg-busy'
+! exec aw restore base
+stderr 'being accessed by other users'
+stderr 'terminate = true'
+exec sh -c 'cat $STUB_STATE/pg/shop_01; echo still-here'
+stdout still-here
+
+cd ../..
+exec sh -c 'sed -i.bak "s/^databases = .*/&\nterminate = true/" workspace.toml; rm workspace.toml.bak'
+exec git -c user.name=t -c user.email=t@t commit -q -am 'terminate'
+cd .worktrees/01
+exec aw restore base
+stdout 'Restored db'
+grep 'pg_terminate_backend' $STUB_LOG
+
+owner-may-change
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[lanes.data.db]
+provider = "postgres"
+url = "postgres://postgres@localhost:5432"
+databases = ["shop"]
+
+[projects.solo]
+directory = "."

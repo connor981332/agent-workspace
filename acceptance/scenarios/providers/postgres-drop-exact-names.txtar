@@ -1,0 +1,44 @@
+# Dropping a lane removes exactly its recorded databases, and the copies project code named after
+# them, and never the template, a snapshot or another lane's.
+# req: R34 R33
+# source: C2 t_lane_rm_force_and_drop_data
+# milestone: M5
+
+stubs psql
+exec sh -c 'mkdir -p $STUB_STATE/pg; : > $STUB_STATE/pg/shop_template'
+workspace solo --single --init
+exec aw attach 'one'
+exec aw attach 'two'
+cd .worktrees/01
+exec aw run solo true
+cd ../02
+exec aw run solo true
+cd ../..
+exec sh -c ': > $STUB_STATE/pg/shop_01_0; : > $STUB_STATE/pg/shop_01_1; : > $STUB_STATE/pg/shopping; : > $STUB_STATE/pg/shop_snapshot_x_shop'
+exec aw discard one --yes
+exec sh -c 'ls $STUB_STATE/pg'
+! stdout '^shop_01'
+stdout '^shop_02$'
+stdout '^shop_template$'
+stdout '^shopping$'
+stdout '^shop_snapshot_x_shop$'
+! grep 'DROP DATABASE IF EXISTS "shop_template"' $STUB_LOG
+! grep 'DROP DATABASE IF EXISTS "shop_02"' $STUB_LOG
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[lanes.data.db]
+provider = "postgres"
+url = "postgres://postgres@localhost:5432"
+template = "shop_template"
+databases = ["shop"]
+
+[projects.solo]
+directory = "."

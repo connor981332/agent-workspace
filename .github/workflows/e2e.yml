@@ -1,0 +1,34 @@
+# The end-to-end suite with real Docker, Postgres and Redis (plans/release-candidate.md §7). It runs
+# on PRs that touch what it covers, nightly, and before each release.
+name: e2e
+
+on:
+  pull_request:
+    paths:
+      - 'internal/runners/**'
+      - 'internal/providers/**'
+      - 'internal/procs/**'
+      - 'acceptance/e2e/**'
+      - 'acceptance/e2e_test.go'
+      - '.github/workflows/e2e.yml'
+  schedule:
+    - cron: '17 4 * * *'
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  e2e-docker:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: End-to-end suite
+        working-directory: acceptance
+        env:
+          AW_E2E: "1"
+        run: go test -count=1 -timeout 15m -run TestE2E .

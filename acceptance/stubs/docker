@@ -44,8 +44,16 @@ compose)
   echo "COMPOSE_FILE=${COMPOSE_FILE:-}" >> "$STUB_LOG"
   ;;
 exec)
-  case "$*" in
-    *psql*"-c SELECT"*) cat "$STUB_STATE/psql-select" 2>/dev/null || true ;;
+  # Past the options and the container is the command, which the stubs of psql and redis-cli answer.
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -i|-t|-it) shift ;;
+      -e|-u|-w) shift 2 ;;
+      *) shift; break ;;
+    esac
+  done
+  case "${1:-}" in
+    psql|redis-cli) exec "$@" ;;
   esac
   ;;
 esac

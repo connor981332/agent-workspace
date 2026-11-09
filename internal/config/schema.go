@@ -136,8 +136,13 @@ var schema = table("",
 				"command", str("For provider = \"external\": the provider executable."),
 				"template", str("postgres: the template database lanes are cloned from. Nothing ever connects to it."),
 				"databases", strList("postgres: the databases each lane gets, named <database>_<lane>."),
-				"service", str("Run the provider's client (psql, redis-cli) in this container service instead of on the host."),
-				"env", mapOf("Variables the lane's commands receive, e.g. DATABASE_URL = \"{url:shop_development}\".",
+				"url", str("postgres or redis: where the server is, e.g. postgres://postgres@localhost:5432. Keep a password out of "+
+					"the team layer: put this key in the individual layer, or use PGPASSWORD or REDISCLI_AUTH."),
+				"terminate", boolean("postgres: end other connections to a database before dropping or restoring it.").withDefault(false),
+				"service", str("Run the provider's client (psql, redis-cli) in this container instead of on the host: a Compose service "+
+					"with one running container, or a container's exact name."),
+				"env", mapOf("Variables the lane's commands receive, e.g. DATABASE_URL = \"{url:shop_development}\". "+
+					"{lane} and {name} are the lane's number and name.",
 					envRE, envFix, str("")),
 			)),
 	),

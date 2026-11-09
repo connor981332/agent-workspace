@@ -1,0 +1,74 @@
+# Create, snapshot, restore and drop against real Postgres and Redis, with the clients in the containers.
+
+exec docker run -d --name $E2E_PG -e POSTGRES_PASSWORD=pw postgres:16.4-alpine
+exec docker run -d --name $E2E_REDIS redis:7.2.5-alpine
+exec sh -c 'i=0; until docker exec $E2E_PG pg_isready -U postgres -q; do i=$((i+1)); test $i -lt 120 || exit 1; sleep 0.5; done'
+exec sh -c 'i=0; until docker exec $E2E_PG psql -U postgres -qAt -c "select 1" >/dev/null 2>&1; do i=$((i+1)); test $i -lt 120 || exit 1; sleep 0.5; done'
+exec sh -c 'i=0; until test "$(docker exec $E2E_REDIS redis-cli ping)" = PONG; do i=$((i+1)); test $i -lt 120 || exit 1; sleep 0.5; done'
+
+# A template with one row, which each lane starts from.
+exec sh -c 'docker exec $E2E_PG psql -U postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE shop_template"'
+exec sh -c 'docker exec $E2E_PG psql -U postgres -d shop_template -v ON_ERROR_STOP=1 -c "CREATE TABLE t (v text); INSERT INTO t VALUES (''from-template'')"'
+exec sh -c 'docker exec $E2E_REDIS redis-cli set owner-key kept'
+
+exec sh -c 'sed -i "s/PG_CONTAINER/$E2E_PG/; s/REDIS_CONTAINER/$E2E_REDIS/" workspace.toml'
+workspace solo --single --init
+
+exec aw attach 'one'
+cd .worktrees/01
+exec aw run solo sh -c 'echo "$DATABASE_URL $AW_CACHE_URL"'
+stdout '^postgres://postgres:pw@localhost:5432/shop_01 redis://localhost:6379/1$'
+exec sh -c 'docker exec $E2E_PG psql -U postgres -d shop_01 -qAt -c "SELECT v FROM t"'
+stdout '^from-template$'
+
+# A snapshot, a change, and a restore that undoes the change.
+exec sh -c 'docker exec $E2E_PG psql -U postgres -d shop_01 -q -c "INSERT INTO t VALUES (''in-snapshot'')"'
+exec aw snapshot base
+stdout 'Took snapshot base of db'
+exec sh -c 'docker exec $E2E_PG psql -U postgres -d shop_01 -q -c "INSERT INTO t VALUES (''after-snapshot'')"'
+exec aw restore base
+stdout 'Restored db from snapshot base'
+exec sh -c 'docker exec $E2E_PG psql -U postgres -d shop_01 -qAt -c "SELECT v FROM t ORDER BY v"'
+stdout '^in-snapshot$'
+! stdout 'after-snapshot'
+
+# A copy project code made, and a Redis key in the lane's database.
+exec sh -c 'docker exec $E2E_PG psql -U postgres -q -c "CREATE DATABASE shop_01_0"'
+exec sh -c 'docker exec $E2E_REDIS redis-cli -n 1 set lane-key x'
+
+# Dropping removes the lane's data by name, and nothing else.
+cd ../..
+exec aw discard one --yes
+exec sh -c 'docker exec $E2E_PG psql -U postgres -qAt -c "SELECT datname FROM pg_database ORDER BY 1"'
+! stdout '^shop_01'
+stdout '^shop_template$'
+stdout '^solo_snapshot_base_shop$'
+exec sh -c 'docker exec $E2E_REDIS redis-cli -n 1 dbsize'
+stdout '^0$'
+exec sh -c 'docker exec $E2E_REDIS redis-cli get owner-key'
+stdout '^kept$'
+
+-- workspace.toml --
+[workspace]
+name = "Solo"
+namespace = "solo"
+schema = 1
+
+[lanes]
+pool = 0
+
+[lanes.data.db]
+provider = "postgres"
+url = "postgres://postgres:pw@localhost:5432"
+service = "PG_CONTAINER"
+template = "shop_template"
+databases = ["shop"]
+env = { DATABASE_URL = "{url:shop}" }
+
+[lanes.data.cache]
+provider = "redis"
+url = "redis://localhost:6379"
+service = "REDIS_CONTAINER"
+
+[projects.solo]
+directory = "."

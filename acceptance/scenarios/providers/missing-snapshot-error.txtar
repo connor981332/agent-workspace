@@ -1,0 +1,32 @@
+# Restoring a snapshot that does not exist is refused, names the fix, and changes nothing.
+# req: R35 R93
+# source: C2 t_lane_snapshot_restore
+# milestone: M5
+
+stubs psql
+workspace solo --single --init
+exec aw attach 'one'
+cd .worktrees/01
+exec aw run solo true
+! exec aw restore nothere
+stderr 'there is no snapshot named nothere → aw snapshots lists them'
+! grep 'DROP DATABASE' $STUB_LOG
+! exec aw snapshot 'bad name'
+stderr 'is not a snapshot name'
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[lanes.data.db]
+provider = "postgres"
+url = "postgres://postgres@localhost:5432"
+databases = ["shop"]
+
+[projects.solo]
+directory = "."

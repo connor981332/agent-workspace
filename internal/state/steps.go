@@ -2,6 +2,7 @@ package state
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"time"
 )
@@ -184,4 +185,98 @@ func (s Setup) Age() time.Duration {
 		return 0
 	}
 	return time.Since(t)
+}
+
+// RecordLaneData records an object as belonging to a lane.
+func RecordLaneData(tx *sql.Tx, lane int, data, object string) error {
+	_, err := tx.Exec(`INSERT INTO lane_data (lane, data, object) VALUES (?, ?, ?) ON CONFLICT DO NOTHING`, lane, data, object)
+	return err
+}
+
+// ForgetLaneData removes an object's record, once the object has gone.
+func ForgetLaneData(tx *sql.Tx, lane int, data, object string) error {
+	_, err := tx.Exec(`DELETE FROM lane_data WHERE lane = ? AND data = ? AND object = ?`, lane, data, object)
+	return err
+}
+
+// LaneData returns what is recorded as a lane's, for one data block.
+func LaneData(q Querier, lane int, data string) ([]string, error) {
+	return queryStrings(q, `SELECT object FROM lane_data WHERE lane = ? AND data = ? ORDER BY object`, lane, data)
+}
+
+// OtherLanesData returns what is recorded as any other lane's, for one data block.
+func OtherLanesData(q Querier, lane int, data string) ([]string, error) {
+	return queryStrings(q, `SELECT object FROM lane_data WHERE lane != ? AND data = ? ORDER BY object`, lane, data)
+}
+
+func queryStrings(q Querier, query string, args ...any) ([]string, error) {
+	rows, err := q.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var s string
+		if err := rows.Scan(&s); err != nil {
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	return out, rows.Err()
+}
+
+// Snapshot is a named copy of one data block. Names are shared across the workspace.
+type Snapshot struct {
+	Data    string   `json:"data"`
+	Name    string   `json:"name"`
+	Lane    int      `json:"lane"`
+	Objects []string `json:"objects"`
+	Created string   `json:"created"`
+}
+
+// RecordSnapshot records a snapshot.
+func RecordSnapshot(tx *sql.Tx, s Snapshot) error {
+	objects, err := json.Marshal(s.Objects)
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(`INSERT INTO snapshots (data, name, lane, objects, created) VALUES (?, ?, ?, ?, ?)`, s.Data, s.Name, s.Lane, string(objects), now())
+	return err
+}
+
+// SnapshotByName returns a snapshot, or ErrNotFound.
+func SnapshotByName(q Querier, data, name string) (Snapshot, error) {
+	s := Snapshot{Data: data, Name: name}
+	var objects string
+	err := q.QueryRow(`SELECT lane, objects, created FROM snapshots WHERE data = ? AND name = ?`, data, name).Scan(&s.Lane, &objects, &s.Created)
+	if errors.Is(err, sql.ErrNoRows) {
+		return s, ErrNotFound
+	}
+	if err != nil {
+		return s, err
+	}
+	return s, json.Unmarshal([]byte(objects), &s.Objects)
+}
+
+// Snapshots lists every snapshot.
+func Snapshots(q Querier) ([]Snapshot, error) {
+	rows, err := q.Query(`SELECT data, name, lane, objects, created FROM snapshots ORDER BY name, data`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Snapshot{}
+	for rows.Next() {
+		var s Snapshot
+		var objects string
+		if err := rows.Scan(&s.Data, &s.Name, &s.Lane, &objects, &s.Created); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal([]byte(objects), &s.Objects); err != nil {
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	return out, rows.Err()
 }

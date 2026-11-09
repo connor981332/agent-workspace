@@ -1,0 +1,45 @@
+# A snapshot stops the lane's servers first, because Postgres cannot copy a database in use, and
+# starts them again afterwards on the same seat.
+# req: R35 R36
+# source: C1 quiesce
+# milestone: M5
+
+stubs psql
+workspace shop --init
+exec aw attach 'one'
+cd .worktrees/01
+exec aw serve app
+exec aw whoami --json
+json stdout .seats[0].seat 1
+exec sh -c 'i=0; until test -s ../../.git/aw/lanes/01/pid; do i=$((i+1)); test $i -lt 400 || exit 1; sleep 0.02; done; cp ../../.git/aw/lanes/01/pid ../../.git/before'
+exec aw snapshot one
+exec sh -c 'i=0; until ! cmp -s ../../.git/aw/lanes/01/pid ../../.git/before; do i=$((i+1)); test $i -lt 400 || exit 1; sleep 0.02; done'
+exec aw whoami --json
+json stdout .seats[0].seat 1
+exec aw stop app
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[lanes.data.db]
+provider = "postgres"
+url = "postgres://postgres@localhost:5432"
+databases = ["shop"]
+
+[projects.web]
+directory = "web"
+
+[projects.web.servers.app]
+command = 'echo $$ > "$AW_LANE_STATE/pid"; exec sleep 30'
+port = 39100
+
+[resources.app]
+kind = "process"
+capacity = 2
+servers = ["web.app"]

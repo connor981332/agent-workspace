@@ -66,6 +66,8 @@ type Data struct {
 	Command   string            `json:"command"`
 	Template  string            `json:"template"`
 	Databases []string          `json:"databases"`
+	URL       string            `json:"url"`
+	Terminate bool              `json:"terminate"`
 	Service   string            `json:"service"`
 	Env       map[string]string `json:"env"`
 }
@@ -174,6 +176,11 @@ func (m *Multiplexer) UnmarshalJSON(data []byte) error {
 type Ports struct {
 	Offset int `json:"offset"`
 }
+
+var databaseRE = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+// redisDatabases is how many databases a default Redis server has.
+const redisDatabases = 16
 
 // Hook is a lifecycle step: a command string, or { run, timeout, needs }.
 type Hook struct {
@@ -591,9 +598,29 @@ func (c *Config) check(team *doc) Errors {
 			if len(d.Databases) == 0 {
 				fail(p, "is a postgres provider with no databases", `add databases = ["<name>"]`)
 			}
+			if d.URL == "" {
+				fail(p, "is a postgres provider with no url", `add url = "postgres://postgres@localhost:5432"`)
+			}
+			for i, db := range d.Databases {
+				if !databaseRE.MatchString(db) {
+					fail(p.child("databases").index(i), fmt.Sprintf("%q is not a plain database name", db), "use letters, digits and underscores, starting with a letter or underscore")
+				}
+				if db == d.Template {
+					fail(p.child("databases").index(i), fmt.Sprintf("%q is the template, and nothing may connect to a template", db), "use a different name for the template or the database")
+				}
+			}
+			if d.Template != "" && !databaseRE.MatchString(d.Template) {
+				fail(p.child("template"), fmt.Sprintf("%q is not a plain database name", d.Template), "use letters, digits and underscores, starting with a letter or underscore")
+			}
 		case "redis":
 			if d.Template != "" || len(d.Databases) > 0 {
 				fail(p, "is a redis provider, which takes no template or databases", "remove template and databases")
+			}
+			if d.URL == "" {
+				fail(p, "is a redis provider with no url", `add url = "redis://localhost:6379"`)
+			}
+			if c.Lanes.Max > redisDatabases-1 {
+				fail(Path{"lanes", "max"}, fmt.Sprintf("is %d, but lanes use Redis databases 1 to %d by default", c.Lanes.Max, redisDatabases-1), fmt.Sprintf("lower max to %d", redisDatabases-1))
 			}
 		}
 		if d.Provider != "external" && d.Command != "" {

@@ -27,11 +27,13 @@ import (
 
 // Phases, as hooks see them in AW_PHASE.
 const (
+	PhaseData     = "data" // not a hook: a provider creates or resets the lane's data
 	PhasePrepare  = "prepare"
 	PhaseInstall  = "install"
 	PhaseSetup    = "setup"
 	PhaseReset    = "reset"
 	PhaseTeardown = "teardown"
+	PhaseRestore  = "restore"
 )
 
 // StartWindow is how long a setup may be recorded with no process before it counts as lost.
@@ -50,12 +52,21 @@ type Step struct {
 	Project string // "" for the workspace's
 	Hook    *config.Hook
 	Stamp   []string // install: the files whose contents decide whether it reruns
+	Data    string   // data: the [lanes.data] block it provisions
 }
 
-// Plan returns a lane's setup steps, in order: what is not specific to one project first, and then
-// each project's. fromPool picks reset over setup.
+// Plan returns a lane's setup steps, in order: the data, what is not specific to one project, and
+// then each project's. fromPool picks reset over setup.
 func Plan(c *config.Config, fromPool bool) []Step {
 	var out []Step
+	data := make([]string, 0, len(c.Lanes.Data))
+	for name := range c.Lanes.Data {
+		data = append(data, name)
+	}
+	slices.Sort(data)
+	for _, name := range data {
+		out = append(out, Step{Name: "data." + name, Phase: PhaseData, Data: name})
+	}
 	if c.Lifecycle.Prepare != nil {
 		out = append(out, Step{Name: PhasePrepare, Phase: PhasePrepare, Hook: c.Lifecycle.Prepare})
 	}
@@ -251,6 +262,10 @@ type Runner struct {
 	Where func(project string) (string, []string, error)
 	// Seats takes the resources a step needs, and returns how to give them back.
 	Seats func(ctx context.Context, needs []string) (func(), error)
+	// Provision creates or resets one data block.
+	Provision func(ctx context.Context, data string, fromPool bool) error
+	// After runs once the steps have, even if one failed. Its failure is reported, not fatal.
+	After func(ctx context.Context) error
 	// Out is told about each step. It may be nil.
 	Out io.Writer
 }
@@ -280,7 +295,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	}
 	ok := true
 	for _, s := range serial {
-		if !r.step(ctx, s, done.finished) {
+		if !r.step(ctx, s, done) {
 			ok = false
 			break
 		}
@@ -292,13 +307,18 @@ func (r *Runner) Run(ctx context.Context) error {
 			go func(list []Step) {
 				defer wg.Done()
 				for _, s := range list {
-					if !r.step(ctx, s, done.finished) {
+					if !r.step(ctx, s, done) {
 						return
 					}
 				}
 			}(list)
 		}
 		wg.Wait()
+	}
+	if r.After != nil {
+		if err := r.After(context.Background()); err != nil {
+			r.say("warning: %v", err)
+		}
 	}
 	return r.finish()
 }
@@ -346,8 +366,8 @@ func (r *Runner) begin(ctx context.Context) (*begun, error) {
 }
 
 // step runs one step, and reports whether the steps after it may run.
-func (r *Runner) step(ctx context.Context, s Step, finished map[string]bool) bool {
-	if finished[s.Name] {
+func (r *Runner) step(ctx context.Context, s Step, b *begun) bool {
+	if b.finished[s.Name] {
 		return true
 	}
 	log := filepath.Join(r.StateDir, "logs", "setup", s.Name+".log")
@@ -368,6 +388,15 @@ func (r *Runner) step(ctx context.Context, s Step, finished map[string]bool) boo
 	}
 	if ctx.Err() != nil {
 		return end(state.StepFailed, "stopped before it ran", nil)
+	}
+	if s.Phase == PhaseData {
+		r.say("%s: running", s.Name)
+		if err := r.Provision(ctx, s.Data, b.fromPool); err != nil {
+			r.say("%s: %v", s.Name, err)
+			return end(state.StepFailed, err.Error(), nil)
+		}
+		r.say("%s: done", s.Name)
+		return end(state.StepDone, "", nil)
 	}
 	dir, env, err := r.Where(s.Project)
 	if err != nil {

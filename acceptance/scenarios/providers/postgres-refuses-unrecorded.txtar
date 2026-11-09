@@ -1,0 +1,34 @@
+# A database that already exists with a lane's name, but is not recorded as the lane's, is refused
+# and left alone.
+# req: R34
+# source: spec lifecycle.md
+# milestone: M5
+
+stubs psql
+exec sh -c 'mkdir -p $STUB_STATE/pg; echo precious > $STUB_STATE/pg/shop_01'
+workspace solo --single --init
+exec aw attach 'one'
+cd .worktrees/01
+! exec aw run solo true
+stderr 'the database shop_01 exists, and is not recorded as this lane'
+stderr 'aw setup one'
+exec sh -c 'cat $STUB_STATE/pg/shop_01'
+stdout precious
+! grep 'DROP DATABASE' $STUB_LOG
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[lanes.data.db]
+provider = "postgres"
+url = "postgres://postgres@localhost:5432"
+databases = ["shop"]
+
+[projects.solo]
+directory = "."
