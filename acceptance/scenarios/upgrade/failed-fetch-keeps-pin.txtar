@@ -1,0 +1,20 @@
+# A release that cannot be fetched and verified leaves the workspace as it was.
+# req: R15 R18
+# source: distribution.md, "The maintainer"
+# milestone: M8
+
+owner-may-change
+workspace solo --single --init
+exec sh -c 'mkdir $WORK/bad; cp "$AW_NEW_MIRROR"/* $WORK/bad/; for f in $WORK/bad/aw_*; do printf x >> "$f"; done'
+env AW_MIRROR=$WORK/bad
+! exec aw upgrade --to $AW_NEW_VERSION
+stderr 'checksum mismatch'
+stderr 'the workspace stays on '$AW_VERSION
+grep '^'$AW_VERSION'$' .aw/version
+grep 'aw_'$AW_VERSION'_' .aw/lock
+exec aw version
+stdout '^aw '$AW_VERSION' '
+
+env AW_MIRROR=$WORK/nowhere
+! exec aw upgrade --to 9.9.9
+stderr 'check AW_MIRROR'

@@ -7,6 +7,7 @@ import (
 	"bufio"
 	"bytes"
 	_ "embed"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -119,6 +120,39 @@ func fetch(mirror, name string) ([]byte, error) {
 
 // retryDelay is how long to wait before asking a failing server again.
 var retryDelay = 2 * time.Second
+
+// Latest asks GitHub for the newest release: the newest final one when there is any, otherwise the
+// newest pre-release.
+func Latest() (string, error) {
+	data, err := fetch("https://api.github.com/repos/connor981332/agent-workspace", "releases?per_page=30")
+	if err != nil {
+		return "", err
+	}
+	var releases []struct {
+		Tag   string `json:"tag_name"`
+		Draft bool   `json:"draft"`
+	}
+	if err := json.Unmarshal(data, &releases); err != nil {
+		return "", fmt.Errorf("reading GitHub's list of releases: %w → name a version with --to", err)
+	}
+	first := ""
+	for _, r := range releases {
+		v := strings.TrimPrefix(r.Tag, "v")
+		if r.Draft || !Exact(v) {
+			continue
+		}
+		if first == "" {
+			first = v
+		}
+		if !strings.Contains(v, "-") {
+			return v, nil
+		}
+	}
+	if first == "" {
+		return "", errors.New("GitHub lists no release → name a version with --to")
+	}
+	return first, nil
+}
 
 // ErrNotPinnable means this binary's version cannot be pinned (a development build).
 var ErrNotPinnable = errors.New("not an exact release version")

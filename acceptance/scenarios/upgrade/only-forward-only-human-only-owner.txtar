@@ -1,0 +1,16 @@
+# aw upgrade only goes forward, is the human's, and runs in the owner checkout.
+# req: R18 R64
+# source: distribution.md, "The maintainer"
+# milestone: M8
+
+workspace solo --single --init
+! exec aw upgrade --to 0.0.0-a
+stderr 'older than the pinned'
+! exec aw upgrade --to latest-please
+stderr 'not an exact version'
+exec aw attach 'one'
+cd .worktrees/01
+! exec aw upgrade --to 9.9.9
+stderr 'this is a lane'
+! exec awtest-hook bash 'aw upgrade --to 9.9.9'
+stderr 'only the human'

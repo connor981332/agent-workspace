@@ -19,6 +19,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -115,9 +116,31 @@ func setup() (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	// A later release, for the upgrade scenarios: this source, under the next version.
+	newVersion := nextVersion(version)
+	newBin := filepath.Join(tmp, "new", "aw")
+	build := exec.Command("go", "build", "-trimpath",
+		"-ldflags", "-X github.com/connor981332/agent-workspace/internal/cli.version="+newVersion, "-o", newBin, "./cmd/aw")
+	build.Dir = ".."
+	build.Env = append(os.Environ(), "CGO_ENABLED=0")
+	if out, err := build.CombinedOutput(); err != nil {
+		return 0, fmt.Errorf("building the next aw: %v\n%s", err, out)
+	}
+	newMirror, err := makeMirror(filepath.Join(tmp, "new-mirror"), newBin, newVersion)
+	if err != nil {
+		return 0, err
+	}
 	cfg = cmds.Config{AWBin: awBin, GlobalAW: globalAW, StubsDir: stubs, RealGit: realGit, Repo: repo,
-		Version: version, Mirror: mirror}
+		Version: version, Mirror: mirror, NewVersion: newVersion, NewMirror: newMirror}
 	return 0, nil
+}
+
+// nextVersion is a version after v, whatever kind of version v is.
+func nextVersion(v string) string {
+	core, _, _ := strings.Cut(v, "-")
+	parts := strings.Split(core, ".")
+	patch, _ := strconv.Atoi(parts[2])
+	return fmt.Sprintf("%s.%s.%d-next", parts[0], parts[1], patch+1)
 }
 
 // testVersion is the version the runner gives the aw it builds, so that aw init can pin it.

@@ -75,6 +75,7 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
       - name: Check the assets
         run: sh .github/scripts/check-release-assets.sh dist
       - name: SLSA build provenance

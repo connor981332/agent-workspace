@@ -1,0 +1,66 @@
+# The exit test of M8: an upgrade that starts from a real v0.1 state database (written by
+# v0.1.0-rc.1), with working lanes, a held seat whose holder has gone, and a hand-edited launcher.
+# Lanes survive it, and the dead holder's seat is recovered.
+# req: R19 R20 R18
+# source: plan M8 exit criterion
+# milestone: M8
+
+owner-may-change
+workspace shop --init
+exec aw attach 'one'
+exec aw attach 'two'
+exec sh $WORK/load.sh
+exec sh -c 'echo "# my note" >> bin/aw'
+
+env AW_MIRROR=$AW_NEW_MIRROR
+! exec aw upgrade --to $AW_NEW_VERSION
+stderr 'bin/aw was edited by hand'
+exec aw upgrade --to $AW_NEW_VERSION --eject bin/aw
+grep '# my note' bin/aw
+exec aw version --json
+json stdout .version $AW_NEW_VERSION
+
+cd .worktrees/01
+exec aw whoami
+stdout 'location +lane root'
+exec aw run web true
+exec aw serve stack
+stdout 'Holding seat'
+exec aw stop stack
+cd ../02
+exec aw run web true
+cd ../..
+exec aw sweep --json
+stdout '"one"'
+stdout '"two"'
+
+-- load.sh --
+# Puts the fixture in place, with its paths moved to this run's workspace.
+db=.git/aw/state.db
+rm -f "$db" "$db-wal" "$db-shm"
+cp "$AW_REPO/acceptance/testdata/state-v0.1.db" "$db"
+owner=$(printf %s "$OWNER" | sed "s/'/''/g")
+from="/tmp/go-test-script4286426700/script-zz-generate/link/it''s a workspace/shop"
+awtest-sqlite "$db" \
+  "UPDATE lane_repos SET path = replace(path, '$from', '$owner')" \
+  "UPDATE lease_procs SET log = replace(log, '$from', '$owner')"
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[projects.web]
+directory = "web"
+
+[projects.web.servers.app]
+command = "exec sleep 5 # {port}"
+port = 3000
+
+[resources.stack]
+kind = "process"
+capacity = 2
+servers = ["web.app"]

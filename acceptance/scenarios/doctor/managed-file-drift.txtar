@@ -1,0 +1,13 @@
+# aw doctor says when a managed file was edited by hand, and that aw upgrade will not overwrite it.
+# req: R18
+# source: C2 test_kit.sh t_check_reports_problems
+# milestone: M8
+
+owner-may-change
+workspace solo --single --init
+exec aw doctor
+stdout 'launcher: bin/aw is as aw wrote it'
+exec sh -c 'echo "# my note" >> bin/aw'
+exec aw doctor
+stdout 'launcher: bin/aw was edited by hand'
+stdout 'aw upgrade will refuse to overwrite'
