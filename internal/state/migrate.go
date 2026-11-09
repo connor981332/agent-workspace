@@ -182,6 +182,15 @@ var migrations = []string{
 		created TEXT NOT NULL,
 		PRIMARY KEY (data, name)
 	) STRICT`,
+
+	// 11: a lane's role, and the human's delegation (M9): at most one at a time.
+	`ALTER TABLE lanes ADD COLUMN role TEXT NOT NULL DEFAULT '';
+	CREATE TABLE delegations (
+		id      INTEGER PRIMARY KEY CHECK (id = 1),
+		scope   TEXT NOT NULL,
+		granted TEXT NOT NULL,
+		expires TEXT NOT NULL
+	) STRICT`,
 }
 
 // BackupPath is where the database is copied before migrating from schema version v.

@@ -1,0 +1,11 @@
+# A fresh clone, before aw setup, is where delegation helps most: it works with no state yet.
+# req: R64
+# source: C1 test_delegation_before_activation_allows_exact_bootstrap_commands
+# milestone: M9
+
+owner-may-change
+workspace solo --single --init
+exec rm -rf .git/aw
+exec aw delegate --scope maintenance --ttl 30m
+exec awtest-hook bash 'aw setup'
+! exec awtest-hook bash 'aw delegate --scope maintenance --ttl 1h'

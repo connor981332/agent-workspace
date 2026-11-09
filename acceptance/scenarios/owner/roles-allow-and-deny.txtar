@@ -1,0 +1,41 @@
+# A team role adds or removes a fixed set of abilities. Only the human can assign one that adds. No
+# role reaches past path confinement, destructive Git or owner-only commands.
+# req: R65
+# source: spec owner decision 2026-11-09
+# milestone: M9
+
+owner-may-change
+workspace solo --single --init
+env CLAUDE_CODE_SESSION_ID=s-1
+! exec aw attach --role infra 'one'
+stderr 'only the human can assign it'
+! exec aw attach --role nope 'one'
+stderr 'no role named'
+env CLAUDE_CODE_SESSION_ID=
+stubs claude
+exec sh -c 'echo "Keep the databases up" > infra.md'
+exec aw new --role infra 'one' -- --print
+cd .worktrees/01
+exec awtest-hook bash 'docker compose restart db'
+! stdout 'deny'
+! exec awtest-hook bash 'cat ../../README.md'
+stderr 'outside lane'
+! exec awtest-hook bash 'git push --force origin aw/one'
+! exec awtest-hook bash 'aw discard one --yes'
+stderr 'only the human'
+exec awtest-hook session-start x
+stdout 'infra role'
+stdout 'Keep the databases up'
+
+-- workspace.toml --
+[workspace]
+name = "Solo"
+namespace = "solo"
+schema = 1
+
+[projects.solo]
+directory = "."
+
+[roles.infra]
+allow = ["containers"]
+instructions = "infra.md"

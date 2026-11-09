@@ -128,6 +128,10 @@ v0.0.11 passed the whole release workflow: Sigstore signature, SLSA provenance, 
 
 **In progress:** M8. `aw upgrade` (with the new version finishing the job, so that it migrates with its own schema and templates), the embedded changelog, configuration migrations (none exist yet: schema 1), `.aw/managed` with `--eject` and `--take`, the Homebrew cask, and a Renovate preset. No state migration needs `--drain`. Known limit: a pin needs `.aw/lock` and managed files updated, which only a self-hosted Renovate can do through `postUpgradeTasks`; the hosted app cannot use the preset.
 
+**M8 complete.** (No tag, per §7.)
+
+**In progress:** M9, on `m9/owner`. Decided by the spec owner on 2026-11-09 and recorded in owner-checkout.md and architecture.md: one `maintenance` delegation scope; roles as fixed capabilities in both directions; publication pre-authorization by a fixed action list; a lane is the change set, with `depends_on` and `generated_contracts`. State schema 11.
+
 **Pending manual checks:** the v0.1 dogfooding (M7); the macOS devcontainer checklist on Docker Desktop and OrbStack (`docs/dev/macos-devcontainer-checklist.md`, M6); the hot-path and budget benchmarks on an Apple Silicon laptop (T3, M1, M2;
 docs/dev/benchmarks.md).
 

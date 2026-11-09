@@ -1,0 +1,24 @@
+# aw move-to-lane commits the owner's uncommitted work to a new branch, restores the owner checkout
+# to its branch, and claims a lane on that branch.
+# req: R62
+# source: owner-checkout.md
+# milestone: M9
+
+owner-may-change
+workspace solo --single --init
+! exec aw move-to-lane 'nothing here'
+stderr 'no uncommitted work'
+exec sh -c 'echo work > feature.txt; echo more >> README.md'
+exec aw move-to-lane 'add feature flag'
+stdout 'Moved the work to lane 01 feature-flag, on aw/feature-flag'
+exec git status --porcelain
+! stdout .
+exec git rev-parse --abbrev-ref HEAD
+stdout '^main$'
+! exists feature.txt
+exists .worktrees/01/feature.txt
+exec git -C .worktrees/01 rev-parse --abbrev-ref HEAD
+stdout '^aw/feature-flag$'
+env CLAUDE_CODE_SESSION_ID=s-1
+! exec aw move-to-lane 'x'
+stderr 'only for the human'

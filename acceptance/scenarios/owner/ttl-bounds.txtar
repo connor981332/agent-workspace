@@ -1,0 +1,16 @@
+# A delegation lasts from 5 minutes to 8 hours, and names its scope.
+# req: R64
+# source: C1 test_delegation_lets_owner_checkout_run_only_in_scope_maintenance
+# milestone: M9
+
+workspace solo --single --init
+! exec aw delegate --scope maintenance --ttl 4m
+stderr 'from 5m to 8h'
+! exec aw delegate --scope maintenance --ttl 9h
+stderr 'from 5m to 8h'
+! exec aw delegate --scope maintenance --ttl soon
+stderr 'like 30m or 2h'
+! exec aw delegate --scope everything --ttl 1h
+stderr 'must be maintenance'
+exec aw delegate --scope maintenance --ttl 8h
+exec aw delegate --scope maintenance --ttl 5m

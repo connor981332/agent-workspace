@@ -27,6 +27,7 @@ that says what to do instead, or passed to you for approval.
 | Your processes | `kill`, `pkill` and the like are refused. Configured servers are started through `aw serve`. |
 | Containers | Commands that create, restart or remove containers are refused. |
 | Secrets | Reading or echoing a project's secret files, the environment, or a process's environment is refused. |
+| Who may do what | A team role can remove publishing or merging from a lane, such as the implementer role. Pre-authorizing narrow publication and delegating routine maintenance are time-limited or reviewed configuration. |
 | Your decisions | Owner-only commands, such as `aw discard` and `aw pair`, refuse agents. Pushing and opening merge requests ask you first. |
 
 **Guards fail closed.** If `aw` cannot decide, the call is refused. That covers an invalid

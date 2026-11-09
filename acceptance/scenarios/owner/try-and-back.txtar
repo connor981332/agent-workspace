@@ -1,0 +1,27 @@
+# aw try checks out a lane's exact heads in the owner checkout, refusing to disturb uncommitted work,
+# and aw try --back returns each repository to its branch.
+# req: R62
+# source: owner-checkout.md
+# milestone: M9
+
+owner-may-change
+workspace solo --single --init
+exec aw attach 'one'
+lane-commit 01 lane.txt 'lane work'
+! exec aw try --back
+stderr 'not trying a lane'
+exec sh -c 'echo mine >> README.md'
+! exec aw try one
+stderr 'uncommitted changes'
+exec git checkout README.md
+exec aw try one
+stdout 'exact heads'
+exists lane.txt
+exec git status -sb
+stdout 'HEAD \(no branch\)'
+! exec aw try one
+stderr 'already trying'
+exec aw try --back
+! exists lane.txt
+exec git rev-parse --abbrev-ref HEAD
+stdout '^main$'

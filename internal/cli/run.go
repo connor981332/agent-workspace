@@ -86,7 +86,7 @@ runs the project's [projects.<p>] run.`,
 }
 
 func newNewCmd() *cobra.Command {
-	var harness, branch string
+	var harness, branch, role string
 	var useMux bool
 	cmd := &cobra.Command{
 		Use:   `new "<purpose>" [--harness h] [--mux] [--branch b] [-- harness arguments…]`,
@@ -130,6 +130,9 @@ against the lane.`,
 			}
 			id := "new-" + randomHex(8)
 			m := manager(w)
+			if err := checkRole(w.cfg, role, false); err != nil {
+				return err
+			}
 			pid := os.Getpid()
 			if useMux {
 				pid = 0 // the harness's own process is recorded by its first hook call
@@ -137,6 +140,9 @@ against the lane.`,
 			c, err := m.Claim(cmd.Context(), lanes.ClaimRequest{Purpose: purpose, Branch: branch,
 				Who: lanes.Identity{Harness: harness, Session: id, PID: pid}})
 			if err != nil {
+				return err
+			}
+			if err := applyRole(cmd.Context(), w, c, role); err != nil {
 				return err
 			}
 			fmt.Fprintf(cmd.ErrOrStderr(), "aw: lane %s %s, starting %s\n", c.Dir, c.Lane.Name, harness)
@@ -161,6 +167,7 @@ against the lane.`,
 			return syscall.Exec(path, append([]string{harness}, extra...), env)
 		}),
 	}
+	cmd.Flags().StringVar(&role, "role", "", "the team role this lane works under")
 	cmd.Flags().StringVar(&harness, "harness", "", "the harness to launch (default: [user] harness)")
 	cmd.Flags().StringVar(&branch, "branch", "", "start the lane on this existing branch")
 	cmd.Flags().BoolVar(&useMux, "mux", false, "open it in your terminal multiplexer")

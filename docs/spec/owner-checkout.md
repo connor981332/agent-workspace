@@ -72,6 +72,30 @@ session**.
 - Pair sessions appear in `aw`, `recap` and `resume`. `aw finish` writes a handoff but protects
   nothing, because the owner checkout is never cleaned up.
 
+## Delegation
+
+`aw delegate --scope maintenance --ttl 1h` lets sessions in the owner checkout do routine maintenance
+for 5 minutes to 8 hours: `aw setup`, `park`, `unpark`, `sweep --apply`, `containers up`, and the
+commands listed in `[delegation] maintenance`. It never covers starting agents, discarding work,
+pairing, delegating, upgrading, or recreating or removing containers. Lanes never use it. Only the
+human can grant it. A record that has expired, names another scope or claims more than 8 hours counts
+as none. (Decided by the spec owner, 2026-11-09.)
+
+## Roles
+
+A lane can work under a team role (`aw new --role`, `aw attach --role`):
+
+```toml
+[roles.infra]
+allow = ["containers"]              # publish, merge, containers, servers
+deny = []
+instructions = "docs/infra-role.md" # a session receives it when it starts
+```
+
+The built-in `implementer` denies `publish` and `merge`. No role can override path confinement,
+secrets, destructive Git or owner-only commands. An agent may take on a role that only removes
+abilities; a role with `allow` is the human's to assign. (Decided by the spec owner, 2026-11-09.)
+
 ## Moving work between the owner checkout and lanes
 
 - **`aw move-to-lane "<purpose>"`.** Commits the owner checkout's uncommitted work to a new branch in

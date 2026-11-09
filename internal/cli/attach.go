@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"os"
@@ -10,8 +12,10 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/connor981332/agent-workspace/internal/config"
 	"github.com/connor981332/agent-workspace/internal/lanes"
 	"github.com/connor981332/agent-workspace/internal/platform"
+	"github.com/connor981332/agent-workspace/internal/state"
 	"github.com/connor981332/agent-workspace/internal/timing"
 	"github.com/connor981332/agent-workspace/internal/ui"
 )
@@ -84,7 +88,7 @@ func sessionIdentity(harness, session string) (lanes.Identity, error) {
 
 func newAttachCmd() *cobra.Command {
 	var asJSON bool
-	var branch, harness, session string
+	var branch, harness, session, role string
 	cmd := &cobra.Command{
 		Use:   `attach "<purpose>"`,
 		Short: "Claim a lane for this session and say where to work",
@@ -107,7 +111,13 @@ The same session attaching again gets the same lane. Work in the lane root aw pr
 			defer w.Close()
 			t.Mark("open")
 			m := manager(w)
+			if err := checkRole(w.cfg, role, who != lanes.Identity{}); err != nil {
+				return err
+			}
 			c, err := m.Claim(cmd.Context(), lanes.ClaimRequest{Purpose: args[0], Branch: branch, Who: who})
+			if err == nil {
+				err = applyRole(cmd.Context(), w, c, role)
+			}
 			if err != nil {
 				return err
 			}
@@ -141,6 +151,7 @@ The same session attaching again gets the same lane. Work in the lane root aw pr
 			return nil
 		}),
 	}
+	cmd.Flags().StringVar(&role, "role", "", "the team role this lane works under")
 	cmd.Flags().StringVar(&branch, "branch", "", "start on this existing branch (tracking origin's when it is only there) instead of a new one")
 	cmd.Flags().StringVar(&harness, "harness", "", "the harness of the attaching session (normally from AW_SESSION or the hook)")
 	cmd.Flags().StringVar(&session, "session", "", "the harness's session ID (normally from AW_SESSION or the hook)")
@@ -153,4 +164,28 @@ func shellQuote(s string) string {
 		return s
 	}
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// checkRole refuses an unknown role, and a role that adds abilities when an agent asks for it: an
+// agent may take on less, never more.
+func checkRole(c *config.Config, role string, byAgent bool) error {
+	if role == "" {
+		return nil
+	}
+	r, ok := c.RoleNamed(role)
+	if !ok {
+		return fmt.Errorf("there is no role named %q → define [roles.%s] in workspace.toml", role, role)
+	}
+	if byAgent && len(r.Allow) > 0 {
+		return fmt.Errorf("the %s role adds abilities, so only the human can assign it → ask the human to run aw new --role %s", role, role)
+	}
+	return nil
+}
+
+// applyRole records the lane's role, unless the session is simply returning to its lane.
+func applyRole(ctx context.Context, w *writeContext, c *lanes.Claimed, role string) error {
+	if c.Reused && role == "" {
+		return nil
+	}
+	return w.store.Write(ctx, func(tx *sql.Tx) error { return state.SetLaneRole(tx, c.Lane.Number, role) })
 }

@@ -1,0 +1,35 @@
+# A change set pushes each repository with commits and opens linked merge requests, producer before
+# consumer. Repositories with no commits are left out. It asks first, under the publication policy.
+# req: R69 R72
+# source: wishlist 12, spec owner decision 2026-11-09
+# milestone: M9
+
+workspace shop --init --forge github
+exec aw attach 'one'
+lane-commit 01 web/a.txt 'consumer'
+lane-commit 01 api/b.txt 'producer'
+stubs gh glab
+owner-may-change
+cd .worktrees/01
+exec awtest-hook bash 'aw changeset --title x'
+stdout '"permissionDecision":"ask"'
+exec aw changeset --title 'Add x' --json
+json stdout .changes[0].project api
+json stdout .changes[1].project web
+grep 'gh pr create --repo acceptance/api' $STUB_LOG
+grep 'gh pr edit https://forge.example/change/1' $STUB_LOG
+grep '1. api' $STUB_LOG
+grep 'web: https://forge.example/change/2' $STUB_LOG
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[projects.web]
+directory = "web"
+depends_on = ["api"]
+
+[projects.api]
+directory = "api"

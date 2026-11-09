@@ -1,0 +1,22 @@
+# An expired delegation, or one no aw delegate could have written, counts as none.
+# req: R64
+# source: C1 test_delegation_lets_owner_checkout_run_only_in_scope_maintenance
+# milestone: M9
+
+workspace solo --single --init
+exec aw delegate --scope maintenance --ttl 1h
+exec awtest-hook bash 'aw setup'
+exec awtest-sqlite .git/aw/state.db 'UPDATE delegations SET expires = ''2001-01-01T00:00:00Z'''
+! exec awtest-hook bash 'aw setup'
+stderr 'only the human'
+exec aw delegate --status
+stdout 'Nothing is delegated'
+
+exec aw delegate --scope maintenance --ttl 1h
+exec awtest-sqlite .git/aw/state.db 'UPDATE delegations SET expires = ''2999-01-01T00:00:00Z'''
+! exec awtest-hook bash 'aw setup'
+exec aw delegate --scope maintenance --ttl 1h
+exec awtest-sqlite .git/aw/state.db 'UPDATE delegations SET scope = ''everything'''
+! exec awtest-hook bash 'aw setup'
+exec aw delegate --revoke
+stdout 'Nothing is delegated'

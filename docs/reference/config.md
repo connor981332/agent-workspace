@@ -87,6 +87,9 @@ The project repositories. The key is the project's name.
 | `install_stamp` | array of strings | — | Files, relative to the project, whose contents decide whether install reruns, e.g. package-lock.json. |
 | `run` | string | — | The default command for aw run <project> with no command. |
 | `needs` | array of strings | — | Resources the project's commands need. |
+| `depends_on` | array of strings | — | Projects this one consumes. A change set merges those first (R69). |
+| `publication` | array of strings | — | Actions pre-authorized in this project, as in [publication] allow. |
+| `generated_contracts` | array of strings | — | Files generated from a contract, from the project root (** matches directories). Agents may not edit them (R70). |
 | `secrets` | array of strings | — | Files that are not in Git, such as .env, linked read-only into every lane from the owner checkout, relative to the project. |
 | `generated` | array of strings | — | Ignored paths (Git pathspecs) that builds create and that do not block recycling a lane, such as node_modules or tmp. Other ignored files may be someone's work, so they keep the lane. |
 
@@ -201,6 +204,34 @@ Machine-specific port settings.
 | Key | Type | Default | Meaning |
 |---|---|---|---|
 | `offset` | integer, 0 to 60000 | `0` | Added to every port of this workspace, so two workspaces on one machine do not collide. |
+
+## `[roles.<name>]`
+
+Team roles (R65). A lane takes one with aw new --role. No role can override path confinement, secrets, destructive Git or owner-only commands. implementer is built in, and denies publish and merge.
+
+`<name>`: lowercase letters, digits and hyphens, starting with a letter.
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `allow` | array of strings | — | Capabilities this role has beyond the default: publish, merge, containers, servers. |
+| `deny` | array of strings | — | Capabilities this role does not have: publish, merge, servers. |
+| `instructions` | string | — | A file, from the workspace root, whose text a session in this role receives when it starts. |
+
+## `[publication]`
+
+What agents may publish without asking. The default asks before anything outward-facing (R72).
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `allow` | array of strings | — | Pre-authorized actions: push (only the lane's own branch), open-merge-request, merge. Force pushes, deleting branches, releases and packages are never pre-authorized. |
+
+## `[delegation]`
+
+What the human's aw delegate --scope maintenance covers, beyond aw's own maintenance commands.
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `maintenance` | array of strings | — | Commands, as their first word, that a delegated session in the owner checkout may run. |
 
 ## `[devcontainer]`
 

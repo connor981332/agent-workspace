@@ -1,0 +1,18 @@
+# Agents can neither grant nor extend a delegation, even while one is in force; they may read or end
+# it, which widens nothing.
+# req: R64
+# source: C1 test_delegation_lets_owner_checkout_run_only_in_scope_maintenance
+# milestone: M9
+
+workspace solo --single --init
+exec aw delegate --scope maintenance --ttl 1h
+! exec awtest-hook bash 'aw delegate --scope maintenance --ttl 8h'
+stderr 'only the human'
+exec awtest-hook bash 'aw delegate --status'
+exec awtest-hook bash 'aw delegate --revoke'
+! exec awtest-hook bash 'echo x > .git/aw/state.db'
+env CLAUDE_CODE_SESSION_ID=s-1
+! exec aw delegate --scope maintenance --ttl 8h
+stderr 'only for the human'
+exec aw delegate --status
+stdout 'Delegated maintenance'

@@ -8,6 +8,14 @@ set -eu
 tool=${0##*/}
 echo "$tool $*" >> "$STUB_LOG"
 if [ -n "${STUB_DELAY:-}" ]; then sleep "$STUB_DELAY"; fi
+case "${1:-} ${2:-}" in
+"pr create"|"mr create")
+	n=$(( $(cat "$STUB_STATE/$tool-opened" 2>/dev/null || echo 0) + 1 ))
+	mkdir -p "$STUB_STATE"; echo "$n" > "$STUB_STATE/$tool-opened"
+	echo "https://forge.example/change/$n"
+	exit 0 ;;
+"pr edit"|"mr update") exit 0 ;;
+esac
 [ "${1:-}" = api ] || { echo "$tool stub: only '$tool api' is supported" >&2; exit 1; }
 shift
 if [ "${1:-}" = --hostname ]; then shift 2; fi

@@ -1,0 +1,31 @@
+# The built-in implementer role commits but never pushes or merges, even where a team pre-authorized
+# those. An agent may take this role itself, because it only removes abilities.
+# req: R65
+# source: C2 finding F20
+# milestone: M9
+
+workspace solo --single --init
+env CLAUDE_CODE_SESSION_ID=s-1
+exec aw attach --role implementer 'one'
+env CLAUDE_CODE_SESSION_ID=
+cd .worktrees/01
+! exec awtest-hook bash 'git push origin aw/one'
+stderr 'role does not publish'
+! exec awtest-hook bash 'gh pr create --fill'
+stderr 'role does not publish'
+! exec awtest-hook bash 'gh pr merge 3'
+stderr 'role does not merge'
+exec awtest-hook bash 'git commit -m x'
+! stdout 'ask'
+
+-- workspace.toml --
+[workspace]
+name = "Solo"
+namespace = "solo"
+schema = 1
+
+[projects.solo]
+directory = "."
+
+[publication]
+allow = ["push", "open-merge-request", "merge"]
