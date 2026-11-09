@@ -124,6 +124,10 @@ v0.0.11 passed the whole release workflow: Sigstore signature, SLSA provenance, 
 
 **Verification changed at M7, by the spec owner (2026-11-08)** (§7): local testing during a milestone, the four-platform CI once per milestone, and a tag only when a release is meant to be used.
 
+**M7:** `v0.1.0-rc.1` is published and passed the whole release workflow.
+
+**In progress:** M8. `aw upgrade` (with the new version finishing the job, so that it migrates with its own schema and templates), the embedded changelog, configuration migrations (none exist yet: schema 1), `.aw/managed` with `--eject` and `--take`, the Homebrew cask, and a Renovate preset. No state migration needs `--drain`. Known limit: a pin needs `.aw/lock` and managed files updated, which only a self-hosted Renovate can do through `postUpgradeTasks`; the hosted app cannot use the preset.
+
 **Pending manual checks:** the v0.1 dogfooding (M7); the macOS devcontainer checklist on Docker Desktop and OrbStack (`docs/dev/macos-devcontainer-checklist.md`, M6); the hot-path and budget benchmarks on an Apple Silicon laptop (T3, M1, M2;
 docs/dev/benchmarks.md).
 
@@ -426,7 +430,7 @@ and a Renovate preset.
 
 **Exit criterion:** an upgrade from v0.1.x to v0.2.0 passes in an acceptance scenario that starts
 from a real v0.1 state database (committed as a fixture), with active lanes, held leases and a
-hand-edited managed file. The candidates are archived (§9).
+hand-edited managed file. The candidates are archived once v0.1.0 ships and its dogfooding has passed (§9, the spec owner, 2026-11-09).
 
 ### M9: Owner workflows, delegation, roles, change sets and publication (v0.3)
 
@@ -1075,7 +1079,7 @@ that adds work to the hot path must say why").
 | `go install` | `go install github.com/connor981332/agent-workspace/cmd/aw@vX.Y.Z`. | M7 |
 | Launcher | `bin/aw`, written by `aw init` and `aw setup` from the template embedded in the binary (`internal/launcher`). Reads from `AW_MIRROR` when set. | M1 (local), M7 (GitHub Releases) |
 | Global proxy | A global `aw` inside a workspace runs the workspace's pin. | M7 |
-| Homebrew tap | `connor981332/homebrew-tap`, published by GoReleaser. Needs a decision on macOS quarantine for downloaded casks: Apple notarization (GoReleaser supports it), or a documented quarantine removal. | M8 |
+| Homebrew tap | `connor981332/homebrew-tap`, published by GoReleaser. The spec owner decided on 2026-11-09 that the cask clears the macOS quarantine flag after install, rather than using Apple notarization. The upload is skipped until `HOMEBREW_TAP_TOKEN` exists. | M8 |
 | Renovate preset, Dependabot-compatible manifest | So that new releases arrive as merge requests that bump the pin. | M8 |
 | mise, aqua, Nix | Listed in distribution.md as "later". | After 1.0 |
 
@@ -1152,7 +1156,7 @@ These are implementation choices the spec leaves open. Each can be revisited in 
 | Provider implementation | Shell out to `psql` and `redis-cli` on the configured runner | Keeps database drivers out of the binary and the dependency list, matches C2, and lets the acceptance suite stub them. |
 | Lane directory numbers | Two digits (`03`), widening to three if `[lanes] max` is over 99 | The spec's layout uses `03`. |
 | Plan convention for this repository | C1's Status block and plan index (R82), followed by hand until M10 ships the mechanism | Lets the plan be resumed today. |
-| When to archive the candidates | At the end of M8: tag `candidates-final`, then remove `workspace-candidate-1/` and `workspace-candidate-2/` in one PR, with a README link to the tag. The candidates' CI goes with them. The inventory above cites tests by file and name, and stays valid against the tag. | By then, v0.1 has replaced both in daily use, and v0.2 has shown that upgrades work. |
+| When to archive the candidates | Once v0.1.0 ships and its dogfooding has passed (the spec owner, 2026-11-09; first planned for the end of M8): tag `candidates-final`, then remove `workspace-candidate-1/` and `workspace-candidate-2/` in one PR, with a README link to the tag. The candidates' CI goes with them. The inventory above cites tests by file and name, and stays valid against the tag. | By then, v0.1 has replaced both in daily use, and v0.2 has shown that upgrades work. |
 | Durations in configuration | Accept seconds (`"1s"`), with no lower bound in configuration | Lets the acceptance suite test expiry and grace periods in real time, with no clock override in the binary that an agent could misuse. |
 
 ---

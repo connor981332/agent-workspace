@@ -1,0 +1,25 @@
+# A hand-edited managed file is never overwritten. The human chooses: --take replaces it, --eject
+# keeps the edit and stops aw managing it, and later upgrades leave it alone.
+# req: R18
+# source: C2 test_kit.sh t_update_refreshes_core_and_keeps_owned
+# milestone: M8
+
+owner-may-change
+workspace solo --single --init
+exec sh -c 'echo "# my note" >> bin/aw'
+env AW_MIRROR=$AW_NEW_MIRROR
+! exec aw upgrade --to $AW_NEW_VERSION
+stderr 'edited by hand'
+
+exec aw upgrade --to $AW_NEW_VERSION --take bin/aw
+stdout 'Next: commit this'
+! grep '# my note' bin/aw
+
+exec sh -c 'echo "# mine again" >> bin/aw'
+exec aw upgrade --to $AW_NEW_VERSION --eject bin/aw
+stdout 'bin/aw is yours now'
+grep '# mine again' bin/aw
+! grep 'bin/aw' .aw/managed
+exec aw upgrade --to $AW_NEW_VERSION
+stdout 'Next: commit this'
+grep '# mine again' bin/aw

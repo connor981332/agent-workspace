@@ -24,6 +24,9 @@ type Config struct {
 	Repo     string // the repository under test, for scenarios that check its examples
 	Version  string // the version of the binary under test
 	Mirror   string // a release mirror holding it, for AW_MIRROR
+	// NewVersion and NewMirror are a later release, for the upgrade scenarios.
+	NewVersion string
+	NewMirror  string
 }
 
 // FinalCheck is the command the runner appends to every scenario: the owner checkout must be
@@ -78,6 +81,8 @@ func Setup(cfg Config) func(*testscript.Env) error {
 			"AW_REPO="+cfg.Repo,
 			"AW_VERSION="+cfg.Version,
 			"AW_MIRROR="+cfg.Mirror,
+			"AW_NEW_VERSION="+cfg.NewVersion,
+			"AW_NEW_MIRROR="+cfg.NewMirror,
 			"LC_ALL=C",
 			"PATH="+path,
 		)

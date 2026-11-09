@@ -38,6 +38,24 @@ signs:
     signature: "${artifact}.sigstore.json"
     args: ["sign-blob", "--yes", "--bundle=${signature}", "${artifact}"]
 
+# The tap (§6). The cask clears the macOS quarantine flag after installing, decided by the spec owner
+# on 2026-11-09 in place of Apple notarization. Until the tap's token exists the upload is skipped.
+homebrew_casks:
+  - name: aw
+    binaries: [aw]
+    homepage: https://github.com/connor981332/agent-workspace
+    description: Parallel coding agents that do not get in each other's way
+    repository:
+      owner: connor981332
+      name: homebrew-tap
+      token: '{{ envOrDefault "HOMEBREW_TAP_TOKEN" "" }}'
+    skip_upload: '{{ if isEnvSet "HOMEBREW_TAP_TOKEN" }}false{{ else }}true{{ end }}'
+    hooks:
+      post:
+        # Through sh, because the cask also serves Linux, which has no xattr.
+        install_steps: |
+          run "/bin/sh", args: ["-c", "command -v xattr >/dev/null || exit 0; xattr -dr com.apple.quarantine \"$0\"", "{{ .StagedPath }}"]
+
 snapshot:
   version_template: "{{ incpatch .Version }}-snapshot+{{ .ShortCommit }}"
 

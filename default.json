@@ -1,0 +1,26 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Opens a merge request when a new release of Agent Workspace is out. Extend this preset with github>connor981332/agent-workspace.",
+  "customManagers": [
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^\\.aw/version$/"],
+      "matchStrings": ["^(?<currentValue>\\S+)\\s*$"],
+      "depNameTemplate": "connor981332/agent-workspace",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.*)$"
+    }
+  ],
+  "packageRules": [
+    {
+      "matchDepNames": ["connor981332/agent-workspace"],
+      "commitMessageTopic": "Agent Workspace",
+      "ignoreUnstable": false
+    }
+  ],
+  "postUpgradeTasks": {
+    "commands": ["bin/aw upgrade --to {{{newVersion}}}"],
+    "fileFilters": [".aw/**", "bin/aw", "workspace.toml", "AGENTS.md", ".claude/settings.json", ".codex/hooks.json", ".opencode/plugins/aw.js"],
+    "executionMode": "branch"
+  }
+}

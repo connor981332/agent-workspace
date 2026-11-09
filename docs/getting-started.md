@@ -34,6 +34,8 @@ Install a global `aw`. Inside a workspace it always runs that workspace's pinned
 it changes nothing there.
 
 ```sh
+brew install connor981332/tap/aw
+# or
 curl -fsSL https://raw.githubusercontent.com/connor981332/agent-workspace/master/install.sh | sh
 # or
 go install github.com/connor981332/agent-workspace/cmd/aw@latest
