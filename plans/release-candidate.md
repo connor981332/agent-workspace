@@ -118,7 +118,13 @@ The bench had been running on a RAM disk. It now uses the real disk, where every
 
 (`m7/setup`.) Now: the eight steps of `aw setup` from a fresh clone, each harness's sandbox configured per checkout and per lane, `aw doctor` for sandboxes, the `fresh-clone` release job on a clean Ubuntu container and macOS, and the user documentation. Devcontainer projects' installs need their container, so step 6 and step 7 meet: `aw setup` asks once before starting containers, and starts none off a terminal without `--containers`. Shared infrastructure beyond devcontainers arrives with modules in M10.
 
-**Pending manual checks:** the macOS devcontainer checklist on Docker Desktop and OrbStack (`docs/dev/macos-devcontainer-checklist.md`, M6); the hot-path and budget benchmarks on an Apple Silicon laptop (T3, M1, M2;
+v0.0.11 passed the whole release workflow: Sigstore signature, SLSA provenance, `go install`, the acceptance suite on all four platforms, and `fresh-clone` on a clean `ubuntu:24.04` and on macOS, against the published release. v0.0.8 and v0.0.9 are tags with no release; v0.0.10 published but did not pass verification, during GitHub 504s.
+
+**M7 is built.** What remains of its exit is the spec owner's: both dogfood workspaces in daily use for five working days, and `v0.1.0` itself.
+
+**Verification changed at M7, by the spec owner (2026-11-08)** (§7): local testing during a milestone, the four-platform CI once per milestone, and a tag only when a release is meant to be used.
+
+**Pending manual checks:** the v0.1 dogfooding (M7); the macOS devcontainer checklist on Docker Desktop and OrbStack (`docs/dev/macos-devcontainer-checklist.md`, M6); the hot-path and budget benchmarks on an Apple Silicon laptop (T3, M1, M2;
 docs/dev/benchmarks.md).
 
 ## How to use this plan
@@ -157,9 +163,9 @@ docs/dev/benchmarks.md).
 
 ## 1. Milestones
 
-Each milestone is a shippable increment. From M2 on, every milestone exit before v0.1 is tagged as
-a pre-release `v0.0.N`, where N is the milestone number (M2 gives `v0.0.2`), so the maintainers can
-dogfood it in their own workspaces. The two candidates stay usable throughout.
+Each milestone is a shippable increment. From M2 to M7, milestone exits were tagged as pre-releases
+`v0.0.N`, so the maintainers could dogfood them in their own workspaces. Since M7, a tag is cut only
+when a release is meant to be used (§7). The two candidates stay usable throughout.
 
 ### Why v0.1 is where it is
 
@@ -1062,7 +1068,7 @@ that adds work to the hot path must say why").
 |---|---|---|
 | GoReleaser config | `.goreleaser.yaml`: `linux` and `darwin`, `amd64` and `arm64`, `CGO_ENABLED=0`, `-trimpath`, reproducible timestamps, version and the two schema numbers set in ldflags. The assets are raw binaries named `aw_<version>_<os>_<arch>`, so the launcher needs no `tar`. CI runs `goreleaser check` and a snapshot build on every PR. | M0 |
 | Checksums | `checksums.txt` (SHA-256). `.aw/lock` holds the four checksums from it. The launcher verifies them with `sha256sum` or `shasum -a 256`. | M1 (local mirror), M2 (published) |
-| Release workflow | On a `v*` tag: build, publish a GitHub Release, and run the acceptance suite against the published assets. Pre-releases `v0.0.N` mark each milestone exit from M2. The workflow uses a protected environment, so a maintainer approves each release. | M2 |
+| Release workflow | On a `v*` tag: build, publish a GitHub Release, and run the acceptance suite against the published assets. A tag is cut only when a release is meant to be used, such as a release candidate (§7). Pre-releases `v0.0.N` marked each milestone exit up to M7. The workflow uses a protected environment, so a maintainer approves each release. | M2 |
 | Signing | Keyless Sigstore (cosign) signature of `checksums.txt`, through GitHub OIDC, published as a bundle. The launcher and `install.sh` verify it when `cosign` is installed. | M7 |
 | Provenance | SLSA build provenance through GitHub artifact attestations (`actions/attest-build-provenance`), verifiable with `gh attestation verify`. | M7 |
 | `install.sh` | Downloads the binary for the platform to `~/.local/bin/aw`, verifies the checksum, and verifies the signature when `cosign` is present. Published with each release, at a stable URL. | M7 |
@@ -1103,6 +1109,20 @@ in CI and by the manual checklist at M6 and before each release (risk 4).
 The Go workflow ignores changes that touch only `workspace-candidate-*` (`paths-ignore`). The
 candidates workflow is not edited, so it keeps running on every pull request, as today, until the
 candidates are archived.
+
+### How work is verified (decided by the spec owner, 2026-11-08)
+
+- **During a milestone:** local testing only (formatting, vet, staticcheck, unit and acceptance suites, a
+  `darwin/arm64` vet, and the real-Docker suite when it is touched), on one milestone branch. No pull
+  request per part.
+- **At the end of a milestone:** one pull request, which runs the four-platform CI once. That is the
+  only CI a milestone normally spends, and macOS is why it stays: this is where BSD tools and slow
+  runners differ from a Linux laptop. The cost is that a macOS bug can wait for the end of a
+  milestone. Master stays protected.
+- **Releases:** a tag is cut only when a release is meant to be used, such as a release candidate.
+  A milestone's version name says what it contains, and does not by itself mean a tag.
+- **Release-only steps:** before tagging, run `.github/scripts/check-action-tags.sh` locally and
+  `release-dry-run.yml`, which builds and signs without publishing or needing approval.
 
 ---
 
