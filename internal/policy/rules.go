@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/connor981332/agent-workspace/internal/shell"
+	"github.com/connor981332/agent-workspace/internal/workspace"
 )
 
 // dirOptions take a directory as their value, with or without a slash in it.
@@ -89,9 +90,13 @@ func pathsRule(s Scope, c shell.Command) Decision {
 		}
 		return s.boundary(abs, text)
 	}
-	for _, a := range c.Assigns {
-		if d := check(a, false); d.Verdict != Allow {
-			return d
+	// An assignment with no command only sets a shell variable, and every use of it is checked. As a
+	// prefix it reaches the command's environment, so it is a path that command may use.
+	if len(c.Args) > 0 {
+		for _, a := range c.Assigns {
+			if d := check(a, false); d.Verdict != Allow {
+				return d
+			}
 		}
 	}
 	name := c.Name()
@@ -472,7 +477,7 @@ var containerChanging = map[string]bool{
 // containerRule refuses creating, restarting or stopping containers (F5, R49): they are shared,
 // and their ports and mounts are fixed when they are created.
 func containerRule(s Scope, c shell.Command) Decision {
-	if slices.Contains(s.RoleAllow, "containers") {
+	if len(c.Args) == 0 || slices.Contains(s.RoleAllow, "containers") {
 		return allow()
 	}
 	name := c.Name()
@@ -512,6 +517,9 @@ func containerRule(s Scope, c shell.Command) Decision {
 // killRule refuses stopping processes directly (R58): the owner's processes are on the same
 // machine, and servers belong to aw serve and aw stop.
 func killRule(s Scope, c shell.Command) Decision {
+	if len(c.Args) == 0 {
+		return allow()
+	}
 	name := c.Name()
 	args := c.Args[1:]
 	refuse := func() Decision {
@@ -670,6 +678,9 @@ func isReadOnly(c shell.Command) bool {
 		}
 		switch sub {
 		case "branch":
+			if hasArg(rest, "--list") || hasShortFlag(rest, 'l') {
+				return !hasArg(rest, "--delete", "--move", "--copy", "--force") && !hasShortFlag(rest, 'd') && !hasShortFlag(rest, 'D') && !hasShortFlag(rest, 'm') && !hasShortFlag(rest, 'M') && !hasShortFlag(rest, 'c') && !hasShortFlag(rest, 'C')
+			}
 			return len(nonOptions(rest)) == 0 && !hasShortFlag(rest, 'd') && !hasShortFlag(rest, 'D') && !hasShortFlag(rest, 'm') && !hasShortFlag(rest, 'M') && !hasShortFlag(rest, 'c') && !hasShortFlag(rest, 'C')
 		case "tag":
 			return len(nonOptions(rest)) == 0 || hasArg(rest, "-l", "--list")
@@ -688,7 +699,9 @@ func isReadOnly(c shell.Command) bool {
 			st, _ := subcommand(rest)
 			return st == "" || st == "show"
 		}
-		return gitReadOnly[sub]
+		return gitReadOnly[sub] && !hasArg(rest, "--output")
+	case "curl":
+		return curlOnlyReads(args)
 	case "sed":
 		return !hasArg(args, "--in-place") && !hasShortFlag(args, 'i')
 	case "awk", "gawk":
@@ -697,6 +710,44 @@ func isReadOnly(c shell.Command) bool {
 		return !hasArg(args, "-delete", "-exec", "-execdir", "-ok", "-okdir", "-fprint", "-fprint0", "-fprintf", "-fls")
 	}
 	return readOnly[name]
+}
+
+// curlBareFlags and curlValueOptions are the curl options that neither write a file nor send a body.
+// Anything else, such as -o, -d or -T, leaves the call unclassified.
+var (
+	curlBareFlags = map[string]bool{"--silent": true, "--show-error": true, "--head": true, "--location": true, "--fail": true,
+		"--verbose": true, "--insecure": true, "--include": true, "--compressed": true, "--http1.1": true, "--http2": true}
+	curlValueOptions = map[string]bool{"-m": true, "--max-time": true, "--connect-timeout": true, "-H": true, "--header": true, "-A": true, "--user-agent": true,
+		"-w": true, "--write-out": true, "--retry": true}
+)
+
+// curlOnlyReads reports whether a curl call only asks for a URL and prints the answer. It is an
+// allowlist, so that an option added to curl later is not read-only by default.
+func curlOnlyReads(args []shell.Word) bool {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if !a.Known {
+			return false
+		}
+		switch {
+		case curlBareFlags[a.Text]:
+		case curlValueOptions[a.Text]:
+			i++
+			// A header read from a file, or a format that writes one.
+			if i >= len(args) || !args[i].Known || strings.HasPrefix(args[i].Text, "@") || strings.Contains(args[i].Text, "%output") {
+				return false
+			}
+		case strings.HasPrefix(a.Text, "--"):
+			return false
+		case strings.HasPrefix(a.Text, "-"):
+			if len(a.Text) == 1 || strings.Trim(a.Text[1:], "sSILfvki") != "" {
+				return false
+			}
+		case strings.HasPrefix(a.Text, "file:"):
+			return false
+		}
+	}
+	return true
 }
 
 // herdrReads are the herdr verbs that only look, or that a harness uses to report its own state.
@@ -851,7 +902,7 @@ func selfModRule(s Scope, c shell.Command) Decision {
 	}
 	if !isReadOnly(c) && len(c.Args) > 1 && !isAW(c) {
 		for _, a := range c.Args[1:] {
-			if abs, ok := absolute(a.Text, c.Dir); a.Known && ok && within(abs, filepath.Join(s.Owner, ".git", "aw")) {
+			if abs, ok := absolute(a.Text, c.Dir); a.Known && ok && (within(abs, filepath.Join(s.Owner, ".git", "aw")) || within(abs, filepath.Join(s.Owner, workspace.LocalStateDir))) {
 				return deny("self-modification", "%s is aw's own record of this workspace, which agents do not change → ask the human", quote(a.Text))
 			}
 		}
@@ -859,8 +910,10 @@ func selfModRule(s Scope, c shell.Command) Decision {
 	return first
 }
 
-// unattachedRule claims lanes lazily: a session in the owner checkout with no lane may read, and
-// anything else is refused with the attach and pair instructions.
+// unattachedRule claims lanes lazily, for what is in the owner's workspace. A session with no lane
+// may read anywhere and write outside the workspace. A command that visibly changes the owner
+// checkout is refused with the attach and pair instructions. A command aw cannot classify goes to
+// the human, who can see what it is: a harness that cannot ask turns that into a refusal.
 func unattachedRule(s Scope, c shell.Command) Decision {
 	if s.Role != Unattached || isAW(c) || isReadOnly(c) {
 		return allow()
@@ -872,7 +925,47 @@ func unattachedRule(s Scope, c shell.Command) Decision {
 	if n := c.Name(); n != "" {
 		what = n
 	}
-	return deny("attach", "%s may change files, and this session is not attached to a lane: the owner checkout belongs to the human %s", what, s.attachHint())
+	targets, understood := unattachedWrites(c)
+	if understood {
+		unclear := false
+		for _, t := range targets {
+			abs, ok := "", false
+			if t.Known {
+				abs, ok = absolute(t.Text, c.Dir)
+			}
+			switch {
+			case !ok:
+				unclear = true
+			case within(abs, s.Owner):
+				return deny("attach", "%s changes %s, and this session is not attached to a lane: the owner checkout belongs to the human %s", what, quote(t.Text), s.attachHint())
+			}
+		}
+		if !unclear {
+			return allow()
+		}
+	}
+	return ask("attach", "%s may change files, and this session is not attached to a lane, so the human decides → approve it if it only reads; otherwise %s", what, strings.TrimPrefix(s.attachHint(), "→ "))
+}
+
+// unattachedWrites are what a command writes, and whether that is all it can write: a reading command
+// with redirects, or a plain file command. An interpreter's -i flag says nothing about what its
+// program does.
+func unattachedWrites(c shell.Command) ([]shell.Word, bool) {
+	var out []shell.Word
+	for _, r := range c.Redirs {
+		if strings.Contains(r.Op, ">") && !isDup(r) && !harmless[r.Target.Text] {
+			out = append(out, r.Target)
+		}
+	}
+	if n := c.Name(); n == "perl" || n == "ruby" {
+		return out, false
+	}
+	if files := writeTargets(c); len(files) > 0 {
+		return append(out, files...), true
+	}
+	plain := c
+	plain.Redirs = nil
+	return out, isReadOnly(plain)
 }
 
 // publishAction classifies a command as one of the actions a team can pre-authorize, or "".

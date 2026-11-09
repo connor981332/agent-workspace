@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/connor981332/agent-workspace/internal/shell"
+	"github.com/connor981332/agent-workspace/internal/workspace"
 )
 
 // Tool is the kind of a tool call, as an adapter normalizes it.
@@ -185,7 +186,7 @@ func decideFiles(s Scope, c Call, cwd shell.Dir) Decision {
 			return deny("secrets", "%s is a secret file, and agents do not read secrets → tools that need it read it themselves (aw run sets up the environment)", quote(p))
 		}
 		if c.Tool == Write {
-			if d := s.unattachedWrite(); d.Verdict != Allow {
+			if d := s.unattachedWrite(abs); d.Verdict != Allow {
 				return d
 			}
 			if d := s.selfModification(abs, p); d.Verdict != Allow {
@@ -260,8 +261,9 @@ func (s Scope) attachHint() string {
 	return `→ run bin/aw attach "<what you are working on>" to claim a lane, and work there; or ask the human to make this a pair session by running ` + pair
 }
 
-func (s Scope) unattachedWrite() Decision {
-	if s.Role != Unattached {
+// unattachedWrite is the owner checkout's rule, so a file elsewhere on the machine is not its concern.
+func (s Scope) unattachedWrite(abs string) Decision {
+	if s.Role != Unattached || !within(abs, s.Owner) {
 		return allow()
 	}
 	return deny("attach", "this session is not attached to a lane, and the owner checkout belongs to the human %s", s.attachHint())
@@ -280,8 +282,8 @@ func (s Scope) selfModification(abs, given string) Decision {
 		return allow()
 	}
 	parts := strings.Split(rel, string(filepath.Separator))
-	if slices.Contains(parts, ".git") {
-		return deny("self-modification", "%s is inside a Git directory, which holds the workspace's hooks, shared configuration and aw's own records, including this session's → ask the human to change it", quote(given))
+	if slices.Contains(parts, ".git") || within(abs, filepath.Join(s.Owner, workspace.LocalStateDir)) {
+		return deny("self-modification", "%s is inside a Git directory or aw's state directory, which holds the workspace's hooks, shared configuration and aw's own records, including this session's → ask the human to change it", quote(given))
 	}
 	top := parts[0]
 	switch {
