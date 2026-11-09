@@ -23,7 +23,6 @@ aw version | grep -F "aw $version "
 git init -q --bare "$work/remote.git"
 git clone -q "$work/remote.git" "$work/maintainer" 2>/dev/null
 cd "$work/maintainer"
-git checkout -q -b main
 echo '# fresh' > README.md
 git add -A && git commit -q -m first
 aw init
@@ -33,7 +32,12 @@ git push -q origin main
 rm -rf "$XDG_CACHE_HOME"
 git clone -q "$work/remote.git" "$work/member"
 cd "$work/member"
-bin/aw setup --harness claude 2>&1 | tee "$work/setup.log"
+bin/aw setup --harness claude >"$work/setup.log" 2>&1 || {
+	cat "$work/setup.log"
+	echo "bin/aw setup failed" >&2
+	exit 1
+}
+cat "$work/setup.log"
 if grep -q 'has no signature' "$work/setup.log"; then
 	echo "the release's signature was not verified" >&2
 	exit 1
