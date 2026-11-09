@@ -116,6 +116,8 @@ The bench had been running on a RAM disk. It now uses the real disk, where every
 
 **In progress:** M7. (`m7/distribution`.) Now: keyless signing of `checksums.txt`, SLSA provenance, `install.sh`, `go install` checked at release, the launcher verifying the signature when `cosign` is installed, and the global `aw` as a proxy for the workspace's pin. Until 1.0 every release is a pre-release, which GitHub's `releases/latest` URLs skip, so `install.sh`'s stable URL is the raw file on master, and it picks the newest release through the API.
 
+(`m7/setup`.) Now: the eight steps of `aw setup` from a fresh clone, each harness's sandbox configured per checkout and per lane, `aw doctor` for sandboxes, the `fresh-clone` release job on a clean Ubuntu container and macOS, and the user documentation. Devcontainer projects' installs need their container, so step 6 and step 7 meet: `aw setup` asks once before starting containers, and starts none off a terminal without `--containers`. Shared infrastructure beyond devcontainers arrives with modules in M10.
+
 **Pending manual checks:** the macOS devcontainer checklist on Docker Desktop and OrbStack (`docs/dev/macos-devcontainer-checklist.md`, M6); the hot-path and budget benchmarks on an Apple Silicon laptop (T3, M1, M2;
 docs/dev/benchmarks.md).
 

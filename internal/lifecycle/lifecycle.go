@@ -410,7 +410,7 @@ func (r *Runner) step(ctx context.Context, s Step, b *begun) bool {
 	stampPath, stamp := "", ""
 	if s.Phase == PhaseInstall {
 		stampPath = filepath.Join(r.StateDir, s.Project+".install-stamp")
-		stamp = installStamp(s, dir)
+		stamp = InstallStamp(s.Hook.Run, s.Stamp, dir)
 		if have, err := os.ReadFile(stampPath); err == nil && string(have) == stamp {
 			r.say("%s: unchanged, skipped", s.Name)
 			return end(state.StepSkipped, "its stamp is unchanged", nil)
@@ -455,12 +455,12 @@ func (r *Runner) step(ctx context.Context, s Step, b *begun) bool {
 	return end(state.StepDone, "", &code)
 }
 
-// installStamp is the hash of the install command and the contents of its stamp files, so that a
-// lane reinstalls when either changes. A lane's first install has no stamp to compare with.
-func installStamp(s Step, dir string) string {
+// InstallStamp is the hash of the install command and the contents of its stamp files, so that a
+// checkout reinstalls when either changes. A first install has no stamp to compare with.
+func InstallStamp(run string, files []string, dir string) string {
 	h := sha256.New()
-	fmt.Fprintf(h, "%s\x00", s.Hook.Run)
-	for _, f := range s.Stamp {
+	fmt.Fprintf(h, "%s\x00", run)
+	for _, f := range files {
 		fmt.Fprintf(h, "%s\x00", f)
 		data, err := os.ReadFile(filepath.Join(dir, f))
 		if err != nil {

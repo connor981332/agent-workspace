@@ -18,6 +18,7 @@ import (
 	"github.com/connor981332/agent-workspace/internal/gitx/run"
 	"github.com/connor981332/agent-workspace/internal/lifecycle"
 	"github.com/connor981332/agent-workspace/internal/platform"
+	"github.com/connor981332/agent-workspace/internal/sandbox"
 	"github.com/connor981332/agent-workspace/internal/state"
 	"github.com/connor981332/agent-workspace/internal/timing"
 	"github.com/connor981332/agent-workspace/internal/workspace"
@@ -492,7 +493,32 @@ func (m *Manager) build(ctx context.Context, lane state.Lane, plans []repoPlan, 
 	if err := os.MkdirAll(filepath.Join(root, ".aw"), 0o755); err != nil {
 		return made, err
 	}
-	return made, os.WriteFile(filepath.Join(root, workspace.OwnerPointer), []byte(m.WS.Owner+"\n"), 0o644)
+	if err := os.WriteFile(filepath.Join(root, workspace.OwnerPointer), []byte(m.WS.Owner+"\n"), 0o644); err != nil {
+		return made, err
+	}
+	if err := sandbox.Exclude(m.WS.Owner); err != nil {
+		return made, err
+	}
+	// A harness's sandbox is the user's choice; these only say what it may write if it is on.
+	_, err := sandbox.Install(root, m.SandboxRoots(filepath.Base(root)))
+	return made, err
+}
+
+// SandboxRoots are the paths a harness's sandbox must allow, beyond its working directory: every
+// repository's Git directory, which holds aw's state and which sandboxes keep read-only, and the
+// lane's worktrees, when lane is a lane directory such as "03". For the owner checkout it is "".
+func (m *Manager) SandboxRoots(lane string) []string {
+	roots := []string{filepath.Join(m.WS.Owner, ".git")}
+	for _, name := range sortedKeys(m.Cfg.Projects) {
+		p := m.Cfg.Projects[name]
+		if p.Directory != "." {
+			roots = append(roots, filepath.Join(m.WS.Owner, p.Directory, ".git"))
+		}
+		if lane != "" && p.Lanes != "shared" {
+			roots = append(roots, filepath.Join(m.WS.Owner, p.Directory, ".worktrees", lane))
+		}
+	}
+	return roots
 }
 
 // linkSecrets links each secret file of the owner's checkout into the worktree, relatively, and

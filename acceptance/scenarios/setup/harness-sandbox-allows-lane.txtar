@@ -1,0 +1,32 @@
+# aw setup and each new lane tell Codex and Claude Code exactly what their sandboxes may write: the
+# Git directories, which hold aw's state, and the lane's worktrees. The files stay out of Git, keep
+# what a person wrote, and do not stop a lane from being recycled.
+# req: R55
+# source: plan risk 7, §8 question 4
+# milestone: M7
+
+owner-may-change
+workspace shop --init
+exec sh -c 'mkdir -p .claude; echo "{\"model\": \"mine\"}" > .claude/settings.local.json'
+exec aw setup --harness claude
+grep 'writable_roots' .codex/config.toml
+grep '/shop/.git"' .codex/config.toml
+grep '/shop/web/.git"' .codex/config.toml
+grep 'allowWrite' .claude/settings.local.json
+grep '"model": "mine"' .claude/settings.local.json
+! grep 'enabled' .claude/settings.local.json
+exec git status --porcelain
+! stdout 'config.toml'
+! stdout 'settings.local'
+exec aw doctor
+stdout 'harness sandboxes: Codex and Claude Code'
+
+exec aw attach 'one'
+cd .worktrees/01
+grep '/web/.worktrees/01"' .codex/config.toml
+grep '/api/.worktrees/01"' .claude/settings.local.json
+exec git status --porcelain
+! stdout 'config.toml'
+cd ../..
+exec aw sweep --apply --json
+json stdout .lanes[0].action recycle

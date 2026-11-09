@@ -1,0 +1,35 @@
+# aw setup can be rerun: it clones nothing again, keeps the individual layer, and does not reinstall
+# while the stamp is unchanged. It reinstalls when the stamp changes.
+# req: R12
+# source: C1 test_fresh_checkout_bootstraps_then_attaches_without_manual_repair
+# milestone: M7
+
+owner-may-change
+workspace solo --single --init
+exec aw setup --harness codex
+stdout 'solo: installing dependencies'
+exec sh -c 'echo "# edited by me" >> "$XDG_CONFIG_HOME/agent-workspace/solo.toml"'
+exec aw setup --harness claude
+! stdout 'Cloning'
+! stdout 'installing dependencies'
+! stdout 'Wrote .*solo.toml'
+stdout 'already set up'
+grep 'edited by me' $XDG_CONFIG_HOME/agent-workspace/solo.toml
+grep 'harness = "codex"' $XDG_CONFIG_HOME/agent-workspace/solo.toml
+grep -count=1 . .git/aw/install.txt
+
+exec sh -c 'echo v2 >> README.md'
+exec aw setup
+stdout 'solo: installing dependencies'
+grep -count=2 . .git/aw/install.txt
+
+-- workspace.toml --
+[workspace]
+name = "Solo"
+namespace = "solo"
+schema = 1
+
+[projects.solo]
+directory = "."
+install = "echo x >> .git/aw/install.txt"
+install_stamp = ["README.md"]

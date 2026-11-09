@@ -24,6 +24,7 @@ import (
 	"github.com/connor981332/agent-workspace/internal/launcher"
 	"github.com/connor981332/agent-workspace/internal/platform"
 	"github.com/connor981332/agent-workspace/internal/runners"
+	"github.com/connor981332/agent-workspace/internal/sandbox"
 	"github.com/connor981332/agent-workspace/internal/state"
 	"github.com/connor981332/agent-workspace/internal/timing"
 	"github.com/connor981332/agent-workspace/internal/workspace"
@@ -139,6 +140,7 @@ func Run(dir, version string, withTimings bool) *Report {
 	checkInstructions(ws.Owner, add)
 	checkMachine(ws.Owner, c, add)
 	checkDevcontainers(ws.Owner, c, add)
+	checkSandboxes(ws.Owner, c, add)
 	addMachine(add)
 	if withTimings {
 		r.Timings = t.Phases()
@@ -432,6 +434,25 @@ func checkDevcontainers(owner string, c *config.Config, add func(Check)) {
 		add(Check{Name: "devcontainer CLI", Status: Warn, Message: fmt.Sprintf("%q names no version, so builds can change without warning", c.Devcontainer.Command),
 			Fix: "name a version in [devcontainer] command, e.g. npx -y @devcontainers/cli@{version}"})
 	}
+}
+
+// checkSandboxes says when Codex's sandbox would keep aw's state read-only (plan risk 7). Before
+// aw setup the file is simply not there yet, so that is not a problem.
+func checkSandboxes(owner string, c *config.Config, add func(Check)) {
+	if c == nil {
+		return
+	}
+	if _, err := os.Stat(filepath.Join(owner, sandbox.CodexFile)); err != nil {
+		add(Check{Name: "harness sandboxes", Status: Info, Message: "not configured yet: bin/aw setup does it"})
+		return
+	}
+	roots := []string{filepath.Join(owner, ".git")}
+	if missing := sandbox.Missing(owner, roots); len(missing) > 0 {
+		add(Check{Name: "harness sandboxes", Status: Warn, Message: fmt.Sprintf("%s does not allow %s, so a sandboxed Codex cannot write aw's state", sandbox.CodexFile, strings.Join(missing, ", ")),
+			Fix: "add it to sandbox_workspace_write.writable_roots"})
+		return
+	}
+	add(Check{Name: "harness sandboxes", Status: OK, Message: "Codex and Claude Code may write the lane, the state and the Git directories"})
 }
 
 func checkInstructions(owner string, add func(Check)) {
