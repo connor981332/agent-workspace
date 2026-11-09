@@ -28,6 +28,8 @@ jobs:
     environment: release
     permissions:
       contents: write
+      id-token: write # keyless signing, and attestations
+      attestations: write
     steps:
       - uses: actions/checkout@v7
         with:
@@ -65,6 +67,7 @@ jobs:
           print(f"AW_CONFIG_SCHEMA={v['config_schema']}")
           print(f"AW_STATE_SCHEMA={v['state_schema']}")
           PY
+      - uses: sigstore/cosign-installer@v4
       - uses: goreleaser/goreleaser-action@v7
         with:
           distribution: goreleaser
@@ -74,6 +77,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Check the assets
         run: sh .github/scripts/check-release-assets.sh dist
+      - name: SLSA build provenance
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: dist/assets/aw_*
 
   # The published assets, as downloaded, pass the acceptance suite on every platform.
   verify:
@@ -111,6 +118,22 @@ jobs:
           "$bin" version --json
           echo "AW_ACCEPT_MIRROR=$dir" >> "$GITHUB_ENV"
           echo "AW_BIN=$bin" >> "$GITHUB_ENV"
+      - uses: sigstore/cosign-installer@v4
+        if: runner.os == 'Linux'
+      - name: The signature, the provenance and go install (Linux)
+        if: runner.os == 'Linux'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        working-directory: ${{ env.AW_ACCEPT_MIRROR }}
+        run: |
+          cosign verify-blob --bundle checksums.txt.sigstore.json \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity "https://github.com/$GITHUB_REPOSITORY/.github/workflows/release.yml@$GITHUB_REF" \
+            checksums.txt
+          gh attestation verify "$AW_BIN" --repo "$GITHUB_REPOSITORY"
+          test -s install.sh
+          GOBIN="$RUNNER_TEMP/gobin" GOFLAGS= GOPROXY=direct go install "github.com/$GITHUB_REPOSITORY/cmd/aw@$GITHUB_REF_NAME"
+          "$RUNNER_TEMP/gobin/aw" version | grep -F "aw ${GITHUB_REF_NAME#v} "
       - name: Acceptance suite against the published assets
         working-directory: acceptance
         run: go test -count=1 ./...

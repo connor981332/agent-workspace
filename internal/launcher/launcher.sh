@@ -3,8 +3,8 @@
 #
 # It runs the aw version pinned in the owner checkout's .aw/version, verified against .aw/lock.
 # On the common path it uses only shell builtins and then execs the cached binary. Only when the
-# binary is not cached does it download it (from $AW_MIRROR if set), verify its SHA-256 checksum
-# and store it. AW_TOOL_PATH runs a local build instead, for working on aw itself.
+# binary is not cached does it download it (from $AW_MIRROR if set), verify its SHA-256 checksum,
+# verify the release's signature when cosign is installed, and store it. AW_TOOL_PATH runs a local build instead, for working on aw itself.
 #
 # For aw hook and aw git-hook, every failure exits 2, which harnesses and Git treat as a refusal:
 # a guard that cannot run must deny, never allow.
@@ -19,6 +19,10 @@ aw_die() {
 	if [ -n "$aw_hook" ]; then exit 2; fi
 	exit 1
 }
+
+# Tells the binary it came through here, so that it does not act as the global proxy.
+AW_LAUNCHED=1
+export AW_LAUNCHED
 
 # Run the binary. For hooks it runs as a child, so that a binary that fails to start still exits 2.
 aw_run() {
@@ -108,17 +112,28 @@ mkdir -p "$aw_cache" || aw_die "cannot create $aw_cache"
 aw_tmp=$aw_cache/.download.$$
 trap 'rm -f "$aw_tmp"' EXIT
 aw_from=${AW_MIRROR:-https://github.com/connor981332/agent-workspace/releases/download/v$aw_version}
+
+# Fetches a release file to a path. Returns non-zero, saying nothing, when it cannot.
+aw_get() {
+	case $aw_from in
+	/*) cp "$aw_from/$1" "$2" 2>/dev/null ;;
+	*)
+		if command -v curl >/dev/null 2>&1; then
+			curl -fsSL -o "$2" "$aw_from/$1"
+		elif command -v wget >/dev/null 2>&1; then
+			wget -q -O "$2" "$aw_from/$1"
+		else
+			aw_die "neither curl nor wget is installed → install one, then retry"
+		fi
+		;;
+	esac
+}
+
 case $aw_from in
-/*) cp "$aw_from/$aw_asset" "$aw_tmp" 2>/dev/null || aw_die "$aw_from/$aw_asset not found in the mirror (AW_MIRROR)" ;;
+/*) aw_get "$aw_asset" "$aw_tmp" || aw_die "$aw_from/$aw_asset not found in the mirror (AW_MIRROR)" ;;
 *)
 	echo "aw: downloading $aw_asset" >&2
-	if command -v curl >/dev/null 2>&1; then
-		curl -fsSL -o "$aw_tmp" "$aw_from/$aw_asset" || aw_die "downloading $aw_from/$aw_asset failed → check the network, or set AW_MIRROR"
-	elif command -v wget >/dev/null 2>&1; then
-		wget -q -O "$aw_tmp" "$aw_from/$aw_asset" || aw_die "downloading $aw_from/$aw_asset failed → check the network, or set AW_MIRROR"
-	else
-		aw_die "neither curl nor wget is installed → install one, then retry"
-	fi
+	aw_get "$aw_asset" "$aw_tmp" || aw_die "downloading $aw_from/$aw_asset failed → check the network, or set AW_MIRROR"
 	;;
 esac
 if command -v sha256sum >/dev/null 2>&1; then
@@ -130,6 +145,30 @@ else
 fi
 aw_got=${aw_got%% *}
 [ "$aw_got" = "$aw_sum" ] || aw_die "checksum mismatch for $aw_asset (expected $aw_sum, got $aw_got); it was not installed → check AW_MIRROR, or report this"
+
+# 5. With cosign installed, the release's signed checksums must agree with the lock. A release with
+# no signature (those before the signing began, or a mirror without one) has its checksum only.
+if command -v cosign >/dev/null 2>&1; then
+	aw_sums=$aw_cache/.checksums.$$
+	aw_bundle=$aw_cache/.bundle.$$
+	trap 'rm -f "$aw_tmp" "$aw_sums" "$aw_bundle"' EXIT
+	if aw_get checksums.txt.sigstore.json "$aw_bundle" && aw_get checksums.txt "$aw_sums"; then
+		cosign verify-blob --bundle "$aw_bundle" \
+			--certificate-oidc-issuer https://token.actions.githubusercontent.com \
+			--certificate-identity-regexp '^https://github\.com/connor981332/agent-workspace/\.github/workflows/release\.yml@refs/tags/v' \
+			"$aw_sums" >/dev/null 2>&1 ||
+			aw_die "the signature of $aw_version's checksums did not verify, so $aw_asset was not installed → report this"
+		aw_signed=
+		while read -r aw_line_sum aw_line_file || [ -n "$aw_line_sum" ]; do
+			if [ "$aw_line_file" = "$aw_asset" ]; then aw_signed=$aw_line_sum; fi
+		done <"$aw_sums"
+		[ "$aw_signed" = "$aw_sum" ] || aw_die "the signed checksum of $aw_asset differs from .aw/lock, so it was not installed → report this"
+	else
+		echo "aw: $aw_version has no signature to verify; its checksum matched .aw/lock" >&2
+	fi
+	rm -f "$aw_sums" "$aw_bundle"
+fi
+
 chmod 755 "$aw_tmp" && mv -f "$aw_tmp" "$aw_cache/aw" || aw_die "cannot store $aw_cache/aw"
 trap - EXIT
 aw_run "$aw_cache/aw" "$@"

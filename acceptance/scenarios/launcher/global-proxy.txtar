@@ -1,0 +1,24 @@
+# A global aw inside a workspace runs that workspace's pin, from the owner checkout or a lane, and
+# outside a workspace it is itself. It does not loop.
+# req: R15 R17
+# source: distribution.md, "The global aw is a proxy"
+# milestone: M7
+
+mkdir $WORK/plain
+cd $WORK/plain
+exec aw version
+stdout '^aw '$AW_VERSION' '
+
+workspace shop --init
+
+# A launcher that names itself, in front of the pinned binary, shows that aw went through it.
+exec sh -c 'cp bin/aw $WORK/launcher.orig; (echo "#!/bin/sh"; echo "echo via-launcher >&2"; sed 1d $WORK/launcher.orig) > bin/aw'
+owner-may-change
+exec aw version
+stderr '^via-launcher$'
+stderr -count=1 'via-launcher'
+exec aw attach 'one'
+cd .worktrees/01
+exec aw whoami
+stderr -count=1 'via-launcher'
+stdout 'location +lane root'

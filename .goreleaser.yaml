@@ -30,6 +30,14 @@ checksum:
   name_template: checksums.txt
   algorithm: sha256
 
+# Keyless Sigstore signature of checksums.txt, through GitHub OIDC (§6). The launcher and install.sh
+# verify it when cosign is installed.
+signs:
+  - cmd: cosign
+    artifacts: checksum
+    signature: "${artifact}.sigstore.json"
+    args: ["sign-blob", "--yes", "--bundle=${signature}", "${artifact}"]
+
 snapshot:
   version_template: "{{ incpatch .Version }}-snapshot+{{ .ShortCommit }}"
 
@@ -45,8 +53,12 @@ release:
   # Until 1.0, every release is a pre-release that marks a milestone exit (§6).
   prerelease: "true"
   draft: false
+  extra_files:
+    - glob: ./install.sh
   header: |
     aw {{ .Version }}: configuration schema {{ .Env.AW_CONFIG_SCHEMA }}, state schema {{ .Env.AW_STATE_SCHEMA }}.
 
-    The assets are raw binaries for Linux and macOS on amd64 and arm64, and checksums.txt (SHA-256).
+    The assets are raw binaries for Linux and macOS on amd64 and arm64, checksums.txt (SHA-256) with
+    its Sigstore bundle, and install.sh. Build provenance is attested: gh attestation verify <file>
+    --repo connor981332/agent-workspace.
     A workspace pins this version in .aw/version, and bin/aw fetches and verifies the binary.

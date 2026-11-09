@@ -187,18 +187,9 @@ func checkMirror(dir, bin, version string) (string, error) {
 	return dir, nil
 }
 
-// globalShim is the suite's global aw. Inside a workspace it runs that workspace's bin/aw launcher,
-// so scenarios go through the launcher as users do; elsewhere it runs the binary under test. M7
-// builds this proxy into aw itself (distribution.md), and the shim is then replaced by the binary.
+// globalShim is the suite's global aw: the binary under test, whose own proxy finds a workspace's
+// launcher, as a user's global install does.
 const globalShim = `#!/bin/sh
-d=$PWD
-while [ -n "$d" ]; do
-	if [ -x "$d/bin/aw" ] && [ -f "$d/.aw/version" ]; then
-		exec "$d/bin/aw" "$@"
-	fi
-	[ "$d" = / ] && break
-	d=$(dirname "$d")
-done
 exec "$AW_BIN" "$@"
 `
 
