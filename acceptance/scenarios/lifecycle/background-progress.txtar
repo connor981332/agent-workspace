@@ -15,8 +15,8 @@ stdout 'it is being set up'
 cd .worktrees/01
 exec aw run api sh -c 'echo api ran'
 stdout 'api ran'
-! exec sh -c 'timeout 1 aw run web true'
-stderr 'waiting for web\.setup to finish'
+exec sh -c 'aw run web true 2> "$WORK/waited" & p=$!; sleep 1; kill $p; wait $p; cat "$WORK/waited"; exit 0'
+stdout 'waiting for web\.setup to finish'
 cd ../..
 exec touch .git/go
 cd .worktrees/01
