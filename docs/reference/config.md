@@ -81,7 +81,8 @@ The project repositories. The key is the project's name.
 | `repo` | string | — | Clone URL. |
 | `lanes` | one of `"worktree"`, `"shared"` | `"worktree"` | worktree: every lane gets a worktree. shared: lanes run the owner checkout with lane settings. |
 | `runner` | one of `"host"`, `"devcontainer"` | `"host"` | Where commands run: host, or devcontainer (one container per project, shared with VS Code). |
-| `install` | string | — | Installs dependencies. Rerun when its stamp changes. |
+| `install` | string | — | Installs dependencies, in each lane's worktree. Rerun when its stamp changes. |
+| `install_stamp` | array of strings | — | Files, relative to the project, whose contents decide whether install reruns, e.g. package-lock.json. |
 | `run` | string | — | The default command for aw run <project> with no command. |
 | `needs` | array of strings | — | Resources the project's commands need. |
 | `secrets` | array of strings | — | Files that are not in Git, such as .env, linked read-only into every lane from the owner checkout, relative to the project. |
@@ -105,8 +106,10 @@ Per-project lifecycle hooks.
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
+| `prepare` | command string, or `{ run, timeout, needs }` | — | After the workspace's prepare, before installs, in the project's worktree. |
 | `setup` | command string, or `{ run, timeout, needs }` | — | After installs, for a newly created lane. |
 | `reset` | command string, or `{ run, timeout, needs }` | — | Instead of setup, for a lane recycled from the pool. |
+| `restore` | command string, or `{ run, timeout, needs }` | — | After a snapshot is restored into the lane. The place to migrate data behind the code. |
 
 ### `[projects."<name>".servers.<name>]`
 
@@ -154,7 +157,7 @@ Named team commands, run with aw <name>.
 | `project` | string | — | The project the command runs in. |
 | `run` | string | — | The command. |
 | `needs` | array of strings | — | Resources it holds while it runs. |
-| `after` | array of strings | — | Lifecycle steps to wait for besides the defaults (prepare, install, setup or reset). |
+| `after` | array of strings | — | Lifecycle steps to wait for besides the defaults (the workspace's prepare and this project's steps), as <project>.<step>, e.g. api.setup. |
 
 ## `[guards.<name>]`
 

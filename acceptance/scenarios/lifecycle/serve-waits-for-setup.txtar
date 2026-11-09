@@ -1,0 +1,36 @@
+# aw serve needs what its servers' project set up: a failed setup refuses it, and takes no seat.
+# req: R31 R36
+# source: C1 test_setup_failure_no_wait_and_server_refusal
+# milestone: M5
+
+workspace shop --init
+exec aw attach 'add feature flag'
+cd .worktrees/01
+! exec aw serve app
+stderr 'setup incomplete \(web\.setup failed'
+exec aw queue --json
+! stdout 'feature-flag'
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[projects.web]
+directory = "web"
+
+[projects.web.servers.app]
+command = "exec sleep 30"
+port = 39000
+
+[projects.web.lifecycle]
+setup = "exit 1"
+
+[resources.app]
+kind = "process"
+capacity = 1
+servers = ["web.app"]

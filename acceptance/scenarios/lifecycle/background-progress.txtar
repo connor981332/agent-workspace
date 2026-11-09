@@ -1,0 +1,42 @@
+# aw attach returns while setup still runs, aw shows how far it has got, a sweep keeps the lane, and
+# aw run waits for exactly the steps it depends on: another project's step does not hold it up.
+# req: R5 R23 R31
+# source: C1 test_cli_new_reserves_reuse_with_pool_zero
+# milestone: M5
+
+workspace shop --init
+exec aw attach 'add feature flag'
+stdout 'Claimed lane 01'
+exec aw --json
+json stdout .lanes[0].state setting-up
+exec sh -c 'aw --json | grep -c "setting up"'
+exec aw sweep --json
+stdout 'it is being set up'
+cd .worktrees/01
+exec aw run api sh -c 'echo api ran'
+stdout 'api ran'
+exec sh -c 'aw run web true 2> "$WORK/waited" & p=$!; sleep 1; kill $p; wait $p; cat "$WORK/waited"; exit 0'
+stdout 'waiting for web\.setup to finish'
+cd ../..
+exec touch .git/go
+cd .worktrees/01
+exec aw run web sh -c 'echo web ran'
+stdout 'web ran'
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[projects.web]
+directory = "web"
+
+[projects.web.lifecycle]
+setup = 'until test -e "$AW_OWNER/.git/go"; do sleep 0.02; done'
+
+[projects.api]
+directory = "api"

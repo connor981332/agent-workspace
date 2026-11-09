@@ -293,6 +293,29 @@ func (m *Manager) remoteStatus(ctx context.Context, r state.LaneRepo, head strin
 	return &ch
 }
 
+// setupProgress says where a lane's setup has got to (R5): the step failing or running, and how far along.
+func (m *Manager) setupProgress(l state.Lane) string {
+	steps, err := state.Steps(m.Store.DB(), l.Number, l.Generation)
+	if err != nil || len(steps) == 0 {
+		return ""
+	}
+	finished, current := 0, ""
+	for _, s := range steps {
+		switch {
+		case s.Finished():
+			finished++
+		case s.Status == state.StepFailed:
+			return fmt.Sprintf(" (%s failed) → aw setup %s", s.Name, l.Name)
+		case s.Status == state.StepRunning && current == "":
+			current = s.Name
+		}
+	}
+	if current == "" {
+		return fmt.Sprintf(" (%d/%d)", finished, len(steps))
+	}
+	return fmt.Sprintf(" (%s, %d/%d)", current, finished, len(steps))
+}
+
 // classify puts a lane in a dashboard section and says why.
 func (m *Manager) classify(ls *LaneStatus, l state.Lane) {
 	running := false
@@ -333,9 +356,9 @@ func (m *Manager) classify(ls *LaneStatus, l state.Lane) {
 	case ls.State == state.LanePool:
 		ls.Section, ls.Why = Pool, "warm"
 	case ls.State == state.LaneClaiming || ls.State == state.LaneSettingUp:
-		ls.Section, ls.Why = Running, "setting up"
+		ls.Section, ls.Why = Running, "setting up"+m.setupProgress(l)
 	case ls.State == state.LaneIncomplete:
-		ls.Section, ls.Why = NeedsYou, "setup incomplete"
+		ls.Section, ls.Why = NeedsYou, "setup incomplete"+m.setupProgress(l)
 	case ls.Handoff != nil && ls.Handoff.Invalid:
 		ls.Section, ls.Why = NeedsYou, "handoff needs inspection (it cannot be read)"
 	case ls.State == state.LaneParked:

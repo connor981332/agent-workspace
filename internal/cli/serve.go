@@ -189,7 +189,7 @@ func startServers(ctx context.Context, w *writeContext, m *lanes.Manager, r brok
 			undo()
 			return nil, fmt.Errorf("server %s is not configured → check workspace.toml", full)
 		}
-		where, err := m.Locate(project)
+		where, err := m.LocateIn(l.Lane, project)
 		if err != nil {
 			undo()
 			return nil, err
@@ -268,6 +268,13 @@ With --wait it waits in the foreground instead. The owner goes to the front of t
 			h, err := holder(w, m)
 			if err != nil {
 				return err
+			}
+			// A server needs what its project's setup makes, and a held seat should not wait for it.
+			for _, full := range r.Servers {
+				project, _, _ := strings.Cut(full, ".")
+				if err := awaitSetup(cmd.Context(), w, m, project, nil, cmd.ErrOrStderr()); err != nil {
+					return err
+				}
 			}
 			if r.Kind == "token" && h.Lane > 0 {
 				if ids, _ := issuedIdentities(); len(ids) == 1 {

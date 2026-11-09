@@ -1,0 +1,33 @@
+# Teardown runs before a lane is removed, with the contract in the lane root. A failure keeps the
+# lane and is journaled, and the retry finishes the job. The lane's private state goes with it.
+# req: R29 R31
+# source: C1 test_cli_apply_callbacks_and_idempotence
+# milestone: M5
+
+workspace solo --single --init
+exec aw attach 'one'
+! exec aw sweep --apply --json
+stdout 'teardown of lane one failed: exit status 4'
+stdout 'aw sweep --apply --retry 1'
+exists .worktrees/01
+exec touch .git/allow
+exec aw sweep --apply --retry 1 --json
+json stdout .lanes[0].action destroy
+! exists .worktrees/01
+! exists .git/aw/lanes/01
+grep 'one 01 teardown' .git/seen
+
+-- workspace.toml --
+[workspace]
+name = "Solo"
+namespace = "solo"
+schema = 1
+
+[lanes]
+pool = 0
+
+[lifecycle]
+teardown = 'test -e "$AW_OWNER/.git/allow" || exit 4; echo "$AW_LANE_NAME $AW_LANE $AW_PHASE" > "$AW_OWNER/.git/seen"'
+
+[projects.solo]
+directory = "."

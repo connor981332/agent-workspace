@@ -1,0 +1,54 @@
+# A failed step makes the lane incomplete: aw run refuses and names the retry command. The retry reruns
+# from the first incomplete step, and steps that finished do not run again.
+# req: R31 R93
+# source: C1 test_setup_failure_no_wait_and_server_refusal
+# milestone: M5
+
+workspace shop --init
+exec aw attach 'add feature flag'
+cd .worktrees/01
+! exec aw run web true
+stderr 'lane feature-flag: setup incomplete \(web\.setup failed: exit status 3, log .*web\.setup\.log\) → aw setup feature-flag'
+exec aw run api sh -c 'echo api works; cat "$AW_LANE_STATE/prepared"'
+stdout 'api works'
+stdout -count=1 '^ran$'
+cd ../..
+exec aw --json
+json stdout .lanes[0].state incomplete
+stdout 'setup incomplete \(web\.setup failed\) → aw setup feature-flag'
+
+# The retry names the failure again while it is not fixed.
+! exec aw setup feature-flag
+stderr 'setup incomplete'
+exec touch .git/fixed
+exec aw setup feature-flag
+stdout 'Lane feature-flag is set up'
+stderr 'web\.setup: done'
+! stderr '^aw: prepare'
+cd .worktrees/01
+exec aw run web sh -c 'cat "$AW_LANE_STATE/prepared"'
+stdout -count=1 '^ran$'
+cd ../..
+exec aw --json
+json stdout .lanes[0].state working
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[lifecycle]
+prepare = 'echo ran >> "$AW_LANE_STATE/prepared"'
+
+[projects.web]
+directory = "web"
+
+[projects.web.lifecycle]
+setup = 'test -e "$AW_OWNER/.git/fixed" || exit 3'
+
+[projects.api]
+directory = "api"

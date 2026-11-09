@@ -1,0 +1,34 @@
+# The env file prepare writes reaches each project's hooks and commands, and only that project's.
+# req: R30
+# source: C1 HostLaneTests.test_single_repo_lane_from_init_to_cleanup
+# milestone: M5
+
+workspace shop --init
+exec aw attach 'add feature flag'
+cd .worktrees/01
+exec aw run web sh -c 'echo "$LANE_DB"; cat "$AW_LANE_STATE/seen"'
+stdout '^shop_01$'
+stdout '^setup saw shop_01$'
+exec aw run api sh -c 'echo "[$LANE_DB]"'
+stdout '^\[\]$'
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[lifecycle]
+prepare = 'echo "LANE_DB=shop_$AW_LANE" > "$AW_LANE_STATE/web.env"'
+
+[projects.web]
+directory = "web"
+
+[projects.web.lifecycle]
+setup = 'echo "setup saw $LANE_DB" > "$AW_LANE_STATE/seen"'
+
+[projects.api]
+directory = "api"

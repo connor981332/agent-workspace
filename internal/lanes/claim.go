@@ -16,6 +16,7 @@ import (
 	"github.com/connor981332/agent-workspace/internal/config"
 	"github.com/connor981332/agent-workspace/internal/forge"
 	"github.com/connor981332/agent-workspace/internal/gitx/run"
+	"github.com/connor981332/agent-workspace/internal/lifecycle"
 	"github.com/connor981332/agent-workspace/internal/platform"
 	"github.com/connor981332/agent-workspace/internal/state"
 	"github.com/connor981332/agent-workspace/internal/timing"
@@ -27,6 +28,8 @@ type Manager struct {
 	WS    *workspace.Workspace
 	Cfg   *config.Config
 	Store *state.Store
+	// Seats takes resources for a lane's teardown, and returns how to give them back.
+	Seats func(ctx context.Context, l state.Lane, needs []string) (func(), error)
 
 	forges        map[string]*forge.Client // by host, for one sweep
 	forgeDeadline time.Time
@@ -58,6 +61,8 @@ type Claimed struct {
 	Returned bool             `json:"returned"`  // its processes had all ended, and it came back
 	Joined   bool             `json:"joined"`    // this process joined the session (a resumed harness)
 	FromPool bool             `json:"from_pool"` // a warm lane was claimed
+	// Setup: the lane has setup steps, and the caller starts them in the background.
+	Setup bool `json:"setup"`
 }
 
 // repoPlan is one repository a lane gets a worktree of.
@@ -180,6 +185,12 @@ func (m *Manager) Claim(ctx context.Context, req ClaimRequest) (*Claimed, error)
 			return err
 		}
 		lane.State, lane.Updated = state.LaneWorking, state.Now()
+		if steps := lifecycle.Plan(m.Cfg, fromPool); len(steps) > 0 {
+			lane.State = state.LaneSettingUp
+			if err := state.PlanSetup(tx, lane.Number, lane.Generation, fromPool, lifecycle.Names(steps)); err != nil {
+				return err
+			}
+		}
 		return state.UpdateLane(tx, lane)
 	})
 	if err != nil {
@@ -187,7 +198,8 @@ func (m *Manager) Claim(ctx context.Context, req ClaimRequest) (*Claimed, error)
 	}
 	t.Mark("record")
 	compose.CopyPersonal(m.WS.Owner, m.Root(lane.Number))
-	return &Claimed{Lane: lane, Dir: Dir(lane.Number, m.Cfg.Lanes.Max), Root: m.Root(lane.Number), Repos: repos, FromPool: fromPool}, nil
+	return &Claimed{Lane: lane, Dir: Dir(lane.Number, m.Cfg.Lanes.Max), Root: m.Root(lane.Number), Repos: repos, FromPool: fromPool,
+		Setup: lane.State == state.LaneSettingUp}, nil
 }
 
 // existing returns the lane the session already holds, waiting while another call builds it.

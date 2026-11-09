@@ -15,13 +15,19 @@ import (
 func newSetupCmd() *cobra.Command {
 	var asJSON bool
 	cmd := &cobra.Command{
-		Use:   "setup",
-		Short: "Install aw's Git hooks and harness hooks in this workspace",
+		Use:   "setup [lane]",
+		Short: "Install aw's hooks in this workspace, or rerun a lane's setup from its first incomplete step",
 		Long: `Point every repository's core.hooksPath at aw's hooks dispatcher, which refuses ref updates a lane may
 not make and then runs the team's own hook of the same name. Merge aw's guard hooks into each
-harness's project configuration, keeping other settings. Safe to rerun.`,
-		Args: cobra.NoArgs,
-		RunE: run(func(cmd *cobra.Command, _ []string) error {
+harness's project configuration, keeping other settings. Safe to rerun.
+
+With a lane, rerun that lane's setup in the foreground, from its first incomplete step. An agent may
+do this for its own lane.`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: run(func(cmd *cobra.Command, args []string) error {
+			if len(args) == 1 {
+				return retrySetup(cmd, args[0])
+			}
 			ws, c, err := loadConfig()
 			if err != nil {
 				return err

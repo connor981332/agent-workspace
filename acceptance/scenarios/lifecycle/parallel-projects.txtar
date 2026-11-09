@@ -1,0 +1,34 @@
+# Independent projects set up at the same time: each project's setup waits for a file the other's writes.
+# req: R32
+# source: spec
+# milestone: M5
+
+workspace shop --init
+exec aw attach 'add feature flag'
+cd .worktrees/01
+exec aw run web true
+exec aw run api true
+cd ../..
+exec aw --json
+json stdout .lanes[0].state working
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[projects.web]
+directory = "web"
+
+[projects.web.lifecycle]
+setup = { run = 'touch "$AW_LANE_STATE/web"; i=0; until test -e "$AW_LANE_STATE/api"; do i=$((i+1)); test $i -lt 200 || exit 9; sleep 0.05; done', timeout = "30s" }
+
+[projects.api]
+directory = "api"
+
+[projects.api.lifecycle]
+setup = { run = 'touch "$AW_LANE_STATE/api"; i=0; until test -e "$AW_LANE_STATE/web"; do i=$((i+1)); test $i -lt 200 || exit 9; sleep 0.05; done', timeout = "30s" }

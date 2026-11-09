@@ -76,18 +76,19 @@ type WorkspaceLifecycle struct {
 }
 
 type Project struct {
-	Directory  string                `json:"directory"`
-	Repo       string                `json:"repo"`
-	Lanes      string                `json:"lanes"`
-	Runner     string                `json:"runner"`
-	Install    string                `json:"install"`
-	Run        string                `json:"run"`
-	Needs      []string              `json:"needs"`
-	Secrets    []string              `json:"secrets"`
-	Generated  []string              `json:"generated"`
-	LaneGuards map[string]*LaneGuard `json:"lane_guards"`
-	Lifecycle  ProjectLifecycle      `json:"lifecycle"`
-	Servers    map[string]*Server    `json:"servers"`
+	Directory    string                `json:"directory"`
+	Repo         string                `json:"repo"`
+	Lanes        string                `json:"lanes"`
+	Runner       string                `json:"runner"`
+	Install      string                `json:"install"`
+	InstallStamp []string              `json:"install_stamp"`
+	Run          string                `json:"run"`
+	Needs        []string              `json:"needs"`
+	Secrets      []string              `json:"secrets"`
+	Generated    []string              `json:"generated"`
+	LaneGuards   map[string]*LaneGuard `json:"lane_guards"`
+	Lifecycle    ProjectLifecycle      `json:"lifecycle"`
+	Servers      map[string]*Server    `json:"servers"`
 }
 
 // LaneGuard is a check a branch must pass before a lane is created on it.
@@ -98,8 +99,10 @@ type LaneGuard struct {
 }
 
 type ProjectLifecycle struct {
-	Setup *Hook `json:"setup"`
-	Reset *Hook `json:"reset"`
+	Prepare *Hook `json:"prepare"`
+	Setup   *Hook `json:"setup"`
+	Reset   *Hook `json:"reset"`
+	Restore *Hook `json:"restore"`
 }
 
 type Server struct {
@@ -664,7 +667,7 @@ func (c *Config) check(team *doc) Errors {
 		for _, h := range []struct {
 			name string
 			hook *Hook
-		}{{"setup", pr.Lifecycle.Setup}, {"reset", pr.Lifecycle.Reset}} {
+		}{{"prepare", pr.Lifecycle.Prepare}, {"setup", pr.Lifecycle.Setup}, {"reset", pr.Lifecycle.Reset}, {"restore", pr.Lifecycle.Restore}} {
 			if h.hook != nil {
 				c.checkNeeds(h.hook.Needs, p.child("lifecycle").child(h.name).child("needs"), fail)
 			}

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/connor981332/agent-workspace/internal/config"
+	"github.com/connor981332/agent-workspace/internal/lifecycle"
 	"github.com/connor981332/agent-workspace/internal/state"
 	"github.com/connor981332/agent-workspace/internal/workspace"
 )
@@ -61,6 +62,10 @@ func openForWrite() (*writeContext, error) {
 		return nil, err
 	}
 	if err := newBroker(w).Recover(context.Background()); err != nil {
+		store.Close()
+		return nil, err
+	}
+	if err := lifecycle.Recover(context.Background(), store); err != nil {
 		store.Close()
 		return nil, err
 	}

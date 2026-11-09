@@ -106,12 +106,14 @@ The same session attaching again gets the same lane. Work in the lane root aw pr
 			}
 			defer w.Close()
 			t.Mark("open")
-			m := &lanes.Manager{WS: w.ws, Cfg: w.cfg, Store: w.store}
+			m := manager(w)
 			c, err := m.Claim(cmd.Context(), lanes.ClaimRequest{Purpose: args[0], Branch: branch, Who: who})
 			if err != nil {
 				return err
 			}
 			t.Mark("claim")
+			startSetup(cmd.ErrOrStderr(), w, c)
+			t.Mark("setup")
 			w.Close()
 			t.Mark("close")
 			if timing.Debug() {

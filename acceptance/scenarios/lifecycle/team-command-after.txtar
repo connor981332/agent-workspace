@@ -1,0 +1,39 @@
+# A team command waits for its own project's steps, and for the steps it names in after. A hook that
+# calls aw run is part of setup, so it does not wait for itself.
+# req: R30 R44
+# source: spec S12
+# milestone: M5
+
+workspace shop --init
+exec aw attach 'add feature flag'
+cd .worktrees/01
+exec aw report
+stdout 'report saw built'
+exec aw run web sh -c 'cat "$AW_LANE_STATE/nested"'
+stdout '^nested in setup$'
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[projects.web]
+directory = "web"
+
+[projects.web.lifecycle]
+setup = '"$AW_TOOL" run web sh -c "echo nested in \$AW_PHASE > \$AW_LANE_STATE/nested"'
+
+[projects.api]
+directory = "api"
+
+[projects.api.lifecycle]
+setup = 'sleep 0.3; touch "$AW_LANE_STATE/built"'
+
+[commands.report]
+project = "web"
+run = 'test -e "$AW_LANE_STATE/built" && echo report saw built'
+after = ["api.setup"]

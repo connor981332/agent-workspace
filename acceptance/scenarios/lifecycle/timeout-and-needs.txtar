@@ -1,0 +1,39 @@
+# A hook's timeout fails the step, and a hook's needs hold a seat, with its variables, while it runs.
+# req: R30 R37
+# source: spec
+# milestone: M5
+
+workspace shop --init
+exec aw attach 'add feature flag'
+cd .worktrees/01
+! exec aw run web true
+stderr 'web\.setup failed: it took longer than its timeout of 200ms'
+exec aw run api sh -c 'cat "$AW_LANE_STATE/seat"'
+stdout '^seat 1$'
+exec aw queue --json
+! stdout 'feature-flag'
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[projects.web]
+directory = "web"
+
+[projects.web.lifecycle]
+setup = { run = "sleep 30", timeout = "200ms" }
+
+[projects.api]
+directory = "api"
+
+[projects.api.lifecycle]
+setup = { run = 'echo "seat $AW_SEAT_DB" > "$AW_LANE_STATE/seat"', needs = ["db"] }
+
+[resources.db]
+kind = "token"
+tokens = ["d1"]
