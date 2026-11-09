@@ -1,0 +1,17 @@
+# aw setup composes the onboarding skills for each harness, and leaves a file edited by hand alone.
+# req: R85 R86
+# source: onboarding.md, "Skills as framework content"
+# milestone: M11
+
+owner-may-change
+workspace solo --single --init
+exec aw setup --harness claude
+exists .claude/skills/aw-workspace-design/SKILL.md
+exists .agents/skills/aw-readiness-audit/SKILL.md
+exists .opencode/commands/aw-workspace-design.md
+grep 'a human approves' .claude/skills/aw-workspace-design/SKILL.md
+grep 'aw-workspace-design' .aw/managed
+exec sh -c 'echo "# mine" >> .claude/skills/aw-workspace-design/SKILL.md'
+exec aw setup --harness claude
+stderr 'edited by hand, so aw left it alone'
+grep '# mine' .claude/skills/aw-workspace-design/SKILL.md

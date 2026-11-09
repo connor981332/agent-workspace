@@ -1,0 +1,20 @@
+# A key built only from a record's ID can repeat across lanes restored from one snapshot; one with
+# the record's creation time cannot.
+# req: R86 R89
+# source: C2 finding F17
+# milestone: M11
+
+owner-may-change
+workspace solo --single --init
+cp $WORK/charge.rb charge.rb
+! exec aw doctor --projects
+stdout '\[idempotency-key\]'
+stdout 'creation time'
+cp $WORK/good.rb charge.rb
+exec aw doctor --projects
+stdout 'No project has anything'
+
+-- charge.rb --
+Stripe::Charge.create(amount, idempotency_key: "charge-#{order.id}")
+-- good.rb --
+Stripe::Charge.create(amount, idempotency_key: "charge-#{order.id}-#{order.created_at.to_i}")

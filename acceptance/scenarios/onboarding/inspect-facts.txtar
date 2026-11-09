@@ -1,0 +1,22 @@
+# aw inspect reports facts about a project, and writes nothing.
+# req: R85
+# source: onboarding.md, "Facts first"
+# milestone: M11
+
+owner-may-change
+workspace solo --single --init
+cp $WORK/package.json package.json
+cp $WORK/app.js app.js
+exec aw inspect --json
+json stdout .projects[0].stacks[0] node
+json stdout .projects[0].scripts.dev 'next dev'
+json stdout .projects[0].env_vars[0] API_KEY
+json stdout .projects[0].ports[0] 3000
+exec git status --porcelain
+stdout 'package.json'
+
+-- package.json --
+{"scripts": {"dev": "next dev"}}
+-- app.js --
+const key = process.env.API_KEY
+fetch("http://localhost:3000/x")

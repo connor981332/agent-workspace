@@ -143,6 +143,7 @@ type Project struct {
 	Run          string                `json:"run"`
 	Needs        []string              `json:"needs"`
 	DependsOn    []string              `json:"depends_on"`
+	Smoke        string                `json:"smoke"`
 	Publication  []string              `json:"publication"`
 	Contracts    []string              `json:"generated_contracts"`
 	Secrets      []string              `json:"secrets"`

@@ -64,6 +64,13 @@ do this for its own lane.`,
 			if err != nil {
 				return err
 			}
+			skills, skillEdits, err := compose.ApplySkills(ws.Owner)
+			if err != nil {
+				return err
+			}
+			for _, f := range skillEdits {
+				fmt.Fprintf(errOut, "warning: %s was edited by hand, so aw left it alone\n", f)
+			}
 			sandboxes, err := setupSandboxes(ws, c)
 			if err != nil {
 				return err
@@ -117,6 +124,7 @@ do this for its own lane.`,
 					fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s: %s\n", r.Path, r.Note)
 				}
 			}
+			changed = changed || len(skills) > 0
 			if changed {
 				fmt.Fprintln(out, "Next: commit these files, so lanes get them. Codex asks once to trust project hooks, and Grok to trust the folder (/hooks-trust).")
 			}

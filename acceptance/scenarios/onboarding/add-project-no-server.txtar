@@ -1,0 +1,16 @@
+# A project can be added before it has servers or a clone, and a bad name changes nothing.
+# req: R13
+# source: C2 test_kit.sh t_add_project_without_port_or_clone
+# milestone: M11
+
+owner-may-change
+workspace shop --init
+exec aw add project later --no-clone
+grep '\[projects.later\]' workspace.toml
+! exists later
+exec aw config validate
+exec sh -c 'cp workspace.toml $WORK/before'
+! exec aw add project 'Bad Name' --no-clone
+cmp workspace.toml $WORK/before
+! exec aw add project nourl
+stderr 'give the repository'

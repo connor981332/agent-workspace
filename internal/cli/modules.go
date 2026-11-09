@@ -35,8 +35,8 @@ func infraOf(ws *workspace.Workspace, c *config.Config) *runners.Infra {
 }
 
 func newAddCmd() *cobra.Command {
-	cmd := &cobra.Command{Use: "add", Short: "Add a module to this workspace"}
-	cmd.AddCommand(&cobra.Command{
+	cmd := &cobra.Command{Use: "add", Short: "Add a module or a project to this workspace"}
+	cmd.AddCommand(newAddProjectCmd(), &cobra.Command{
 		Use:   "module <name>…",
 		Short: "Install first-party modules: their files, configuration and instructions",
 		Args:  cobra.MinimumNArgs(1),

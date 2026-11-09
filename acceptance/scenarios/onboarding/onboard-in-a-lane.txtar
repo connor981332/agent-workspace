@@ -1,0 +1,19 @@
+# aw onboard runs the design skill in a lane, so that its result goes through review. It is the
+# human's to start.
+# req: R85 R88
+# source: onboarding.md, "Review and commit"
+# milestone: M11
+
+owner-may-change
+stubs claude
+workspace solo --single --init
+exec aw onboard
+grep 'claude .*aw-workspace-design' $STUB_LOG
+exists .worktrees/01
+exec git -C .worktrees/01 rev-parse --abbrev-ref HEAD
+stdout '^aw/'
+exec aw onboard --review
+grep 'new or has drifted' $STUB_LOG
+env CLAUDE_CODE_SESSION_ID=s-1
+! exec aw new x
+stderr 'only for the human'

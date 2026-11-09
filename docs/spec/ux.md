@@ -43,6 +43,8 @@ The CLI is part of the design, not an afterthought. Most of the tool's value is 
 | `aw infra up\|ps\|logs` / `aw infra down` | both / human | The shared infrastructure |
 | `aw webhook <provider>` | both | Send a provider's sandbox webhooks to this lane |
 | `aw plan new\|list\|promote` / `aw check-docs` | both | Plans and their conventions |
+| `aw inspect` / `aw doctor --projects` | both | Facts about the projects, and the deterministic readiness audit |
+| `aw onboard [--review]` / `aw add project <alias> [url]` | human | Agent-proposed configuration in a lane; adding a repository |
 | `aw delegate` | human | Expiring, scoped maintenance authority ([owner-checkout.md](owner-checkout.md#delegation)) |
 | `aw changeset --title t` | both | Open this lane's linked merge requests in merge order; the publication policy applies |
 | `aw upgrade` | human | Change the pinned framework version |
