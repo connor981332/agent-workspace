@@ -11,7 +11,7 @@ workspace shop
 exec aw init
 owner-snapshot
 stubs cosign
-exec sh -c 'rm -rf "$XDG_CACHE_HOME/agent-workspace"; mkdir $WORK/m && cp "$GOOD_MIRROR"/* $WORK/m/'
+exec sh -c 'rm -rf "$XDG_CACHE_HOME/agent-workspace"; mkdir $WORK/m && cp "$GOOD_MIRROR"/* $WORK/m/; rm -f $WORK/m/checksums.txt.sigstore.json'
 env AW_MIRROR=$WORK/m
 
 exec bin/aw version
@@ -35,3 +35,15 @@ exec sh -c 'rm -f $STUB_STATE/cosign-fails; sed "s/^[0-9a-f]\{64\}/$(printf "%06
 ! exec bin/aw version
 stderr 'differs from .aw/lock'
 ! exists $CACHED
+
+# A server failing to give the signature is not the same as there being none: it stops the install.
+stubs curl
+env STUB_MIRROR=$WORK/m
+exec sh -c 'cp "$GOOD_MIRROR"/checksums.txt $WORK/m/checksums.txt; rm -rf "$XDG_CACHE_HOME/agent-workspace"; echo 504 > $STUB_STATE/http-code; touch $STUB_STATE/fail-checksums.txt.sigstore.json'
+env AW_MIRROR=https://stub.invalid/release
+! exec bin/aw version
+stderr 'could not fetch the signature'
+! exists $CACHED
+exec sh -c 'rm $STUB_STATE/fail-checksums.txt.sigstore.json $STUB_STATE/http-code'
+exec bin/aw version
+exists $CACHED

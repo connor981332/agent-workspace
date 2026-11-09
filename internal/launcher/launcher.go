@@ -94,7 +94,19 @@ func fetch(mirror, name string) ([]byte, error) {
 		return nil, fmt.Errorf("AW_MIRROR %q is neither an absolute directory nor an http(s) URL", mirror)
 	}
 	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Get(mirror + "/" + name)
+	var resp *http.Response
+	var err error
+	for attempt := 0; ; attempt++ {
+		resp, err = client.Get(mirror + "/" + name)
+		// A server's temporary failure is worth waiting out; a missing release is not.
+		if (err == nil && resp.StatusCode < 500) || attempt == 3 {
+			break
+		}
+		if err == nil {
+			resp.Body.Close()
+		}
+		time.Sleep(retryDelay)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("downloading %s/%s: %v → check the network, or set AW_MIRROR", mirror, name, err)
 	}
@@ -104,6 +116,9 @@ func fetch(mirror, name string) ([]byte, error) {
 	}
 	return io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 }
+
+// retryDelay is how long to wait before asking a failing server again.
+var retryDelay = 2 * time.Second
 
 // ErrNotPinnable means this binary's version cannot be pinned (a development build).
 var ErrNotPinnable = errors.New("not an exact release version")

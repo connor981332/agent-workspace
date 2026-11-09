@@ -1,0 +1,21 @@
+#!/bin/sh
+# Test double for curl, for the launcher: serves files from $STUB_MIRROR. A file with a
+# $STUB_STATE/fail-<name> marker fails, and -w prints $STUB_STATE/http-code (default 200).
+set -eu
+out="" url="" code=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -o) out="$2"; shift 2 ;;
+    -w) code=1; shift 2 ;;
+    --retry|--retry-delay) shift 2 ;;
+    -*) shift ;;
+    *) url="$1"; shift ;;
+  esac
+done
+name="${url##*/}"
+if [ -n "$code" ]; then
+  cat "$STUB_STATE/http-code" 2>/dev/null || echo 200
+  exit 0
+fi
+[ ! -e "$STUB_STATE/fail-$name" ] || exit 22
+cp "$STUB_MIRROR/$name" "$out"
