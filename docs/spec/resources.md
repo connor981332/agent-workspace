@@ -61,6 +61,9 @@ needs = ["web-stack"]
 - Team commands declare `needs`. A command with no needs runs immediately. A command with needs
   queues, holds its seats while it runs and releases them when it exits.
 
+A server in a devcontainer is held by a host-side keeper, which is what its lease records
+([architecture.md](architecture.md#runners)).
+
 ## Seats and ports
 
 Capacity counts concurrent holders, including the owner when `owner_counts = true`. The seat number

@@ -1,0 +1,132 @@
+# The devcontainer runner against real Docker and the real devcontainer CLI, ported from candidate
+# 2's smoke-docker.sh: start, same-path exec, a lane, a server on a published port, the keeper, the
+# in-use refusal, and a moved workspace claiming its container.
+# req: R47 R48 R49 R50 R42
+# source: C2 tests/smoke-docker.sh
+
+owner-may-change
+workspace awsmoke --single --init
+exec sh -c 'cp -R $WORK/.devcontainer . && git add .devcontainer && git -c user.name=t -c user.email=t@t commit -q -m devcontainer && git push -q origin HEAD:main'
+exec sh -c 'pwd -P > $WORK/here'
+env COMPOSE_LABEL=label=com.docker.compose.project=awsmoke_devcontainer
+
+# aw containers up starts the container through the CLI, labelled with its checkout, and runs nothing.
+exec aw doctor
+stdout 'devcontainer awsmoke: the same path'
+exec aw containers up
+stdout 'awsmoke container is running'
+exec sh -c 'docker ps -q --filter $COMPOSE_LABEL | wc -l | tr -d " "'
+stdout '^1$'
+exec sh -c 'docker ps --filter $COMPOSE_LABEL --format "{{.Label \"devcontainer.local_folder\"}}" | grep -Fx -- "$(cat $WORK/here)"'
+exec sh -c 'docker inspect $(docker ps -q --filter $COMPOSE_LABEL) --format "{{range .Mounts}}{{.Source}}|{{.Destination}}{{println}}{{end}}" | grep -Fx -- "$(cat $WORK/here)|$(cat $WORK/here)"'
+exec git status --porcelain
+! stdout 'aw.compose'
+
+# Commands run at the same path. A second start does not build a rival container.
+exec aw run awsmoke sh -c 'pwd; cat /etc/alpine-release; echo "project=$AW_PROJECT"'
+stdout '^project=awsmoke$'
+stdout '^3\.'
+exec sh -c 'aw run awsmoke pwd | grep -Fx -- "$(cat $WORK/here)"'
+exec sh -c 'aw run awsmoke sh -c "exit 7"; echo "status=$?"'
+stdout '^status=7$'
+exec aw containers up
+exec sh -c 'docker ps -aq --filter $COMPOSE_LABEL | wc -l | tr -d " "'
+stdout '^1$'
+
+# A lane: its hook ran in the container, and its worktree is visible there with the lane's environment.
+exec aw attach 'one'
+cd .worktrees/01
+exec aw run awsmoke sh -c 'pwd; echo "$AW_LANE $AW_LANE_NAME"; cat .hook-ran; cat /etc/alpine-release'
+stdout '\.worktrees/01$'
+stdout '^01 one$'
+stdout '^container-hook 3\.'
+
+# A server in seat 1, reachable from the host on its published port, held by a host keeper.
+exec aw serve stack
+exec curl -fsS http://127.0.0.1:18100/README.md
+stdout '^# awsmoke$'
+
+# Recreating is refused while the seat is held.
+cd ../..
+! exec aw containers recreate awsmoke
+stderr 'holds a seat on stack'
+cd .worktrees/01
+
+# A keeper killed outright: the next stop finds the server in the container and ends it.
+exec sh -c 'pkill -KILL -f "__kee[p].*$WORK"; sleep 0.3; docker exec $(docker ps -q --filter $COMPOSE_LABEL) ps | grep -c "[n]c -l"'
+stdout '^[12]$'
+exec aw stop stack
+exec sh -c 'docker exec $(docker ps -q --filter $COMPOSE_LABEL) ps | grep -c "[n]c -l" || true'
+stdout '^0$'
+
+# aw stop with a live keeper stops the server too.
+exec aw serve stack
+exec aw stop stack
+exec sh -c 'docker exec $(docker ps -q --filter $COMPOSE_LABEL) ps | grep -c "[n]c -l" || true'
+stdout '^0$'
+rm .hook-ran
+exec aw discard one --yes
+cd ../..
+
+# Anything attached to the container, such as VS Code, also refuses removal.
+exec sh -c 'docker exec -d $(docker ps -q --filter $COMPOSE_LABEL) sleep 120'
+exec sh -c 'sleep 0.5'
+! exec aw containers down awsmoke
+stderr 'attached: sleep 120'
+exec sh -c 'docker exec $(docker ps -q --filter $COMPOSE_LABEL) pkill -f "sleep 120"; sleep 0.5; true'
+
+# A container left over from a moved checkout is claimed, never reused with an empty mount.
+exec sh -c 'docker stop -t 1 $(docker ps -q --filter $COMPOSE_LABEL)'
+exec sh -c 'mkdir -p $WORK/moved && mv "$(cat $WORK/here)" $WORK/moved/awsmoke'
+cd $WORK/moved/awsmoke
+exec aw run awsmoke sh -c 'pwd; cat README.md'
+stderr 'Removing container'
+stdout '^# awsmoke$'
+exec sh -c 'docker ps --filter $COMPOSE_LABEL --format "{{.Label \"devcontainer.local_folder\"}}"'
+stdout 'moved/awsmoke$'
+
+exec aw containers down awsmoke
+stdout 'stopped and removed'
+exec sh -c 'docker ps -aq --filter $COMPOSE_LABEL | wc -l | tr -d " "'
+stdout '^0$'
+
+-- workspace.toml --
+[workspace]
+name = "Smoke"
+namespace = "awsmoke"
+schema = 1
+
+[lanes]
+pool = 0
+port_stride = 100
+
+[projects.awsmoke]
+directory = "."
+runner = "devcontainer"
+
+[projects.awsmoke.lifecycle]
+setup = 'echo "container-hook $(cat /etc/alpine-release)" > .hook-ran'
+
+[projects.awsmoke.servers.app]
+command = """while true; do printf 'HTTP/1.0 200 OK\r\n\r\n# awsmoke\n' | nc -l -p {port} >/dev/null; done"""
+port = 18000
+ready = "wget -q -O /dev/null http://127.0.0.1:{port}/"
+
+[resources.stack]
+kind = "process"
+capacity = 2
+servers = ["awsmoke.app"]
+-- .devcontainer/devcontainer.json --
+{
+  "name": "smoke",
+  "dockerComposeFile": ["compose.yaml", "aw.compose.yaml"],
+  "service": "app",
+  "workspaceFolder": "${localWorkspaceFolder}",
+  // Runs on the host, before the container is looked for: VS Code does this too.
+  "initializeCommand": "bin/aw containers claim awsmoke",
+}
+-- .devcontainer/compose.yaml --
+services:
+  app:
+    image: alpine:3.20
+    command: sh -c "while sleep 1000; do :; done"

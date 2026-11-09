@@ -75,6 +75,9 @@ setup = { run = "npm run build:assets", needs = ["build-slot"] }
 | `teardown` | Before data is dropped, when a lane is destroyed | lane root |
 | `restore` | After a snapshot is restored into the lane (optional; the place to migrate) | project worktree |
 
+- For a project whose runner is `devcontainer`, `install`, `setup`, `reset` and `restore` run in the
+  project's container. `prepare` and `teardown` run on the host at both levels
+  ([architecture.md](architecture.md#runners)).
 - Hooks must be safe to rerun. `aw setup <lane>` reruns from the first incomplete step, in the
   foreground. An agent may run it for its own lane; every other use of `aw setup` is the human's.
 - By default, `aw run <project>` and team commands wait for the workspace's `prepare` and their

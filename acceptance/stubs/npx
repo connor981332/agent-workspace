@@ -1,0 +1,9 @@
+#!/bin/sh
+# Test double for npx: runs the devcontainer stub for @devcontainers/cli, as the real npx would.
+set -eu
+echo "npx $*" >> "$STUB_LOG"
+[ "$1" = -y ] && shift
+case "$1" in
+  @devcontainers/cli@*) shift; exec devcontainer "$@" ;;
+esac
+exit 1

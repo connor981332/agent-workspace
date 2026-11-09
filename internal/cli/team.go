@@ -84,7 +84,13 @@ func runTeamCommand(name string, c *config.Command, args []string, stdout, stder
 	}
 	env := append(where.Env, seatEnv(w.cfg, b.Resources(), leases, h.Lane)...)
 	argv := append([]string{"sh", "-c", c.Run + ` "$@"`, name}, args...)
-	code, err := runners.RunHost(where.Dir, env, argv)
+	var d *runners.Devcontainer
+	if w.cfg.Projects[c.Project] != nil && w.cfg.Projects[c.Project].Runner == "devcontainer" {
+		if d, err = devcontainerOf(w, c.Project); err != nil {
+			return ExitError, err
+		}
+	}
+	code, err := runProject(ctx, d, where.Dir, env, argv)
 	if err != nil {
 		return ExitError, err
 	}

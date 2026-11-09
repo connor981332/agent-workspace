@@ -63,8 +63,15 @@ runs the project's [projects.<p>] run.`,
 			if leases, err := state.Leases(w.store.DB()); err == nil {
 				where.Env = append(where.Env, seatEnv(w.cfg, newBroker(w).Resources(), leases, m.CallerLane())...)
 			}
+			var d *runners.Devcontainer
+			if w.cfg.Projects[args[0]].Runner == "devcontainer" {
+				if d, err = devcontainerOf(w, args[0]); err != nil {
+					w.Close()
+					return err
+				}
+			}
 			w.Close() // the command may run for hours; hold nothing open
-			code, err := runners.RunHost(where.Dir, where.Env, argv)
+			code, err := runProject(cmd.Context(), d, where.Dir, where.Env, argv)
 			if err != nil {
 				return err
 			}

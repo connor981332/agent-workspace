@@ -1,0 +1,45 @@
+# A shared project's lanes run the owner's checkout in the container, with the lane's settings.
+# req: R74 R47
+# source: C2 test_ws.sh t_ws_lane_uses_worktree_env_and_port
+# milestone: M6
+
+owner-may-change
+stubs docker devcontainer npx
+workspace shop --init
+exec sh -c 'cd api && cp -R $WORK/.devcontainer . && git add .devcontainer && git -c user.name=t -c user.email=t@t commit -q -m devcontainer && git push -q origin HEAD:main'
+exec aw attach 'one'
+cd .worktrees/01
+exec aw run api sh -c 'echo "lane=$AW_LANE"; pwd -P'
+stdout '^lane=01$'
+! stdout '\.worktrees'
+grep 'docker exec -i -u dev' $STUB_LOG
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[projects.web]
+directory = "web"
+
+[projects.api]
+directory = "api"
+lanes = "shared"
+runner = "devcontainer"
+-- .devcontainer/devcontainer.json --
+{
+  // the team's file
+  "dockerComposeFile": ["compose.yaml", "aw.compose.yaml"],
+  "service": "app",
+  "workspaceFolder": "${localWorkspaceFolder}",
+  "remoteUser": "dev",
+  "initializeCommand": "bin/aw containers claim api",
+}
+-- .devcontainer/compose.yaml --
+services:
+  app:
+    image: stub

@@ -130,3 +130,26 @@ The same machine as M1, on power, on its NVMe disk (btrfs), load average about 1
 ### Apple Silicon laptop
 
 Not yet measured: pending, for a maintainer with a Mac.
+
+## M6
+
+### Linux laptop, 2026-11-08
+
+The same machine as M1, on power, on its NVMe disk (btrfs), load average about 3 when it started. aw built from the m6/runner branch. Commands that wait on Docker have no fixed budget (speed.md); these operations are on a host-runner project.
+
+| Operation | n | p50 ms | p95 ms | p99 ms | max ms | limit ms | result |
+|---|---|---|---|---|---|---|---|
+| hook | 1000 | 4.31 | 4.83 | 5.24 | 6.38 | 8.00 | pass |
+| whoami | 500 | 3.45 | 3.97 | 4.17 | 4.69 | 10.00 | pass |
+| config-get | 500 | 3.45 | 3.88 | 4.05 | 4.24 | 10.00 | pass |
+| attach-from-pool | 100 | 65.85 | 72.53 | 73.92 | 105.74 | 100.00 | pass |
+| new-until-harness | 100 | 57.70 | 68.62 | 70.68 | 73.66 | 150.00 | pass |
+| dashboard | 200 | 43.68 | 45.28 | 46.50 | 48.21 | 100.00 | pass |
+| ref-hook | 1000 | 4.69 | 5.29 | 5.88 | 6.55 | 8.00 | pass |
+| serve-free-seat | 100 | 7.96 | 9.17 | 29.04 | 37.45 | 50.00 | pass |
+| grant-next | 100 | 26.50 | 36.57 | 38.48 | 38.50 | 50.00 | pass |
+| preempt | 100 | 7.12 | 8.24 | 8.52 | 27.27 | 50.00 | pass |
+
+### Apple Silicon laptop
+
+Not yet measured: pending, for a maintainer with a Mac.

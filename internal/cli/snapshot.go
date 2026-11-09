@@ -53,7 +53,7 @@ func quiesce(ctx context.Context, w *writeContext, m *lanes.Manager, lane int) (
 			continue
 		}
 		for _, p := range running {
-			procs.Stop(procs.Proc{PID: p.PID, Start: p.Start}, quiesceGrace)
+			procs.Stop(procs.Proc{PID: p.PID, Start: p.Start, Log: p.Log}, quiesceGrace)
 		}
 		if err := b.RecordProcs(ctx, l.ID, nil); err != nil {
 			return nil, err
@@ -111,7 +111,12 @@ func runRestoreHooks(ctx context.Context, w *writeContext, m *lanes.Manager, b *
 			return err
 		}
 		log := filepath.Join(dir, "logs", "setup", project+".restore.log")
-		_, err = lifecycle.Exec(ctx, lifecycle.Command{Dir: where.Dir, Env: where.Env, Run: hook.Run, Timeout: time.Duration(hook.Timeout), Log: log, Phase: lifecycle.PhaseRestore, Fresh: true})
+		argv, err := hookInContainer(ctx, w, project, where.Dir, append(append([]string{}, where.Env...), lifecycle.HookEnv(lifecycle.PhaseRestore, true)...), hook.Run, log)
+		if err != nil {
+			release()
+			return err
+		}
+		_, err = lifecycle.Exec(ctx, lifecycle.Command{Dir: where.Dir, Env: where.Env, Run: hook.Run, Argv: argv, Timeout: time.Duration(hook.Timeout), Log: log, Phase: lifecycle.PhaseRestore, Fresh: true})
 		release()
 		if err != nil {
 			return fmt.Errorf("the data was restored, but %s's restore hook failed: %v (log %s) → fix it and run the restore again", project, err, log)

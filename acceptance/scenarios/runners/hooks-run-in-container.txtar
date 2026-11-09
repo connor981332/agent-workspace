@@ -1,0 +1,56 @@
+# install, setup, reset and restore run in the project's container; prepare and teardown stay on the host.
+# req: R47
+# source: spec owner decision 2026-11-08
+# milestone: M6
+
+owner-may-change
+stubs docker devcontainer npx
+workspace solo --single --init
+exec sh -c 'cp -R $WORK/.devcontainer . && git add .devcontainer && git -c user.name=t -c user.email=t@t commit -q -m devcontainer && git push -q origin HEAD:main'
+exec aw attach 'one'
+cd .worktrees/01
+exec aw run solo true
+cd ../..
+grep 'aw-keeper sh -c echo install-ran' $STUB_LOG
+grep 'aw-keeper sh -c echo setup-ran' $STUB_LOG
+! grep 'prepare-ran' $STUB_LOG
+
+-- workspace.toml --
+[workspace]
+name = "Solo"
+namespace = "solo"
+schema = 1
+
+[lanes]
+pool = 0
+port_stride = 100
+
+[projects.solo]
+directory = "."
+runner = "devcontainer"
+install = "echo install-ran"
+[projects.solo.lifecycle]
+prepare = "echo prepare-ran"
+setup = "echo setup-ran"
+
+[projects.solo.servers.app]
+command = "echo $$ > $WORK/server.pid; exec sleep 60 # {port}"
+port = 3000
+
+[resources.stack]
+kind = "process"
+capacity = 2
+servers = ["solo.app"]
+-- .devcontainer/devcontainer.json --
+{
+  // the team's file
+  "dockerComposeFile": ["compose.yaml", "aw.compose.yaml"],
+  "service": "app",
+  "workspaceFolder": "${localWorkspaceFolder}",
+  "remoteUser": "dev",
+  "initializeCommand": "bin/aw containers claim solo",
+}
+-- .devcontainer/compose.yaml --
+services:
+  app:
+    image: stub

@@ -35,7 +35,10 @@ var envWord = regexp.MustCompile(`[^A-Z0-9]+`)
 func envName(s string) string { return envWord.ReplaceAllString(strings.ToUpper(s), "_") }
 
 func newBroker(w *writeContext) *broker.Broker {
-	return &broker.Broker{Store: w.store, Cfg: w.cfg, ReleaseToken: func(ctx context.Context, r broker.Resource, l state.Lease) error {
+	return &broker.Broker{Store: w.store, Cfg: w.cfg, ListeningIn: func(project string, port int) bool {
+		d, err := devcontainerOf(w, project)
+		return err == nil && d.Listening(context.Background(), port)
+	}, ReleaseToken: func(ctx context.Context, r broker.Resource, l state.Lease) error {
 		_, err := extproto.Call(ctx, w.ws.Owner, r.Release, "release", map[string]any{"resource": r.Name, "token": l.Token, "lane": l.Lane})
 		return err
 	}}
@@ -180,7 +183,7 @@ func startServers(ctx context.Context, w *writeContext, m *lanes.Manager, r brok
 	var started []state.LeaseProc
 	undo := func() {
 		for _, p := range started {
-			procs.Stop(procs.Proc{PID: p.PID, Start: p.Start}, 2*time.Second)
+			procs.Stop(procs.Proc{PID: p.PID, Start: p.Start, Log: p.Log}, 2*time.Second)
 		}
 	}
 	for _, full := range startOrder(w.cfg, r.Servers) {
@@ -196,8 +199,15 @@ func startServers(ctx context.Context, w *writeContext, m *lanes.Manager, r brok
 		}
 		p := port(w.cfg, s, l.Seat)
 		log := filepath.Join(logs, project+"."+name+".log")
-		proc, err := procs.Start(ctx, procs.Spec{Command: strings.ReplaceAll(s.Command, "{port}", strconv.Itoa(p)),
-			Dir: where.Dir, Env: append(where.Env, seatEnv...), Log: log, Ready: strings.ReplaceAll(s.Ready, "{port}", strconv.Itoa(p))})
+		spec := procs.Spec{Command: strings.ReplaceAll(s.Command, "{port}", strconv.Itoa(p)),
+			Dir: where.Dir, Env: append(where.Env, seatEnv...), Log: log, Ready: strings.ReplaceAll(s.Ready, "{port}", strconv.Itoa(p))}
+		if w.cfg.Projects[project].Runner == "devcontainer" {
+			if err := intoContainer(ctx, w, project, &spec); err != nil {
+				undo()
+				return nil, fmt.Errorf("server %s did not start: %w", full, err)
+			}
+		}
+		proc, err := procs.Start(ctx, spec)
 		if err != nil {
 			undo()
 			return nil, fmt.Errorf("server %s did not start: %w", full, err)

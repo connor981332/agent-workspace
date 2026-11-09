@@ -1,10 +1,42 @@
 #!/bin/sh
 # Ported from workspace-candidate-2/tests/stubs/devcontainer.
-# Test double for the devcontainer CLI: `up --workspace-folder <dir>` "starts"
-# the project's container by making the docker stub report it.
+# Test double for the devcontainer CLI. `up --workspace-folder <dir>` starts the project's container:
+# an existing one keeps the mounts and ports it was created with (F3); a new one takes them from aw's
+# Compose fragment and is labelled with the folder, as the real CLI does.
 set -eu
 echo "devcontainer $*" >> "$STUB_LOG"
+echo "devcontainer env BUILDX_BAKE_ENTITLEMENTS_FS=${BUILDX_BAKE_ENTITLEMENTS_FS:-}" >> "$STUB_LOG"
 [ "$1" = up ] || exit 1
-dir="$(basename "$3")"
-mkdir -p "$STUB_STATE/ps"
-echo "c-$dir" > "$STUB_STATE/ps/${dir}_devcontainer__$dir"
+[ ! -e "$STUB_STATE/up-fails" ] || { echo "stub: up failed" >&2; exit 1; }
+dir="$3"
+name="$(basename "$dir")_devcontainer"
+service="$(basename "$dir")"
+fragment="$dir/.devcontainer/aw.compose.yaml"
+if [ -f "$dir/.devcontainer/devcontainer.json" ]; then
+  s="$(sed -n 's/.*"service": *"\([^"]*\)".*/\1/p' "$dir/.devcontainer/devcontainer.json")"
+  service="${s:-$service}"
+fi
+if [ -f "$fragment" ]; then
+  n="$(sed -n 's/^name: *//p' "$fragment")"
+  name="${n:-$name}"
+fi
+mkdir -p "$STUB_STATE/ps" "$STUB_STATE/inspect" "$STUB_STATE/folder" "$STUB_STATE/state"
+id="c-$(basename "$dir")"
+if [ -e "$STUB_STATE/ps/${name}__$service" ]; then
+  id="$(cat "$STUB_STATE/ps/${name}__$service")"
+  echo true > "$STUB_STATE/state/$id"
+  exit 0
+fi
+bindings=""
+if [ -f "$fragment" ]; then
+  for p in $(sed -n 's/.*127\.0\.0\.1:\([0-9]*\):.*/\1/p' "$fragment"); do
+    bindings="$bindings${bindings:+,}\"$p/tcp\":[{\"HostPort\":\"$p\"}]"
+  done
+fi
+echo "$id" > "$STUB_STATE/ps/${name}__$service"
+echo "$dir" > "$STUB_STATE/folder/$id"
+echo true > "$STUB_STATE/state/$id"
+cat > "$STUB_STATE/inspect/$id" <<JSON
+[{"Id":"$id","State":{"Running":true,"Pid":100},"Config":{"Labels":{"devcontainer.local_folder":"$dir"}},
+"Mounts":[{"Type":"bind","Source":"$dir","Destination":"$dir"}],"HostConfig":{"PortBindings":{$bindings}}}]
+JSON

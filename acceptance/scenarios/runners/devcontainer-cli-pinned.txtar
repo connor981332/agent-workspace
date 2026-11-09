@@ -1,0 +1,52 @@
+# The CLI runs at the configured version and with its environment block.
+# req: 
+# source: C2 finding F4; spec S16
+# milestone: M6
+
+owner-may-change
+stubs docker devcontainer npx
+workspace solo --single --init
+exec sh -c 'cp -R $WORK/.devcontainer . && git add .devcontainer && git -c user.name=t -c user.email=t@t commit -q -m devcontainer && git push -q origin HEAD:main'
+exec aw containers up
+grep 'npx -y @devcontainers/cli@1.2.3 up' $STUB_LOG
+grep 'env BUILDX_BAKE_ENTITLEMENTS_FS=1' $STUB_LOG
+
+-- workspace.toml --
+[workspace]
+name = "Solo"
+namespace = "solo"
+schema = 1
+
+[lanes]
+pool = 0
+port_stride = 100
+
+[projects.solo]
+directory = "."
+runner = "devcontainer"
+
+[projects.solo.servers.app]
+command = "echo $$ > $WORK/server.pid; exec sleep 60 # {port}"
+port = 3000
+
+[resources.stack]
+kind = "process"
+capacity = 2
+servers = ["solo.app"]
+
+[devcontainer]
+version = "1.2.3"
+env = { BUILDX_BAKE_ENTITLEMENTS_FS = "1" }
+-- .devcontainer/devcontainer.json --
+{
+  // the team's file
+  "dockerComposeFile": ["compose.yaml", "aw.compose.yaml"],
+  "service": "app",
+  "workspaceFolder": "${localWorkspaceFolder}",
+  "remoteUser": "dev",
+  "initializeCommand": "bin/aw containers claim solo",
+}
+-- .devcontainer/compose.yaml --
+services:
+  app:
+    image: stub
