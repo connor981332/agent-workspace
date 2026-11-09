@@ -29,9 +29,9 @@ esac
 # get <url> <path>
 get() {
 	if command -v curl >/dev/null 2>&1; then
-		curl -fsSL -o "$2" "$1"
+		curl -fsSL --retry 4 --retry-delay 2 -o "$2" "$1"
 	elif command -v wget >/dev/null 2>&1; then
-		wget -q -O "$2" "$1"
+		wget -q -O "$2" "$1" || { sleep 2; wget -q -O "$2" "$1"; } || { sleep 4; wget -q -O "$2" "$1"; }
 	else
 		die "neither curl nor wget is installed → install one, then retry"
 	fi
@@ -61,6 +61,20 @@ fetch() {
 	esac
 }
 
+# Whether the release really has no such file, as opposed to the server failing to give it.
+absent() {
+	case $from in
+	/*) [ ! -e "$from/$1" ] ;;
+	*)
+		if command -v curl >/dev/null 2>&1; then
+			[ "$(curl -sSL -o /dev/null -w '%{http_code}' "$from/$1")" = 404 ]
+		else
+			wget -S -O /dev/null "$from/$1" 2>&1 | grep -q ' 404'
+		fi
+		;;
+	esac
+}
+
 asset=aw_${version}_${os}_${arch}
 echo "Downloading $asset"
 fetch "$asset" "$tmp/aw" || die "could not get $asset from $from → check the version and the network"
@@ -85,8 +99,10 @@ if command -v cosign >/dev/null 2>&1; then
 			"$tmp/checksums.txt" >/dev/null 2>&1 ||
 			die "the signature of the checksums did not verify; nothing was installed → report this"
 		echo "Verified the release's signature"
-	else
+	elif absent checksums.txt.sigstore.json; then
 		echo "This release has no signature to verify; its checksum matched"
+	else
+		die "could not fetch the release's signature from $from; nothing was installed → check the network, and retry"
 	fi
 fi
 

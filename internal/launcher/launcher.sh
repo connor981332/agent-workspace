@@ -113,17 +113,32 @@ aw_tmp=$aw_cache/.download.$$
 trap 'rm -f "$aw_tmp"' EXIT
 aw_from=${AW_MIRROR:-https://github.com/connor981332/agent-workspace/releases/download/v$aw_version}
 
-# Fetches a release file to a path. Returns non-zero, saying nothing, when it cannot.
+# Fetches a release file to a path, riding out a server's temporary failure. Returns non-zero,
+# saying nothing, when it cannot.
 aw_get() {
 	case $aw_from in
 	/*) cp "$aw_from/$1" "$2" 2>/dev/null ;;
 	*)
 		if command -v curl >/dev/null 2>&1; then
-			curl -fsSL -o "$2" "$aw_from/$1"
+			curl -fsSL --retry 4 --retry-delay 2 -o "$2" "$aw_from/$1"
 		elif command -v wget >/dev/null 2>&1; then
-			wget -q -O "$2" "$aw_from/$1"
+			wget -q -O "$2" "$aw_from/$1" || { sleep 2; wget -q -O "$2" "$aw_from/$1"; } || { sleep 4; wget -q -O "$2" "$aw_from/$1"; }
 		else
 			aw_die "neither curl nor wget is installed → install one, then retry"
+		fi
+		;;
+	esac
+}
+
+# Says whether the release really has no such file, as opposed to the server failing to give it.
+aw_absent() {
+	case $aw_from in
+	/*) [ ! -e "$aw_from/$1" ] ;;
+	*)
+		if command -v curl >/dev/null 2>&1; then
+			[ "$(curl -sSL -o /dev/null -w '%{http_code}' "$aw_from/$1")" = 404 ]
+		else
+			wget -S -O /dev/null "$aw_from/$1" 2>&1 | grep -q ' 404'
 		fi
 		;;
 	esac
@@ -163,8 +178,10 @@ if command -v cosign >/dev/null 2>&1; then
 			if [ "$aw_line_file" = "$aw_asset" ]; then aw_signed=$aw_line_sum; fi
 		done <"$aw_sums"
 		[ "$aw_signed" = "$aw_sum" ] || aw_die "the signed checksum of $aw_asset differs from .aw/lock, so it was not installed → report this"
-	else
+	elif aw_absent checksums.txt.sigstore.json; then
 		echo "aw: $aw_version has no signature to verify; its checksum matched .aw/lock" >&2
+	else
+		aw_die "could not fetch the signature of $aw_version from $aw_from, so $aw_asset was not installed → check the network, and retry"
 	fi
 	rm -f "$aw_sums" "$aw_bundle"
 fi
