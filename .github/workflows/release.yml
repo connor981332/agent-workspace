@@ -67,7 +67,7 @@ jobs:
           print(f"AW_CONFIG_SCHEMA={v['config_schema']}")
           print(f"AW_STATE_SCHEMA={v['state_schema']}")
           PY
-      - uses: sigstore/cosign-installer@v4
+      - uses: sigstore/cosign-installer@v4.1.3
       - uses: goreleaser/goreleaser-action@v7
         with:
           distribution: goreleaser
@@ -118,7 +118,7 @@ jobs:
           "$bin" version --json
           echo "AW_ACCEPT_MIRROR=$dir" >> "$GITHUB_ENV"
           echo "AW_BIN=$bin" >> "$GITHUB_ENV"
-      - uses: sigstore/cosign-installer@v4
+      - uses: sigstore/cosign-installer@v4.1.3
         if: runner.os == 'Linux'
       - name: The signature, the provenance and go install (Linux)
         if: runner.os == 'Linux'
@@ -150,7 +150,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
-      - uses: sigstore/cosign-installer@v4
+      - uses: sigstore/cosign-installer@v4.1.3
       - name: Clean ubuntu:24.04 container
         if: runner.os == 'Linux'
         run: |
