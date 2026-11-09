@@ -13,9 +13,7 @@ exec aw sweep --apply --json
 json stdout .lanes[0].action destroy
 exec sh -c 'grep -c "^teardown one$" $STUB_LOG'
 stdout '^1$'
-exec sh -c 'grep -n "^teardown one$\|DROP DATABASE" $STUB_LOG | cut -d: -f2- | cut -c1-20'
-stdout -count=1 '^teardown one'
-exec sh -c 'grep "^teardown one$\|DROP DATABASE" $STUB_LOG | head -1'
+exec sh -c 'grep -E "^teardown one$|DROP DATABASE" $STUB_LOG | head -1'
 stdout '^teardown one$'
 grep 'DROP DATABASE IF EXISTS "shop_01"' $STUB_LOG
 
