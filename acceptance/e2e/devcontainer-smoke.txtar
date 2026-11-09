@@ -76,6 +76,8 @@ stderr 'attached: sleep 120'
 exec sh -c 'docker exec $(docker ps -q --filter $COMPOSE_LABEL) pkill -f "sleep 120"; sleep 0.5; true'
 
 # A container left over from a moved checkout is claimed, never reused with an empty mount.
+# When the container is unexpectedly gone, Docker's own record says what ended it.
+exec sh -c 'docker ps -a --filter $COMPOSE_LABEL --format "{{.ID}} {{.Status}}"; docker events --since 2m --until 0s --filter $COMPOSE_LABEL --format "{{.Time}} {{.Action}} {{.Actor.Attributes.exitCode}}" | grep -E "start|die|kill|stop|destroy" || true'
 exec sh -c 'docker stop -t 1 $(docker ps -q --filter $COMPOSE_LABEL)'
 exec sh -c 'mkdir -p $WORK/moved && mv "$(cat $WORK/here)" $WORK/moved/awsmoke'
 cd $WORK/moved/awsmoke
