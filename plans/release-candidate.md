@@ -136,6 +136,10 @@ v0.0.11 passed the whole release workflow: Sigstore signature, SLSA provenance, 
 
 **In progress:** M10, on `m10/modules`. First-party modules with managed files and eject, shared infrastructure (`aw infra`), per-lane mail tags, a bucket per lane, webhooks to the most recent registrant, the browser MCP module, plans (`aw plan`, `aw check-docs`), and plan efforts in `aw recap`. Decided by the spec owner on 2026-11-09: one shared catcher with a per-lane tag; webhooks go to the lane that registered last.
 
+**M10 complete.** (No tag, per §7.)
+
+**In progress:** M11, on `m11/onboarding`. `aw inspect`, `aw doctor --projects`, `aw rehearse`, the two onboarding skills composed for each harness, `aw onboard` and `aw add project`. Known limits: the skills' output has not been judged against a real project by a person; rehearsal does not detect shared temporary files.
+
 **Pending manual checks:** the v0.1 dogfooding (M7); the macOS devcontainer checklist on Docker Desktop and OrbStack (`docs/dev/macos-devcontainer-checklist.md`, M6); the hot-path and budget benchmarks on an Apple Silicon laptop (T3, M1, M2;
 docs/dev/benchmarks.md).
 

@@ -274,6 +274,11 @@ func regenerate(cmd *cobra.Command, owner string, c *config.Config, eject, take 
 			return nil, err
 		}
 	}
+	if _, skillEdits, err := compose.ApplySkills(owner); err != nil {
+		return nil, err
+	} else {
+		edited = append(edited, skillEdits...)
+	}
 	if _, err := app.InstallGitHooks(cmd.Context(), owner, c); err != nil {
 		return nil, err
 	}

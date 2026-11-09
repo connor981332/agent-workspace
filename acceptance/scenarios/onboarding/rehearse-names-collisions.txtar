@@ -1,0 +1,58 @@
+# aw rehearse fails, naming each collision, on a project with a hardcoded port and a fixed database
+# name, and still cleans up.
+# req: R87 R89
+# source: plan M11 exit criterion
+# milestone: M11
+
+owner-may-change
+workspace shop --init
+exec sh $WORK/seed.sh
+! exec aw rehearse
+stderr 'collision: web server.js:1: localhost:4000 is written into the code'
+stderr 'collision: web config/database.yml:2: the database name shop_development does not vary by lane'
+stderr 'collision: web: both lanes have SHARED_DB_URL'
+! exists .worktrees/01
+exec git branch --list 'aw/*'
+! stdout .
+
+-- seed.sh --
+cd web
+mkdir config
+printf 'const base = "http://localhost:4000/api"\n' > server.js
+printf 'development:\n  database: shop_development\n' > config/database.yml
+git add -A
+git -c user.name=t -c user.email=t@t commit -q -m seed
+git push -q origin HEAD:main
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[lane_env.app]
+SHARED_DB_URL = "postgres://localhost/shop"
+DATABASE_URL = "postgres://localhost/shop_{lane}"
+
+[projects.web]
+directory = "web"
+smoke = "true"
+
+[projects.web.servers.app]
+command = "exec awtest-server -port {port}"
+port = 42300
+ready = "awtest-http 127.0.0.1:{port}"
+
+[projects.api]
+directory = "api"
+
+[projects.api.servers.main]
+command = "exec awtest-server -port {port}"
+port = 42500
+
+[resources.stack]
+kind = "process"
+capacity = 2
+servers = ["web.app", "api.main"]

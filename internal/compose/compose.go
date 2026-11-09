@@ -6,6 +6,7 @@ package compose
 import (
 	"context"
 	"crypto/sha256"
+	"embed"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -125,13 +126,7 @@ func record(owner, hash string) (bool, error) {
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return false, err
 	}
-	var kept []string
-	for _, line := range strings.Split(strings.TrimRight(string(data), "\n"), "\n") {
-		if f := strings.Fields(line); line != "" && !(len(f) == 2 && f[1] == managedKey) {
-			kept = append(kept, line)
-		}
-	}
-	next := strings.Join(append(kept, hash+"  "+managedKey), "\n") + "\n"
+	next := withHash(string(data), managedKey, hash)
 	if next == string(data) {
 		return false, nil
 	}
@@ -331,4 +326,96 @@ func CopyPersonal(owner, laneRoot string) {
 		return
 	}
 	_ = os.WriteFile(filepath.Join(laneRoot, PersonalPath), data, 0o644)
+}
+
+//go:embed skills/*.md
+var skillFiles embed.FS
+
+// Skills are the framework's onboarding skills, by name.
+var Skills = []string{"workspace-design", "readiness-audit"}
+
+// ApplySkills composes the skills into each harness's own format. Grok reads Claude Code's. A file
+// edited by hand is left alone, and listed.
+func ApplySkills(owner string) (changed []string, edited []string, err error) {
+	for _, name := range Skills {
+		data, err := skillFiles.ReadFile("skills/" + name + ".md")
+		if err != nil {
+			return nil, nil, err
+		}
+		for _, target := range []string{
+			".claude/skills/aw-" + name + "/SKILL.md",
+			".agents/skills/aw-" + name + "/SKILL.md",
+			".opencode/commands/aw-" + name + ".md",
+		} {
+			path := filepath.Join(owner, filepath.FromSlash(target))
+			sum := sha256.Sum256(data)
+			hash := hex.EncodeToString(sum[:])
+			have, readErr := os.ReadFile(path)
+			if readErr == nil {
+				haveSum := sha256.Sum256(have)
+				current := hex.EncodeToString(haveSum[:])
+				if current == hash {
+					continue
+				}
+				if current != recordedHash(owner, target) {
+					edited = append(edited, target)
+					continue
+				}
+			}
+			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+				return nil, nil, err
+			}
+			if err := os.WriteFile(path, data, 0o644); err != nil {
+				return nil, nil, err
+			}
+			if err := recordHash(owner, target, hash); err != nil {
+				return nil, nil, err
+			}
+			changed = append(changed, target)
+		}
+	}
+	return changed, edited, nil
+}
+
+func recordedHash(owner, key string) string {
+	data, _ := os.ReadFile(filepath.Join(owner, managedPath))
+	for _, line := range strings.Split(string(data), "\n") {
+		if f := strings.Fields(line); len(f) == 2 && f[1] == key {
+			return f[0]
+		}
+	}
+	return ""
+}
+
+func recordHash(owner, key, hash string) error {
+	path := filepath.Join(owner, managedPath)
+	data, err := os.ReadFile(path)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return os.WriteFile(path, []byte(withHash(string(data), key, hash)), 0o644)
+}
+
+// withHash sets a key's hash in the managed list, in place, so that a file that has not changed is
+// written back byte for byte.
+func withHash(text, key, hash string) string {
+	var out []string
+	done := false
+	for _, line := range strings.Split(strings.TrimRight(text, "\n"), "\n") {
+		if line == "" {
+			continue
+		}
+		if f := strings.Fields(line); len(f) == 2 && f[1] == key {
+			if !done {
+				out = append(out, hash+"  "+key)
+				done = true
+			}
+			continue
+		}
+		out = append(out, line)
+	}
+	if !done {
+		out = append(out, hash+"  "+key)
+	}
+	return strings.Join(out, "\n") + "\n"
 }

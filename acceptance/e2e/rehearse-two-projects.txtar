@@ -1,0 +1,54 @@
+# aw rehearse creates two lanes at once, starts their servers, finds no collision, and leaves nothing
+# behind: no worktrees, branches, processes or archive refs.
+# req: R87
+# source: onboarding.md
+
+owner-may-change
+workspace shop --init
+exec aw rehearse
+stdout 'Claimed lanes'
+stdout 'The rehearsal passed'
+exec aw --json
+! stdout 'rehearse'
+! exists .worktrees/01
+! exists web/.worktrees/01
+exec git for-each-ref refs/aw/archive
+! stdout .
+exec git branch --list 'aw/*'
+! stdout .
+exec git -C web branch --list 'aw/*'
+! stdout .
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[lane_env.app]
+DATABASE_URL = "postgres://localhost/shop_{lane}"
+
+[projects.web]
+directory = "web"
+smoke = "true"
+
+[projects.web.servers.app]
+command = "exec awtest-server -port {port}"
+port = 43300
+ready = "awtest-http 127.0.0.1:{port}"
+
+[projects.api]
+directory = "api"
+
+[projects.api.servers.main]
+command = "exec awtest-server -port {port}"
+port = 43500
+
+[resources.stack]
+kind = "process"
+capacity = 2
+servers = ["web.app", "api.main"]
+

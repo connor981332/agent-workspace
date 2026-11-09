@@ -557,10 +557,21 @@ func (m *Manager) CallerLane() int {
 		return 0
 	}
 	n, err := strconv.Atoi(filepath.Base(m.WS.LaneRoot))
-	if err != nil || m.Root(n) != m.WS.LaneRoot {
+	if err != nil || !samePlace(m.Root(n), m.WS.LaneRoot) {
 		return 0
 	}
 	return n
+}
+
+// samePlace compares paths through symlinks: a process without $PWD sees the physical path, and the
+// owner checkout may be recorded through a link.
+func samePlace(a, b string) bool {
+	if a == b {
+		return true
+	}
+	ra, errA := filepath.EvalSymlinks(a)
+	rb, errB := filepath.EvalSymlinks(b)
+	return errA == nil && errB == nil && ra == rb
 }
 
 // Resolve finds a lane by name, number (3 or 03) or unique name prefix. Names are checked first.

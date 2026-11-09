@@ -1,0 +1,22 @@
+# aw add project records the project, ignores it, clones it and installs its hooks. It is the human's.
+# req: R13
+# source: C2 test_kit.sh t_add_project_wires_everything
+# milestone: M11
+
+owner-may-change
+workspace shop --init
+exec git init -q --bare -b main $WORK/remotes/jobs.git
+exec git clone -q $WORK/remotes/jobs.git $WORK/seed
+exec sh -c 'cd $WORK/seed && git checkout -q -b main 2>/dev/null; echo jobs > README.md; git add -A; git -c user.name=t -c user.email=t@t commit -q -m one; git push -q origin HEAD:main'
+exec aw add project jobs $WORK/remotes/jobs.git
+stdout 'Added project jobs'
+grep '\[projects.jobs\]' workspace.toml
+grep '/jobs' .gitignore
+exists jobs/README.md
+exec git -C jobs config --get core.hooksPath
+exec aw config validate
+! exec aw add project jobs $WORK/remotes/jobs.git
+stderr 'already has a project named jobs'
+env CLAUDE_CODE_SESSION_ID=s-1
+! exec aw add project other x
+stderr 'only for the human'

@@ -87,6 +87,7 @@ The project repositories. The key is the project's name.
 | `install_stamp` | array of strings | — | Files, relative to the project, whose contents decide whether install reruns, e.g. package-lock.json. |
 | `run` | string | — | The default command for aw run <project> with no command. |
 | `needs` | array of strings | — | Resources the project's commands need. |
+| `smoke` | string | — | A quick command that proves the project works in a lane. aw rehearse runs it. |
 | `depends_on` | array of strings | — | Projects this one consumes. A change set merges those first (R69). |
 | `publication` | array of strings | — | Actions pre-authorized in this project, as in [publication] allow. |
 | `generated_contracts` | array of strings | — | Files generated from a contract, from the project root (** matches directories). Agents may not edit them (R70). |

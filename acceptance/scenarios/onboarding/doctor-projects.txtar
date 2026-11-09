@@ -1,0 +1,24 @@
+# aw doctor --projects reports what would collide in lanes, each with its fix, and passes when there
+# is nothing. It only reads files, and test files do not count.
+# req: R89
+# source: onboarding.md
+# milestone: M11
+
+owner-may-change
+workspace solo --single --init
+exec aw doctor --projects
+stdout 'No project has anything'
+cp $WORK/app.js app.js
+cp $WORK/app.test.js app.test.js
+! exec aw doctor --projects
+stdout '\[hardcoded-port\]'
+stdout 'read the port from the environment'
+stdout '\[cookie-domain\]'
+stdout 'AW_HOSTNAME'
+! stdout 'app.test.js'
+
+-- app.js --
+fetch("http://localhost:3000/x")
+const opts = { domain: "localhost" }
+-- app.test.js --
+fetch("http://localhost:3000/x")

@@ -51,6 +51,10 @@ Review `workspace.toml`, then commit what `aw init` wrote, and run `aw setup`. T
 [configuration reference](reference/config.md) lists every key, and `aw config explain <key>` says
 where a value comes from.
 
+To have an agent propose the configuration, run `aw onboard`. It works in a lane, and its result stays
+on that branch until you review it. Before you merge it, run `aw rehearse`, which creates two lanes at
+once and reports anything that collides. `aw add project <alias> <url>` adds a repository later.
+
 ## Every day
 
 | Command | What it does |
