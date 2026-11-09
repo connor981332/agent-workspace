@@ -39,6 +39,9 @@ type Broker struct {
 	// ReleaseToken runs a token resource's release script. A failure while a lane gives a seat back
 	// keeps the lease, so that the release can be retried.
 	ReleaseToken func(ctx context.Context, r Resource, l state.Lease) error
+	// ListeningIn reports whether something listens on a port in a project's container. On the host
+	// Docker's proxy holds a published port whether or not anything does.
+	ListeningIn func(project string, port int) bool
 }
 
 // Resource is a resource as the queue sees it, including the implicit "servers".
@@ -122,7 +125,14 @@ func (b *Broker) ownerPortBusy(r Resource) bool {
 		if s == nil || s.OwnerPort == 0 {
 			continue
 		}
-		c, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(s.OwnerPort+b.Cfg.Ports.Offset)), 20*time.Millisecond)
+		port := s.OwnerPort + b.Cfg.Ports.Offset
+		if project, _, _ := strings.Cut(full, "."); b.Cfg.Projects[project].Runner == "devcontainer" && b.ListeningIn != nil {
+			if b.ListeningIn(project, port) {
+				return true
+			}
+			continue
+		}
+		c, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)), 20*time.Millisecond)
 		if err == nil {
 			c.Close()
 			return true

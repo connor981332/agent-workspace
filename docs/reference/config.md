@@ -201,3 +201,13 @@ Machine-specific port settings.
 | Key | Type | Default | Meaning |
 |---|---|---|---|
 | `offset` | integer, 0 to 60000 | `0` | Added to every port of this workspace, so two workspaces on one machine do not collide. |
+
+## `[devcontainer]`
+
+The devcontainer CLI, for projects whose runner is devcontainer. Pin it: a CLI that drifts breaks builds.
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `command` | string | `"npx -y @devcontainers/cli@{version}"` | Runs the CLI. {version} is replaced by version. aw doctor warns when the command names no version. |
+| `version` | string | `"0.89.0"` | The CLI version the command uses. |
+| `env` | table of string | — | Variables the CLI runs with. BUILDX_BAKE_ENTITLEMENTS_FS = "0" is set unless this overrides it. |

@@ -161,6 +161,7 @@ var ownerOnly = map[string]string{
 	"pair": "grants a pair session", "move-to-lane": "moves the owner's work", "try": "changes the owner checkout",
 	"setup": "sets up the workspace", "rehearse": "rehearses onboarding", "delegate": "grants authority",
 	"upgrade": "changes the pinned version", "init": "creates a workspace",
+	"containers": "starts, recreates or stops shared containers",
 }
 
 // OwnerOnly reports whether an aw command is one only the human runs.
@@ -182,6 +183,12 @@ func ownerOnlyRule(s Scope, c shell.Command) Decision {
 	}
 	if sub == "setup" && ownLaneSetup(s, rest) {
 		return allow()
+	}
+	if sub == "containers" {
+		// The claim step only removes a dead leftover, and a harness's devcontainer up runs it.
+		if cs, _ := subcommand(rest); cs == "claim" {
+			return allow()
+		}
 	}
 	if why, ok := ownerOnly[sub]; ok {
 		return deny("owner-only", "aw %s %s, which only the human does%s → ask the human to run it", sub, why, where)

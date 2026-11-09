@@ -8,21 +8,30 @@
 #   state/<id>                        true|false, the container's running state
 #   net/<name>                        exists when the network exists
 #   psql-select                       output for any psql SELECT
+#   inspect/<id>                      the JSON `docker inspect <id>` prints
+#   folder/<id>                       the devcontainer.local_folder label
+#   top/<id>                          rows of `docker top`, after the header
 set -eu
 echo "docker $*" >> "$STUB_LOG"
 cmd="$1"; shift
 case "$cmd" in
 ps)
-  project="" service="" running=""
+  project="" service="" running="" folder="" all=""
   for a in "$@"; do
     case "$a" in
       label=com.docker.compose.project=*) project="${a#label=com.docker.compose.project=}" ;;
       label=com.docker.compose.service=*) service="${a#label=com.docker.compose.service=}" ;;
+      label=devcontainer.local_folder=*) folder="${a#label=devcontainer.local_folder=}" ;;
       status=running) running=1 ;;
+      -aq|-a) all=1 ;;
     esac
   done
   if [ -n "$service" ]; then
-    cat "$STUB_STATE/ps/${project}__$service" 2>/dev/null || true
+    for id in $(cat "$STUB_STATE/ps/${project}__$service" 2>/dev/null || true); do
+      if [ -z "$all" ] && [ "$(cat "$STUB_STATE/state/$id" 2>/dev/null || echo true)" = false ]; then continue; fi
+      if [ -n "$folder" ] && [ "$(cat "$STUB_STATE/folder/$id" 2>/dev/null)" != "$folder" ]; then continue; fi
+      echo "$id"
+    done
   elif [ -n "$running" ]; then
     cat "$STUB_STATE/running/$project" 2>/dev/null || true
   fi
@@ -32,7 +41,20 @@ inspect)
   case "$*" in
     *Mounts*) cat "$STUB_STATE/mount/$id" ;;
     *State.Running*) cat "$STUB_STATE/state/$id" ;;
+    *) cat "$STUB_STATE/inspect/$id" ;;
   esac
+  ;;
+rm)
+  [ "$1" = -f ] && shift
+  rm -f "$STUB_STATE/inspect/$1" "$STUB_STATE/folder/$1" "$STUB_STATE/state/$1"
+  for f in "$STUB_STATE"/ps/*; do
+    [ "$(cat "$f" 2>/dev/null)" != "$1" ] || rm -f "$f"
+  done
+  ;;
+top)
+  echo "PID PPID COMMAND"
+  echo "100 50 sleep infinity"
+  cat "$STUB_STATE/top/$1" 2>/dev/null || true
   ;;
 network)
   case "$1" in
@@ -42,19 +64,26 @@ network)
   ;;
 compose)
   echo "COMPOSE_FILE=${COMPOSE_FILE:-}" >> "$STUB_LOG"
+  if [ "${1:-}" = -p ] && [ "${3:-}" = down ]; then
+    for f in "$STUB_STATE/ps/${2}__"*; do
+      [ -e "$f" ] || continue
+      id="$(cat "$f")"
+      rm -f "$f" "$STUB_STATE/inspect/$id" "$STUB_STATE/folder/$id" "$STUB_STATE/state/$id"
+    done
+  fi
   ;;
 exec)
-  # Past the options and the container is the command, which the stubs of psql and redis-cli answer.
+  # The paths are the same inside and outside, so the command simply runs here, in -w's directory.
+  # -e NAME takes the value from this environment, as the real client does.
   while [ $# -gt 0 ]; do
     case "$1" in
       -i|-t|-it) shift ;;
-      -e|-u|-w) shift 2 ;;
+      -w) cd "$2"; shift 2 ;;
+      -e|-u) shift 2 ;;
       *) shift; break ;;
     esac
   done
-  case "${1:-}" in
-    psql|redis-cli) exec "$@" ;;
-  esac
+  exec "$@"
   ;;
 esac
 exit 0

@@ -23,6 +23,7 @@ import (
 	"github.com/connor981332/agent-workspace/internal/config"
 	"github.com/connor981332/agent-workspace/internal/launcher"
 	"github.com/connor981332/agent-workspace/internal/platform"
+	"github.com/connor981332/agent-workspace/internal/runners"
 	"github.com/connor981332/agent-workspace/internal/state"
 	"github.com/connor981332/agent-workspace/internal/timing"
 	"github.com/connor981332/agent-workspace/internal/workspace"
@@ -137,6 +138,7 @@ func Run(dir, version string, withTimings bool) *Report {
 	checkHooksPath(ws.Owner, c, add)
 	checkInstructions(ws.Owner, add)
 	checkMachine(ws.Owner, c, add)
+	checkDevcontainers(ws.Owner, c, add)
 	addMachine(add)
 	if withTimings {
 		r.Timings = t.Phases()
@@ -394,6 +396,41 @@ func checkMachine(owner string, c *config.Config, add func(Check)) {
 	if total := platform.TotalMemory(); total > 0 && need > total {
 		add(Check{Name: "machine capacity", Status: Warn, Message: fmt.Sprintf("the resources of every workspace on this machine could need %.1f GB of memory, and it has %.1f GB", float64(need)/(1<<30), float64(total)/(1<<30)),
 			Fix: "lower some capacity, or do not run these at once"})
+	}
+}
+
+// checkDevcontainers reads each project's devcontainer.json and the CLI's pin. It starts nothing and
+// asks no container engine (R2).
+func checkDevcontainers(owner string, c *config.Config, add func(Check)) {
+	if c == nil {
+		return
+	}
+	any := false
+	for _, name := range sortedKeys(c.Projects) {
+		if c.Projects[name].Runner != "devcontainer" {
+			continue
+		}
+		any = true
+		j, err := runners.Validate(filepath.Join(owner, c.Projects[name].Directory))
+		if err != nil {
+			add(Check{Name: "devcontainer " + name, Status: Fail, Message: firstPart(err), Fix: fixPart(err, "fix the project's devcontainer.json")})
+			continue
+		}
+		if !runners.ClaimWired(j, name) {
+			add(Check{Name: "devcontainer " + name, Status: Warn, Message: "VS Code will not run aw's claim step, so it could reuse a container from a moved checkout",
+				Fix: fmt.Sprintf(`set "initializeCommand" to run bin/aw containers claim %s`, name)})
+			continue
+		}
+		add(Check{Name: "devcontainer " + name, Status: OK, Message: "the same path inside and outside, with the seat ports from aw's fragment"})
+	}
+	if !any {
+		return
+	}
+	if runners.CLIPinned(c.Devcontainer) {
+		add(Check{Name: "devcontainer CLI", Status: OK, Message: "pinned: " + strings.ReplaceAll(c.Devcontainer.Command, "{version}", c.Devcontainer.Version)})
+	} else {
+		add(Check{Name: "devcontainer CLI", Status: Warn, Message: fmt.Sprintf("%q names no version, so builds can change without warning", c.Devcontainer.Command),
+			Fix: "name a version in [devcontainer] command, e.g. npx -y @devcontainers/cli@{version}"})
 	}
 }
 

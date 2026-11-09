@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/rogpeppe/go-internal/testscript"
@@ -36,6 +37,13 @@ func TestE2E(t *testing.T) {
 		env.Setenv("E2E_PG", pg)
 		env.Setenv("E2E_REDIS", redis)
 		env.Defer(func() { exec.Command("docker", "rm", "-f", pg, redis).Run() })
+		env.Defer(func() {
+			out, _ := exec.Command("docker", "ps", "-aq", "--filter", "label=com.docker.compose.project=awsmoke_devcontainer").Output()
+			if ids := strings.Fields(string(out)); len(ids) > 0 {
+				exec.Command("docker", append([]string{"rm", "-f"}, ids...)...).Run()
+			}
+			exec.Command("docker", "network", "rm", "awsmoke_devcontainer_default").Run()
+		})
 		return nil
 	}
 	testscript.Run(t, p)

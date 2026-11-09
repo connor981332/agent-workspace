@@ -1,0 +1,28 @@
+# Agents cannot run aw containers up, recreate or down, through the guard or directly. The claim step
+# is open to anyone, because a harness's devcontainer up runs it and it only removes dead leftovers.
+# req: R49
+# source: C2 finding F3; ux.md
+# milestone: M6
+
+workspace shop --init
+exec aw attach 'one'
+cd .worktrees/01
+! exec awtest-hook bash 'aw containers recreate web'
+stderr 'aw containers starts, recreates or stops shared containers, which only the human does'
+! exec awtest-hook bash 'aw containers down'
+stderr 'only the human'
+! exec awtest-hook bash 'aw containers up web'
+stderr 'only the human'
+exec awtest-hook bash 'aw containers claim web'
+env CLAUDE_CODE_SESSION_ID=s-1
+! exec aw containers recreate web
+stderr 'only for the human'
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[projects.web]
+runner = "devcontainer"

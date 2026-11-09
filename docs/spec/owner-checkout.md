@@ -22,7 +22,7 @@ commands, off the hot path.
 | **Dev servers and ports** | The owner uses seat 0 and the base ports. Lanes use offset ports. Agents cannot run `kill`, `pkill` or similar. Eviction only stops lane processes. The owner's servers count against capacity and always win the queue. |
 | **Databases** | Providers never touch the owner's databases or a template. Lane creation refuses a branch whose configuration would reach the owner's databases. |
 | **Secrets** | Lanes get read-only links to the owner's gitignored secret files. Guards refuse writing through those links and reading or echoing them. |
-| **Shared containers** | Agents cannot recreate, restart or stop containers. Disruptive operations are refused while the owner is attached. |
+| **Shared containers** | Agents cannot recreate, restart or stop containers. Disruptive operations are refused while the owner is attached, or anything else is using the container ([architecture.md](architecture.md#runners)). |
 | **Machine load** | Lane limits and resource capacity keep agents from starving the owner's work. |
 
 On the host runner, agents run as the human's user account. These protections stop accidents by

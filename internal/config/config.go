@@ -33,6 +33,8 @@ type Config struct {
 	User      User                 `json:"user"`
 	Ports     Ports                `json:"ports"`
 
+	Devcontainer Devcontainer `json:"devcontainer"`
+
 	// Values is the merged configuration as decoded TOML values, for aw config get.
 	Values map[string]any `json:"-"`
 	// Provenance of every leaf key, by Path.key().
@@ -70,6 +72,13 @@ type Data struct {
 	Terminate bool              `json:"terminate"`
 	Service   string            `json:"service"`
 	Env       map[string]string `json:"env"`
+}
+
+// Devcontainer is how aw runs the devcontainer CLI (S16).
+type Devcontainer struct {
+	Command string            `json:"command"`
+	Version string            `json:"version"`
+	Env     map[string]string `json:"env"`
 }
 
 type WorkspaceLifecycle struct {

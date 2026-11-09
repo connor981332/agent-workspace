@@ -22,6 +22,7 @@ import (
 
 	"github.com/connor981332/agent-workspace/internal/config"
 	"github.com/connor981332/agent-workspace/internal/platform"
+	"github.com/connor981332/agent-workspace/internal/procs"
 	"github.com/connor981332/agent-workspace/internal/state"
 )
 
@@ -264,6 +265,10 @@ type Runner struct {
 	Seats func(ctx context.Context, needs []string) (func(), error)
 	// Provision creates or resets one data block.
 	Provision func(ctx context.Context, data string, fromPool bool) error
+	// InContainer returns the command that runs a hook in its project's container, or nil when the
+	// project runs on the host. What starting the container says goes to the log. Project-level
+	// prepare stays on the host: it writes the env files that commands in the container read.
+	InContainer func(ctx context.Context, project, dir string, env []string, run, log string) ([]string, error)
 	// After runs once the steps have, even if one failed. Its failure is reported, not fatal.
 	After func(ctx context.Context) error
 	// Out is told about each step. It may be nil.
@@ -425,7 +430,14 @@ func (r *Runner) step(ctx context.Context, s Step, b *begun) bool {
 	}
 	defer release()
 	r.say("%s: running", s.Name)
-	code, err := Exec(ctx, Command{Dir: dir, Env: env, Run: s.Hook.Run, Timeout: time.Duration(s.Hook.Timeout), Log: log, Phase: s.Phase, Fresh: r.Fresh})
+	var argv []string
+	if r.InContainer != nil && s.Project != "" && s.Phase != PhasePrepare {
+		if argv, err = r.InContainer(ctx, s.Project, dir, append(append([]string{}, env...), HookEnv(s.Phase, r.Fresh)...), s.Hook.Run, log); err != nil {
+			r.say("%s: %v", s.Name, err)
+			return end(state.StepFailed, err.Error(), nil)
+		}
+	}
+	code, err := Exec(ctx, Command{Dir: dir, Env: env, Run: s.Hook.Run, Argv: argv, Timeout: time.Duration(s.Hook.Timeout), Log: log, Phase: s.Phase, Fresh: r.Fresh})
 	if err != nil {
 		var c *int
 		if code != 0 {
@@ -494,13 +506,25 @@ func (r *Runner) finish() error {
 
 // Command is one hook to run.
 type Command struct {
-	Dir     string
-	Env     []string
-	Run     string
+	Dir string
+	Env []string
+	Run string
+	// Argv replaces Run for a hook in a container: a keeper. Its log is then appended to, after what
+	// starting the container wrote.
+	Argv    []string
 	Timeout time.Duration // 0 means none
 	Log     string
 	Phase   string
 	Fresh   bool
+}
+
+// HookEnv is the environment only hooks receive.
+func HookEnv(phase string, fresh bool) []string {
+	f := "0"
+	if fresh {
+		f = "1"
+	}
+	return []string{"AW_PHASE=" + phase, "AW_FRESH=" + f}
 }
 
 // Exec runs a hook in its own process group, with its output in the log. It returns the exit status,
@@ -514,18 +538,21 @@ func Exec(ctx context.Context, c Command) (int, error) {
 	if err := os.MkdirAll(filepath.Dir(c.Log), 0o700); err != nil {
 		return 0, err
 	}
-	log, err := os.OpenFile(c.Log, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	mode := os.O_TRUNC
+	if c.Argv != nil {
+		mode = os.O_APPEND
+	}
+	log, err := os.OpenFile(c.Log, os.O_CREATE|os.O_WRONLY|mode, 0o600)
 	if err != nil {
 		return 0, err
 	}
 	defer log.Close()
-	fresh := "0"
-	if c.Fresh {
-		fresh = "1"
-	}
 	cmd := exec.Command("sh", "-c", c.Run)
+	if c.Argv != nil {
+		cmd = exec.Command(c.Argv[0], c.Argv[1:]...)
+	}
 	cmd.Dir, cmd.Stdout, cmd.Stderr = c.Dir, log, log
-	cmd.Env = append(append(os.Environ(), c.Env...), "AW_PHASE="+c.Phase, "AW_FRESH="+fresh)
+	cmd.Env = append(append(os.Environ(), c.Env...), HookEnv(c.Phase, c.Fresh)...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if err := cmd.Start(); err != nil {
 		return 0, err
@@ -549,6 +576,7 @@ func Exec(ctx context.Context, c Command) (int, error) {
 	}
 	if stopped {
 		syscall.Kill(-pgid, syscall.SIGKILL) // anything it left behind
+		procs.Reap(c.Log, 0)
 	}
 	switch {
 	case stopped && errors.Is(ctx.Err(), context.DeadlineExceeded):

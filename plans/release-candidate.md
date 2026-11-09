@@ -106,7 +106,13 @@ The bench had been running on a RAM disk. It now uses the real disk, where every
 
 (`m5/providers`.) Now: providers (state schema 10), Postgres and Redis through their own clients, external providers over the extension protocol, shared named snapshots, the `restore` hook (S18, S19), and the end-to-end suite against real Postgres and Redis in the new `e2e-docker` job. `requirements.toml` moved to `current = "M5"`, and the laptop benchmarks pass.
 
-**Pending manual checks:** the hot-path and budget benchmarks on an Apple Silicon laptop (T3, M1, M2;
+**M5 complete (v0.0.6).**
+
+**In progress:** M6. Decided with the spec owner on 2026-11-08: `install`, `setup`, `reset` and `restore` run in the container, while `prepare` and `teardown` stay on the host; a container is in use when a seat is held, a setup is running or any exec session is live, with no override; aw's Compose fragment is generated per clone and untracked, wired through `dockerComposeFile` and `initializeCommand`. Recorded in architecture.md.
+
+(`m6/runner`.) Now: `internal/runners` devcontainer (Compose identity, claim, mount and port checks, a pinned CLI), keepers (`procs.Keep`, S8), `aw containers up|recreate|down|claim`, hooks and servers in containers, the `doctor` checks, 20 scenarios, and `e2e/devcontainer-smoke` against real Docker and the real CLI, which passes locally. `requirements.toml` moved to `current = "M6"`. Known limit: in a container, `AW_LANE_ROOT`, `AW_LANE_STATE`, `AW_OWNER` and `AW_TOOL` name host paths that are not mounted there.
+
+**Pending manual checks:** the macOS devcontainer checklist on Docker Desktop and OrbStack (`docs/dev/macos-devcontainer-checklist.md`, M6); the hot-path and budget benchmarks on an Apple Silicon laptop (T3, M1, M2;
 docs/dev/benchmarks.md).
 
 ## How to use this plan

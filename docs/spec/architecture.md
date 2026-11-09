@@ -262,6 +262,46 @@ Built-in providers implement the same interface in Go, so a team can replace one
   (candidate 2). The runner compares a running container's mounts and published ports with what the
   configuration requires and refuses a mismatch with the fix (candidate 1).
 
+A project's devcontainer must be a Compose one, and its `devcontainer.json` must say:
+
+```jsonc
+{
+  "dockerComposeFile": ["compose.yaml", "aw.compose.yaml"],
+  "service": "app",
+  "workspaceFolder": "${localWorkspaceFolder}",        // the same path inside and outside (S7)
+  "initializeCommand": "../bin/aw containers claim web" // `bin/aw` for a single-repository workspace
+}
+```
+
+`aw.compose.yaml` is written by `aw`, in the clone's `.devcontainer`, and kept out of Git through the
+clone's `.git/info/exclude`, because it names this checkout's path. It holds the same-path bind mount,
+every seat's port on loopback, and the Compose name. The team commits `devcontainer.json`, which lists
+it. `aw containers claim <project>` rewrites it, and removes a container left over from a moved
+checkout, or refuses when that other checkout is live and running there. The CLI runs
+`initializeCommand` before it reads the Compose files, so VS Code gets exactly what `aw` gets.
+A server listening only on the container's loopback is not reachable through a published port, so
+servers must bind `0.0.0.0`.
+
+The CLI itself is pinned under `[devcontainer]`: `command`, `version` and `env` (S16). `aw doctor`
+checks the wiring and the pin from the files alone, and asks no container engine (R2).
+
+**Which commands run in the container:** `aw run`, team commands, servers, and the `install`, `setup`,
+`reset` and `restore` steps. `prepare`, at both levels, and `teardown` run on the host: `prepare`
+writes the env files that commands in the container read, and `teardown` may run when the container
+has gone. In a container, `AW_LANE_ROOT`, `AW_LANE_STATE`, `AW_OWNER` and `AW_TOOL` name host paths
+that are not mounted there.
+
+**Servers in a container (S8)** are held by a keeper, a detached host process (`aw` itself) that stays
+attached through `docker exec`. The keeper's host PID is the lease holder, since a container's PIDs
+may be invisible from the host. Stopping the keeper stops the server's process group in the container.
+A keeper records that group, with its start time, next to the server's log; if it dies uncleanly, the
+next state-changing command stops the recorded group through `docker exec`, after confirming the
+start time.
+
+**A container is in use (R49)** when a lane or the owner holds a seat on one of its servers, a setup is
+running, or any exec session is live in it, which covers VS Code, terminals, `aw run` and servers.
+`aw containers recreate` and `down` then refuse, and list what they found. There is no override.
+
 Git always runs on the host, because worktree `.git` files name host paths.
 
 ## Modules

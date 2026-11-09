@@ -1,0 +1,51 @@
+# A server in a container is held by a host keeper: aw stop stops the command inside, and the seat comes back.
+# req: R42
+# source: spec S8
+# milestone: M6
+
+owner-may-change
+stubs docker devcontainer npx
+workspace solo --single --init
+exec sh -c 'cp -R $WORK/.devcontainer . && git add .devcontainer && git -c user.name=t -c user.email=t@t commit -q -m devcontainer && git push -q origin HEAD:main'
+exec aw serve stack --json
+exists $WORK/server.pid
+grep 'docker exec -i -u dev' $STUB_LOG
+exec aw stop stack
+grep 'kill -TERM' $STUB_LOG
+exec sh -c 'for i in 1 2 3 4 5 6 7 8 9 10; do kill -0 $(cat $WORK/server.pid) 2>/dev/null || exit 0; sleep 0.2; done; exit 1'
+
+-- workspace.toml --
+[workspace]
+name = "Solo"
+namespace = "solo"
+schema = 1
+
+[lanes]
+pool = 0
+port_stride = 100
+
+[projects.solo]
+directory = "."
+runner = "devcontainer"
+
+[projects.solo.servers.app]
+command = "echo $$ > $WORK/server.pid; exec sleep 60 # {port}"
+port = 3000
+
+[resources.stack]
+kind = "process"
+capacity = 2
+servers = ["solo.app"]
+-- .devcontainer/devcontainer.json --
+{
+  // the team's file
+  "dockerComposeFile": ["compose.yaml", "aw.compose.yaml"],
+  "service": "app",
+  "workspaceFolder": "${localWorkspaceFolder}",
+  "remoteUser": "dev",
+  "initializeCommand": "bin/aw containers claim solo",
+}
+-- .devcontainer/compose.yaml --
+services:
+  app:
+    image: stub

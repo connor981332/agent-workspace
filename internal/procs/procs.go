@@ -30,6 +30,10 @@ type Spec struct {
 	Env     []string // added to this process's environment
 	Log     string
 	Ready   string // a shell command that exits 0 when the server is ready, or ""
+	// Argv and ReadyArgv replace Command and Ready for a server in a container: a keeper, and a probe
+	// through docker exec.
+	Argv      []string
+	ReadyArgv []string
 }
 
 // settle is how long a server with no readiness probe must stay up to count as started.
@@ -49,6 +53,9 @@ func Start(ctx context.Context, s Spec) (Proc, error) {
 	}
 	defer log.Close()
 	c := exec.Command("sh", "-c", s.Command)
+	if s.Argv != nil {
+		c = exec.Command(s.Argv[0], s.Argv[1:]...)
+	}
 	c.Dir, c.Env = s.Dir, append(os.Environ(), s.Env...)
 	c.Stdout, c.Stderr = log, log
 	c.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
@@ -64,7 +71,7 @@ func Start(ctx context.Context, s Spec) (Proc, error) {
 	fail := func(why string) (Proc, error) {
 		return p, fmt.Errorf("%s → its log is %s", why, s.Log)
 	}
-	if s.Ready == "" {
+	if s.Ready == "" && s.ReadyArgv == nil {
 		select {
 		case err := <-exited:
 			return fail(fmt.Sprintf("the server exited at once (%v)", err))
@@ -78,6 +85,9 @@ func Start(ctx context.Context, s Spec) (Proc, error) {
 	deadline := time.Now().Add(readyLimit)
 	for {
 		probe := exec.CommandContext(ctx, "sh", "-c", s.Ready)
+		if s.ReadyArgv != nil {
+			probe = exec.CommandContext(ctx, s.ReadyArgv[0], s.ReadyArgv[1:]...)
+		}
 		probe.Dir, probe.Env = s.Dir, c.Env
 		if probe.Run() == nil {
 			return p, nil
@@ -128,8 +138,10 @@ func Signal(p Proc) bool {
 }
 
 // Stop ends the group: SIGTERM, then SIGKILL after grace. It never touches a group it cannot verify.
+// A container command whose keeper has died is stopped from the keeper's record.
 func Stop(p Proc, grace time.Duration) {
 	if !Signal(p) {
+		Reap(p.Log, grace)
 		return
 	}
 	Finish(p, grace)
@@ -144,4 +156,5 @@ func Finish(p Proc, grace time.Duration) {
 	if groupExists(p.PID) {
 		_ = syscall.Kill(-p.PID, syscall.SIGKILL)
 	}
+	Reap(p.Log, 0)
 }
