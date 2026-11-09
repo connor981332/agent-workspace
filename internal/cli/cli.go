@@ -97,7 +97,7 @@ func newRoot(stdout, stderr io.Writer) *cobra.Command {
 	root.CompletionOptions.HiddenDefaultCmd = true
 
 	root.AddCommand(newVersionCmd(), newConfigCmd(), newInitCmd(), newSetupCmd(), newBackgroundSetupCmd(), newSnapshotCmd(), newRestoreCmd(), newSnapshotsCmd(), newDoctorCmd(), newWhoamiCmd(), newAttachCmd(),
-		newInspectCmd(), newRehearseCmd(), newOnboardCmd(), newAddCmd(), newModulesCmd(), newEjectCmd(), newInfraCmd(), newWebhookCmd(), newPlanCmd(), newCheckDocsCmd(), newDelegateCmd(), newMoveToLaneCmd(), newTryCmd(), newChangesetCmd(), newUpgradeCmd(), newUpgradeFinishCmd(), newContainersCmd(), newKeepCmd(), newSweepCmd(), newDiscardCmd(), newParkCmd(false), newParkCmd(true), newFinishCmd(), newRunCmd(), newNewCmd(), newRecapCmd(), newPairCmd(), newResumeCmd(), newOpenCmd(), newServeCmd(), newStopCmd(), newQueueCmd())
+		newSuperviseCmd(), newInspectCmd(), newRehearseCmd(), newOnboardCmd(), newAddCmd(), newModulesCmd(), newEjectCmd(), newInfraCmd(), newWebhookCmd(), newPlanCmd(), newCheckDocsCmd(), newDelegateCmd(), newMoveToLaneCmd(), newTryCmd(), newChangesetCmd(), newUpgradeCmd(), newUpgradeFinishCmd(), newContainersCmd(), newKeepCmd(), newSweepCmd(), newDiscardCmd(), newParkCmd(false), newParkCmd(true), newFinishCmd(), newRunCmd(), newNewCmd(), newRecapCmd(), newPairCmd(), newResumeCmd(), newOpenCmd(), newServeCmd(), newStopCmd(), newQueueCmd())
 	root.PersistentPreRunE = refuseAgent
 	return root
 }

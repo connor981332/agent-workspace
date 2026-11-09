@@ -15,6 +15,37 @@ var dirOptions = map[string]bool{
 	"--cwd": true, "--chdir": true,
 }
 
+// fileChanging are the commands whose arguments are files they change, so an argument aw cannot
+// determine could be anything.
+var fileChanging = map[string]bool{"rm": true, "rmdir": true, "mv": true, "cp": true, "ln": true, "tee": true, "chmod": true, "chown": true,
+	"touch": true, "mkdir": true, "truncate": true, "shred": true, "install": true}
+
+var shells = map[string]bool{"sh": true, "bash": true, "zsh": true, "dash": true, "ksh": true, "fish": true}
+
+// computedRule fails closed on what cannot be read (R55): a command whose name is computed, a
+// command that changes files named by a value only known when it runs, and commands fed to a shell
+// on its standard input.
+func computedRule(s Scope, c shell.Command) Decision {
+	if len(c.Args) == 0 {
+		return allow()
+	}
+	if !c.Args[0].Known {
+		return deny("computed", "the name of this command depends on a value aw cannot determine, so it is refused → write the command itself")
+	}
+	name := c.Name()
+	if s.Role == Lane && fileChanging[name] {
+		for _, a := range c.Args[1:] {
+			if !a.Known {
+				return deny("computed", "%s is given a value aw cannot determine, so it could reach outside the lane, and it is refused → write the path out", name)
+			}
+		}
+	}
+	if shells[name] && (len(c.Args) == 1 || (len(c.Args) == 2 && c.Args[1].Text == "-s")) {
+		return deny("computed", "%s would run whatever is on its standard input, which aw cannot read, so it is refused → save the script to a file in the lane, read it, and run that", name)
+	}
+	return allow()
+}
+
 // pathsRule is the path boundary for a shell command (R58): every literal path, redirect target and
 // directory option must stay in the lane, and one whose value cannot be known fails closed.
 func pathsRule(s Scope, c shell.Command) Decision {
@@ -189,8 +220,8 @@ var ownerOnly = map[string]string{
 	"setup": "sets up the workspace", "rehearse": "rehearses onboarding", "delegate": "grants authority",
 	"upgrade": "changes the pinned version", "init": "creates a workspace",
 	"containers": "starts, recreates or stops shared containers",
-	"infra":      "takes down the shared infrastructure",
-	"add":        "changes the workspace's modules or projects", "eject": "changes what aw manages",
+	"infra":      "takes down the shared infrastructure", "supervise": "installs a user service",
+	"add": "changes the workspace's modules or projects", "eject": "changes what aw manages",
 }
 
 // OwnerOnly reports whether an aw command is one only the human runs.

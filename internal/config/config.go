@@ -41,6 +41,8 @@ type Config struct {
 	LaneEnv  map[string]map[string]string `json:"lane_env"`
 	Webhooks map[string]*Webhook          `json:"webhooks"`
 	Plans    Plans                        `json:"plans"`
+	// Harnesses are declarative adapters: another hooked harness, added without a release.
+	Harnesses map[string]*Harness `json:"harnesses"`
 
 	// Values is the merged configuration as decoded TOML values, for aw config get.
 	Values map[string]any `json:"-"`
@@ -97,6 +99,22 @@ func (c *Config) RoleNamed(name string) (*Role, bool) {
 		return &Role{Deny: []string{"publish", "merge"}}, true
 	}
 	return nil, false
+}
+
+// Harness maps a harness's hook payload to the common form. A tool it does not list is refused.
+type Harness struct {
+	Session    string            `json:"session"`
+	Cwd        string            `json:"cwd"`
+	Event      string            `json:"event"`
+	Tool       string            `json:"tool"`
+	Input      string            `json:"input"`
+	Command    string            `json:"command"`
+	Path       string            `json:"path"`
+	Events     map[string]string `json:"events"`
+	ShellTools []string          `json:"shell_tools"`
+	ReadTools  []string          `json:"read_tools"`
+	WriteTools []string          `json:"write_tools"`
+	OtherTools []string          `json:"other_tools"`
 }
 
 // Webhook is how one provider's sandbox events reach a lane.

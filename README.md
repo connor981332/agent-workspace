@@ -2,7 +2,7 @@
 
 Agent Workspace is a development environment that facilitates parallel agent sessions. It works with any agentic coding tool, and prevents resource contention so many agents can get work done at the same time on one machine.
 
-> **Status: pre-release.** Nothing here is stable yet. Interfaces, file formats and directory layout will change without notice, and nothing is packaged or versioned for outside use. We plan to make this project open source once the design settles. The code is already under the [Apache-2.0 license](LICENSE).
+> **Status: pre-1.0.** Nothing here is stable yet. Interfaces, file formats and directory layout will change without notice, and nothing is packaged or versioned for outside use. We plan to make this project open source once the design settles. The code is already under the [Apache-2.0 license](LICENSE).
 
 ## Getting started
 
@@ -28,30 +28,18 @@ Personal settings can override the team's, except for what the team locks.
 
 ## Where things stand
 
-This repository currently holds **candidate implementations**, competing approaches to the same problem. They exist to find out which design works, and the final form may take ideas from several.
+Agent Workspace is a single Go binary for Linux and macOS, with signed releases. It works with Claude Code, Codex, Grok and OpenCode, and other harnesses can be added in configuration. It came out of two earlier implementations, kept in this repository for now under `workspace-candidate-*`, which will be archived after v0.1.0.
 
-| Candidate | Approach | State |
-|---|---|---|
-| [`workspace-candidate-1`](workspace-candidate-1/) | Python 3.11+, no dependencies. A single `workspace.toml` manifest describes the project, and the `aw` command manages agent "lanes", server slots, hooks and cleanup. Modeled on the RideTracker workspace. | On master, with tests and CI. Its [README](workspace-candidate-1/README.md) documents what it does. |
-| [`workspace-candidate-2`](workspace-candidate-2/) | Shell-based workspace kit: `ws` and `lane` commands, a project template, and optional add-on modules (mail catcher, object store, DNS stand-in, browser MCP and others). Modeled on the FabWorks workspace. | On master, with tests and CI. Its [README](workspace-candidate-2/README.md) documents what it does. |
+## What it does
 
-Both were derived from real workspaces that already run parallel agents day to day, which is why they reflect those teams' conventions. Neither is yet a general-purpose framework.
+- gives each agent a lane: its own worktree of every repository, its own data, ports and hostname;
+- queues access to what only one lane can use at a time, with the human going first and crashed holders recovered;
+- pins one exact, verified version per workspace, updated through a merge request;
+- runs in your project's dev container or on the host;
+- removes only work it can prove was merged;
+- stands in for shared services with optional modules, and helps an agent propose your configuration, which you review.
 
-**Release candidate.** We have settled on the design for the version we will publish: a new Go codebase that takes the safety core of candidate 1 and the container and resource work of candidate 2. The candidates are now research material and the reference for its acceptance tests. The design is in the [specification](docs/spec/README.md).
-
-## Where it is going
-
-The target is described in the [specification](docs/spec/README.md), whose [requirements](docs/spec/requirements.md) grew out of the original [wishlist](wishlist.md): a framework that supports the three levels above and covers, among other things:
-
-- layered configuration with visible provenance, and clone-and-go onboarding;
-- pinned, deliberately updated framework versions that detect local edits;
-- multi-repo isolated workspaces, per-agent provisioned data, and cross-repo change sets;
-- a fair queue for single-instance resources, with human priority and crash recovery;
-- dev-container execution that never starts or stops containers unexpectedly;
-- named team commands, composed instructions, team-defined hooks, and human review of changes to the workspace itself;
-- secrets handling, forge integration, roles, and plans and docs owned at the right level.
-
-The specification adds two principles the wishlist did not state: the tool is never what anyone waits on, and the owner's own checkout is never disturbed by agents.
+The [specification](docs/spec/README.md) has the details.
 
 ## Principles
 
@@ -61,10 +49,6 @@ The specification adds two principles the wishlist did not state: the tool is ne
 - **Honest about safety.** Hooks are guardrails for cooperative agents, not a security sandbox. Do not run untrusted agents or prompts on the strength of this tool. See the [safety model](docs/safety.md).
 - **Any agent tool.** One set of instructions, not one per harness.
 
-## Open source plans
-
-We intend to release this as open source. Before that happens we want to settle the design, converge on one implementation, strip out anything specific to the teams it was modeled on, and write documentation for people outside them. Until then, feel free to read and try things, but expect breakage and don't build on it yet.
-
 ## Contributing
 
-Not open for outside contributions yet. This section will be filled in when the project is released.
+See [CONTRIBUTING.md](CONTRIBUTING.md).

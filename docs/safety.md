@@ -62,3 +62,7 @@ change the workspace's own instructions, hooks and configuration.
 - Treat text an agent reads from the outside world, such as issues, web pages and dependencies, as
   able to change what the agent does.
 - Run `aw doctor` if something looks wrong. It reports hooks that have been changed or are missing.
+
+## What the guards cannot see
+
+Code an interpreter runs (`python3 -c`, `node -e`) and HTTP clients such as `curl` are not read, so what they do is not guarded. A harness without hooks is not confined at all: it gets the instructions and `bin/aw`, and nothing stops it. [docs/dev/security-review.md](dev/security-review.md) lists what has been reviewed.

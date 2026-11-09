@@ -26,7 +26,7 @@ func TestInitRefusals(t *testing.T) {
 }
 
 func TestNames(t *testing.T) {
-	for in, want := range map[string]string{"shop-workspace": "shopworkspace", "RideTracker": "ridetracker", "2026 work": "work", "!!!": "workspace",
+	for in, want := range map[string]string{"shop-workspace": "shopworkspace", "ShopFront": "shopfront", "2026 work": "work", "!!!": "workspace",
 		"averyveryverylongworkspacename": "averyveryverylongwor"} {
 		if got := deriveNamespace(in); got != want {
 			t.Errorf("deriveNamespace(%q) = %q, want %q", in, got, want)

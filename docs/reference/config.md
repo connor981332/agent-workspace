@@ -252,6 +252,27 @@ Forwarders of a provider's sandbox webhooks. The most recent lane to run aw webh
 | `server` | string | — | The server that receives them, as <project>.<server>. |
 | `path` | string | `"/"` | The path on that server. |
 
+## `[harnesses.<name>]`
+
+Declarative adapters: another hooked harness, without a new release. Each key names a field of its hook payload.
+
+`<name>`: lowercase letters, digits and hyphens, starting with a letter.
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `session` | string | — | The field holding the session's ID. |
+| `cwd` | string | — | The field holding the working directory. |
+| `event` | string | — | The field holding the event's name. |
+| `tool` | string | — | The field holding the tool's name. |
+| `input` | string | — | The field holding the tool's input, an object. |
+| `command` | string | — | The field of the input holding a shell command. |
+| `path` | string | — | The field of the input holding a file path. |
+| `events` | table of string | — | The harness's event names, each mapped to pre-tool-use, session-start, user-prompt-submit or session-end. |
+| `shell_tools` | array of strings | — | Tools that run a shell command. |
+| `read_tools` | array of strings | — | Tools that read files. |
+| `write_tools` | array of strings | — | Tools that write files. |
+| `other_tools` | array of strings | — | Tools with no path to check. |
+
 ## `[plans]`
 
 The plan mechanism.

@@ -1,0 +1,50 @@
+# A team can add a hooked harness in workspace.toml. It gets the same decisions as a built-in, a
+# tool the mapping does not list is refused, and it cannot replace a built-in adapter.
+# req: R56
+# source: architecture.md, "Harness adapters"
+# milestone: M12
+
+workspace shop --init
+exec aw attach 'one'
+cd .worktrees/01
+exec sh $WORK/try.sh before run ls
+stdout 'status=0'
+exec sh $WORK/try.sh before run 'cat ../../README.md'
+stdout 'status=2'
+stderr 'outside lane one'
+exec sh $WORK/try.sh before mystery ''
+stdout 'status=2'
+stderr 'the tool "mystery"'
+exec sh $WORK/try.sh after run ls
+stdout 'status=2'
+exec sh -c 'printf x | aw hook nosuch pre-tool-use; echo "status=$?"'
+stdout 'status=2'
+stderr 'not a supported harness'
+
+-- try.sh --
+printf '{"sid":"s1","dir":"%s","what":"%s","name":"%s","args":{"cmd":"%s"}}' "$PWD" "$1" "$2" "$3" | aw hook myagent pre-tool-use
+echo "status=$?"
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[projects.web]
+[projects.api]
+
+[harnesses.myagent]
+session = "sid"
+cwd = "dir"
+event = "what"
+tool = "name"
+input = "args"
+command = "cmd"
+path = "file"
+shell_tools = ["run"]
+read_tools = ["open"]
+write_tools = ["save"]
+other_tools = ["think"]
+
+[harnesses.myagent.events]
+before = "pre-tool-use"

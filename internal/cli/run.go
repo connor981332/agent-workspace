@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
 	"syscall"
 
 	"github.com/spf13/cobra"
@@ -146,6 +147,9 @@ against the lane.`,
 				return err
 			}
 			fmt.Fprintf(cmd.ErrOrStderr(), "aw: lane %s %s, starting %s\n", c.Dir, c.Lane.Name, harness)
+			if !slices.Contains(knownHarnesses, harness) && w.cfg.Harnesses[harness] == nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "aw: warning: %s has no hooks here, so nothing confines it to the lane. It gets the instructions in AGENTS.md, and bin/aw is its way in (docs/harnesses.md)\n", harness)
+			}
 			mx := w.cfg.User.Multiplexer
 			t.Mark("claim")
 			startSetup(cmd.ErrOrStderr(), w, c)

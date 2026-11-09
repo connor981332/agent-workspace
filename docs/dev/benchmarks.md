@@ -268,3 +268,26 @@ The same machine as M1, on power, on its NVMe disk (btrfs). aw built from the m1
 ### Apple Silicon laptop
 
 Not yet measured: pending, for a maintainer with a Mac.
+
+## M12
+
+### Linux laptop, 2026-11-09
+
+The same machine as M1, on power, on its NVMe disk (btrfs). aw built from the m12/final branch.
+
+| Operation | n | p50 ms | p95 ms | p99 ms | max ms | limit ms | result |
+|---|---|---|---|---|---|---|---|
+| hook | 1000 | 4.54 | 5.15 | 5.62 | 6.27 | 8.00 | pass |
+| whoami | 500 | 3.63 | 4.05 | 4.38 | 5.16 | 10.00 | pass |
+| config-get | 500 | 3.63 | 4.09 | 4.37 | 4.79 | 10.00 | pass |
+| attach-from-pool | 100 | 66.86 | 74.52 | 77.79 | 78.07 | 100.00 | pass |
+| new-until-harness | 100 | 57.66 | 70.04 | 76.00 | 77.42 | 150.00 | pass |
+| dashboard | 200 | 43.82 | 45.52 | 46.21 | 47.02 | 100.00 | pass |
+| ref-hook | 1000 | 4.89 | 5.37 | 5.80 | 6.96 | 8.00 | pass |
+| serve-free-seat | 100 | 8.28 | 9.26 | 28.89 | 36.26 | 50.00 | pass |
+| grant-next | 100 | 27.20 | 43.48 | 45.12 | 46.73 | 50.00 | pass |
+| preempt | 100 | 7.44 | 8.16 | 8.57 | 28.63 | 50.00 | pass |
+
+### Apple Silicon laptop
+
+Not yet measured: pending, for a maintainer with a Mac.
