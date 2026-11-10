@@ -194,3 +194,62 @@ func Exclude(dir string) error {
 	}
 	return os.WriteFile(path, append(old, add.String()...), 0o644)
 }
+
+// RehearseCommand is the one command aw onboard lets its lane's agent run without a prompt.
+const RehearseCommand = "bin/aw rehearse"
+
+const rehearseRule = "Bash(" + RehearseCommand + ")"
+
+// AllowRehearse adds or removes the rule in a lane's own Claude Code settings. A harness's permission
+// check cannot see that a rehearsal is isolated, and the onboarding loop depends on running it. The
+// file is aw's, untracked and local to the lane, so the grant ends with the lane.
+func AllowRehearse(root string, allow bool) error {
+	path := filepath.Join(root, filepath.FromSlash(ClaudeFile))
+	old, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) && !allow {
+			return nil
+		}
+		if !os.IsNotExist(err) {
+			return err
+		}
+	}
+	settings := map[string]any{}
+	if len(old) > 0 {
+		if err := json.Unmarshal(old, &settings); err != nil {
+			return nil // not valid JSON: Install has already said it left this file alone
+		}
+	}
+	perms, _ := settings["permissions"].(map[string]any)
+	rules, _ := perms["allow"].([]any)
+	has := slices.Contains(rules, any(rehearseRule))
+	if has == allow {
+		return nil
+	}
+	if allow {
+		if perms == nil {
+			perms = map[string]any{}
+		}
+		rules = append(rules, rehearseRule)
+	} else {
+		rules = slices.DeleteFunc(slices.Clone(rules), func(r any) bool { return r == any(rehearseRule) })
+	}
+	if len(rules) == 0 {
+		delete(perms, "allow")
+	} else {
+		perms["allow"] = rules
+	}
+	if len(perms) == 0 {
+		delete(settings, "permissions")
+	} else {
+		settings["permissions"] = perms
+	}
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(settings); err != nil {
+		return err
+	}
+	return write(path, buf.Bytes())
+}

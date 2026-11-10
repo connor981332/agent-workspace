@@ -1,0 +1,17 @@
+# A harness's permission check cannot see that a rehearsal is isolated, so aw onboard lets its own
+# lane's agent run it. No other lane gets the rule, and it never reaches Git.
+# req: R85 R87
+# source: onboarding RideTracker: Claude Code's auto mode denied the required rehearsal
+# milestone: M12
+
+stubs claude
+workspace solo --single --init
+owner-may-change
+exec aw onboard --harness claude
+stderr 'run bin/aw rehearse without asking'
+grep 'Bash\(bin/aw rehearse\)' .worktrees/01/.claude/settings.local.json
+exec git -C .worktrees/01 status --porcelain --ignored .claude/settings.local.json
+stdout '^!!'
+
+exec aw attach 'other work'
+! grep 'Bash\(bin/aw rehearse\)' .worktrees/02/.claude/settings.local.json

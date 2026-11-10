@@ -89,7 +89,7 @@ runs the project's [projects.<p>] run.`,
 
 // startLaneSession claims a lane and replaces this process with the harness in it. It returns only
 // when something stopped that.
-func startLaneSession(cmd *cobra.Command, purpose, harness, branch, role string, useMux, awHooksOnly bool, extra []string) error {
+func startLaneSession(cmd *cobra.Command, purpose, harness, branch, role string, useMux, awHooksOnly, onboarding bool, extra []string) error {
 	t := timing.Start()
 	w, err := openForWrite()
 	if err != nil {
@@ -117,7 +117,7 @@ func startLaneSession(cmd *cobra.Command, purpose, harness, branch, role string,
 	errOut := cmd.ErrOrStderr()
 	fmt.Fprintf(errOut, "aw: creating a lane for %q\n", ui.Clean(purpose))
 	m.Progress = func(line string) { fmt.Fprintln(errOut, "aw: "+line) }
-	m.AWHooksOnly = awHooksOnly
+	m.AWHooksOnly, m.Onboarding = awHooksOnly, onboarding
 	if err := checkRole(w.cfg, role, false); err != nil {
 		return err
 	}
@@ -179,7 +179,7 @@ against the lane.`,
 			} else if len(args) > 1 {
 				return &usageError{fmt.Errorf(`aw new takes one purpose; quote it, and put harness arguments after --`)}
 			}
-			return startLaneSession(cmd, purpose, harness, branch, role, useMux, false, extra)
+			return startLaneSession(cmd, purpose, harness, branch, role, useMux, false, false, extra)
 		}),
 	}
 	cmd.Flags().StringVar(&role, "role", "", "the team role this lane works under")

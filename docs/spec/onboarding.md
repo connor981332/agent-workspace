@@ -95,7 +95,8 @@ uncommitted changes, with its own namespace, a port offset and its own container
 afterwards. aw can only move what it names, so it refuses to start when a Compose file or script fixes a
 host port, a shared network or a real Compose project; those read `AW_PORT_<n>`, `AW_INFRA_NETWORK` and
 `AW_INFRA_PROJECT`, which a rehearsal sets, with the real value as the default. The agent onboarding a workspace may run it for its own lane, and so needs no human for
-the loop.
+the loop: `aw onboard` adds an allow rule for exactly `bin/aw rehearse` to the lane's own gitignored
+`.claude/settings.local.json`, because a harness's permission check cannot see aw's isolation.
 
 The skill iterates until rehearsal passes, then stops and reports.
 

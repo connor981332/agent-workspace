@@ -35,6 +35,8 @@ type Manager struct {
 	Progress func(string)
 	// AWHooksOnly leaves other systems' hooks out of a new lane's harness files.
 	AWHooksOnly bool
+	// Onboarding lets the new lane's agent run aw rehearse without a permission prompt.
+	Onboarding bool
 
 	forges        map[string]*forge.Client // by host, for one sweep
 	forgeDeadline time.Time
@@ -551,8 +553,11 @@ func (m *Manager) build(ctx context.Context, lane state.Lane, plans []repoPlan, 
 		return made, err
 	}
 	// A harness's sandbox is the user's choice; these only say what it may write if it is on.
-	_, err := sandbox.Install(root, m.SandboxRoots(filepath.Base(root)))
-	return made, err
+	if _, err := sandbox.Install(root, m.SandboxRoots(filepath.Base(root))); err != nil {
+		return made, err
+	}
+	// Set or cleared every time: a warm lane may have been an onboarding lane before.
+	return made, sandbox.AllowRehearse(root, m.Onboarding)
 }
 
 // SandboxRoots are the paths a harness's sandbox must allow, beyond its working directory: every
