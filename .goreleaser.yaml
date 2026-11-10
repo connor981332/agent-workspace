@@ -4,6 +4,11 @@ version: 2
 
 project_name: aw
 
+git:
+  # Marks where the earlier implementations were removed. It is not a version.
+  ignore_tags:
+    - candidates-final
+
 builds:
   - id: aw
     main: ./cmd/aw
