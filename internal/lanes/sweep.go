@@ -292,7 +292,7 @@ func (m *Manager) evidenceOptions(r state.LaneRepo) evidence.Options {
 }
 
 func worktreeLocked(ctx context.Context, owner, path string) (bool, error) {
-	out, err := run.In(owner).Run(ctx, "worktree", "list", "--porcelain")
+	out, err := worktreeGit(ctx, run.In(owner), "", "worktree", "list", "--porcelain")
 	if err != nil {
 		return false, err
 	}
@@ -452,10 +452,10 @@ func (m *Manager) destroy(ctx context.Context, l state.Lane, stored []state.Lane
 				m.removeRootLinks(r.Path)
 			}
 			removeMaterialized(r.Path)
-			if _, err := g.Run(ctx, "worktree", "remove", r.Path); err != nil {
+			if _, err := worktreeGit(ctx, g, "", "worktree", "remove", r.Path); err != nil {
 				return err
 			}
-		} else if _, err := g.Run(ctx, "worktree", "prune"); err != nil {
+		} else if _, err := worktreeGit(ctx, g, "", "worktree", "prune"); err != nil {
 			return err
 		}
 		if r.Branch != "" {
