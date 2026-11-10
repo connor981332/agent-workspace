@@ -1,0 +1,33 @@
+# A workspace need not be a Git repository: only its projects are. Its state lives in .aw/state, a
+# lane root is a plain directory, and onboarding works in the owner checkout.
+# req: R1
+# source: dogfood of 0.1.0-rc.2
+# milestone: M12
+
+stubs claude
+exec mkdir -p $WORK/plain/web
+cd $WORK/plain/web
+exec git init -q -b main
+exec git commit -q --allow-empty -m first
+cd ..
+exec aw init
+exists workspace.toml
+exists bin/aw
+! exists .git
+exec aw setup --harness claude
+exists .aw/state/state.db
+! exists .git
+exec aw doctor
+stdout 'kept as plain files'
+exec aw attach 'plain work'
+exists .worktrees/01/bin/aw
+exists .worktrees/01/workspace.toml
+exists .worktrees/01/web
+! exists .worktrees/01/.aw/state
+exec git -C web/.worktrees/01 status --porcelain
+! stdout .
+exec aw discard plain-work --yes
+! exists .worktrees/01
+exec aw onboard --harness claude
+grep 'pair session in the owner checkout' $STUB_LOG
+! exists .worktrees/01

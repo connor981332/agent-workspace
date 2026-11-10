@@ -1,0 +1,21 @@
+# A statement that is only an assignment has no command word. The guard used to crash on it and
+# refuse the call, so agents could not write `d=x; ...`.
+# req: R55
+# source: dogfood of 0.1.0-rc.2
+# milestone: M12
+
+workspace shop --init
+exec awtest-hook bash 'd=x; echo "$d"'
+! stdout .
+exec awtest-hook bash 'foo=1; echo "$foo"'
+! stdout .
+exec awtest-hook bash 'n=a; d=x/$n; echo "$d"'
+! stdout .
+exec awtest-hook bash 'for n in a b; do d=1; done'
+! stdout .
+exec awtest-hook bash 'for n in a b; do d=$n; done'
+! stdout .
+exec awtest-hook bash 'FOO=1 echo hi'
+! stdout .
+! exec awtest-hook bash 'd=$(git branch -D main)'
+stderr 'deletes, moves or forces a branch'

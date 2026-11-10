@@ -24,7 +24,8 @@ const (
 	TeamPath = ".aw/instructions.md"
 	// AgentsPath is the canonical instructions file, which holds the generated block.
 	AgentsPath = "AGENTS.md"
-	// ClaudePath is Claude Code's own file, which imports AGENTS.md.
+	// ClaudePath is Claude Code's own file. aw does not create it: Claude Code reads AGENTS.md itself.
+	// When the file exists, Claude Code reads it instead of AGENTS.md, so it must import AGENTS.md.
 	ClaudePath = "CLAUDE.md"
 	// ClaudeImport is the line that imports it.
 	ClaudeImport = "@AGENTS.md"
@@ -44,7 +45,7 @@ This workspace runs several agents in parallel, each in its own lane.
 
 - The checkout you start in belongs to the human. Reading needs nothing. Before changing anything, run ` + "`bin/aw attach \"<what you are working on>\"`" + ` and work in the lane root it prints.
 - If your working directory stays where it was, start each shell command with ` + "`cd <lane root> &&`" + ` and use absolute paths inside the lane for file tools.
-- ` + "`bin/aw whoami`" + ` shows where you are. ` + "`bin/aw run <project> <command>`" + ` runs a command with the lane's environment.
+- ` + "`bin/aw lanes`" + ` lists the lanes, and ` + "`bin/aw whoami`" + ` shows where you are. ` + "`bin/aw run <project> <command>`" + ` runs a command with the lane's environment.
 - When you stop, run ` + "`bin/aw finish`" + ` so that the next session can pick up the work.
 - When aw refuses something, its message says what to do instead. Follow it, and do not look for a way around it.`
 
@@ -213,6 +214,9 @@ func applyImport(owner string) (Result, error) {
 	if err != nil {
 		return res, err
 	}
+	if text == "" {
+		return res, nil // no file: Claude Code reads AGENTS.md directly
+	}
 	for _, line := range strings.Split(text, "\n") {
 		if strings.TrimSpace(line) == ClaudeImport {
 			return res, nil
@@ -256,7 +260,8 @@ func applyPersonal(ctx context.Context, owner, namespace string) (Result, error)
 	next := ""
 	switch {
 	case content != "":
-		if next, err = splice(text, content, PersonalPath); err != nil {
+		// Claude Code stops reading AGENTS.md by itself once this file exists, so it is imported here.
+		if next, err = splice(text, ClaudeImport+"\n\n"+content, PersonalPath); err != nil {
 			return res, err
 		}
 	default: // the personal file has gone: its block goes too, and whatever else is there stays
@@ -274,6 +279,9 @@ func applyPersonal(ctx context.Context, owner, namespace string) (Result, error)
 }
 
 func exclude(owner, pattern string) error {
+	if !workspace.IsGitRepo(owner) {
+		return nil
+	}
 	common, err := workspace.GitCommonDir(owner)
 	if err != nil {
 		return err

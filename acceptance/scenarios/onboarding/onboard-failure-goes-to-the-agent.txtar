@@ -1,0 +1,19 @@
+# When a lane cannot be created, aw onboard starts the agent anyway, in the owner checkout as a pair
+# session, with the failure in front of it.
+# req: R85
+# source: dogfood of 0.1.0-rc.2
+# milestone: M12
+
+owner-may-change
+stubs claude
+workspace shop --init
+exec git -C web checkout -q --detach
+! exec aw doctor --json
+stdout 'detached HEAD'
+exec aw onboard --harness claude
+stderr 'no lane could be created'
+grep 'Something failed before you started' $STUB_LOG
+grep 'detached HEAD' $STUB_LOG
+grep 'pair session' $STUB_LOG
+! exists .worktrees/01
+grep 'claude:pair-' $STUB_LOG

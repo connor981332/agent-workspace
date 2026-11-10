@@ -14,8 +14,10 @@ Agents propose, the tool verifies, a human approves. You are writing a proposal.
    - which data needs a provider, and what template it starts from;
    - which lifecycle hooks are needed, and write them, safe to rerun;
    - which team commands exist, and what each needs;
-   - which token resources exist, such as emulators or simulators.
+   - which token resources exist, such as emulators or simulators;
+   - which gitignored files a lane needs, from what aw inspect lists: `secrets` for anything an agent must not read, `local_files` for the rest, and nothing that is not needed;
+   - which settings the project's hooks read, in `[projects.<name>.env]`.
 3. Write `workspace.toml`, the hook scripts, and `docs/workspace-design.md`, which records each decision and the reason for it.
 4. Check it with `bin/aw config validate` and `bin/aw doctor`.
 5. Ask the human to run `bin/aw rehearse`, which only the human may run, and work from what it reports. Iterate until it passes.
-6. Stop, and report what you decided and why. The result goes on this lane's branch and through a merge request, because hooks run with the user's privileges and a person must review them.
+6. Stop, and report what you decided and why. The result goes on this lane's branch and through a merge request, because hooks run with the user's privileges and a person must review them. In a pair session in the owner checkout there is no branch: leave the changes there for the person to review.

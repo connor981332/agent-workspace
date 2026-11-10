@@ -7,6 +7,7 @@ package evidence
 import (
 	"context"
 	"fmt"
+	"github.com/connor981332/agent-workspace/internal/workspace"
 	"path"
 	"strings"
 
@@ -75,6 +76,7 @@ func Check(ctx context.Context, path, baseRef string, o Options) Repo {
 	if err != nil {
 		return unknown("git status failed: %v", err)
 	}
+	status = workspace.WithoutMaterialized(g.Dir, status)
 	if status != "" {
 		r.Dirty = summarize("changed or untracked", status)
 	} else {

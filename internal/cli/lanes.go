@@ -124,21 +124,30 @@ nothing. Recycled lanes return to the warm pool; lanes beyond [lanes] pool, or o
 }
 
 func newDiscardCmd() *cobra.Command {
-	var yes, asJSON bool
+	var yes, asJSON, orphans bool
 	cmd := &cobra.Command{
-		Use:   "discard <lane>",
+		Use:   "discard <lane> | --orphans",
 		Short: "Abandon a lane's unmerged work: archive its branches, then remove it",
 		Long: `Abandon a lane's unmerged work. Every branch of the lane is archived under
 refs/aw/archive/<name>/<time> first, so nothing committed is lost; then the lane is removed. A lane
-with uncommitted work is refused. It asks for confirmation on a terminal; elsewhere it needs --yes.`,
-		Args: cobra.ExactArgs(1),
+with uncommitted work is refused. It asks for confirmation on a terminal; elsewhere it needs --yes.
+
+With --orphans, clean up what no lane records: branches with the lane prefix and worktrees under
+.worktrees that an interrupted lane left, in any project. aw doctor lists them. Each branch is
+archived the same way, and a worktree with uncommitted files is left alone.`,
 		RunE: run(func(cmd *cobra.Command, args []string) error {
+			if orphans != (len(args) == 0) {
+				return &usageError{errors.New("name one lane, or pass --orphans")}
+			}
 			w, err := openForWrite()
 			if err != nil {
 				return err
 			}
 			defer w.Close()
 			m := manager(w)
+			if orphans {
+				return discardOrphans(cmd, m, yes, asJSON)
+			}
 			l, err := m.Resolve(args[0])
 			if err != nil {
 				return err
@@ -171,8 +180,48 @@ with uncommitted work is refused. It asks for confirmation on a terminal; elsewh
 		}),
 	}
 	cmd.Flags().BoolVar(&yes, "yes", false, "do not ask for confirmation")
+	cmd.Flags().BoolVar(&orphans, "orphans", false, "clean up the branches and worktrees no lane records")
 	cmd.Flags().BoolVar(&asJSON, "json", false, "print what was archived as JSON")
 	return cmd
+}
+
+func discardOrphans(cmd *cobra.Command, m *lanes.Manager, yes, asJSON bool) error {
+	if !yes {
+		if !ui.IsTerminal(os.Stdin) {
+			return errors.New("aw discard --orphans removes leftover branches and worktrees; confirm with --yes")
+		}
+		fmt.Fprint(cmd.ErrOrStderr(), "Remove the branches and worktrees no lane records? Branches are archived first. [y/N] ")
+		answer, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+		if a := strings.ToLower(strings.TrimSpace(answer)); a != "y" && a != "yes" {
+			return errors.New("nothing was removed")
+		}
+	}
+	done, err := m.DiscardOrphans(cmd.Context(), time.Now())
+	if err != nil {
+		return err
+	}
+	out := cmd.OutOrStdout()
+	if asJSON {
+		if done == nil {
+			done = []lanes.DiscardedOrphan{}
+		}
+		return writeJSON(out, map[string]any{"orphans": done})
+	}
+	if len(done) == 0 {
+		fmt.Fprintln(out, "No leftovers: every lane branch and worktree belongs to a lane.")
+	}
+	for _, o := range done {
+		what := o.Branch
+		if what == "" {
+			what = o.Worktree
+		}
+		if o.Skipped != "" {
+			fmt.Fprintf(cmd.ErrOrStderr(), "aw: left %s in %s: %s\n", ui.Clean(what), o.Label, ui.Clean(o.Skipped))
+			continue
+		}
+		fmt.Fprintf(out, "Removed %s from %s. %s\n", ui.Clean(what), o.Label, o.Archive)
+	}
+	return nil
 }
 
 func newParkCmd(unpark bool) *cobra.Command {

@@ -21,9 +21,11 @@ import (
 	"time"
 
 	"github.com/connor981332/agent-workspace/internal/config"
+	"github.com/connor981332/agent-workspace/internal/gitx/run"
 	"github.com/connor981332/agent-workspace/internal/platform"
 	"github.com/connor981332/agent-workspace/internal/procs"
 	"github.com/connor981332/agent-workspace/internal/state"
+	"github.com/connor981332/agent-workspace/internal/ui"
 )
 
 // Phases, as hooks see them in AW_PHASE.
@@ -31,6 +33,7 @@ const (
 	PhaseData     = "data" // not a hook: a provider creates or resets the lane's data
 	PhasePrepare  = "prepare"
 	PhaseInstall  = "install"
+	PhaseCheckout = "post-checkout" // the repository's own hook, which creating the worktree skips
 	PhaseSetup    = "setup"
 	PhaseReset    = "reset"
 	PhaseTeardown = "teardown"
@@ -56,9 +59,33 @@ type Step struct {
 	Data    string   // data: the [lanes.data] block it provisions
 }
 
+// CheckoutHooks finds each project's own post-checkout hook, by project. Creating a lane's worktree
+// skips it, so it runs as a setup step: a failure leaves a lane that can be looked at and retried.
+func CheckoutHooks(ctx context.Context, owner string, c *config.Config) map[string]string {
+	out := map[string]string{}
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	for name, p := range c.Projects {
+		if p.Lanes == "shared" || p.PostCheckout == "skip" {
+			continue
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if h := run.HookPath(ctx, filepath.Join(owner, p.Directory), "post-checkout"); h != "" {
+				mu.Lock()
+				out[name] = h
+				mu.Unlock()
+			}
+		}()
+	}
+	wg.Wait()
+	return out
+}
+
 // Plan returns a lane's setup steps, in order: the data, what is not specific to one project, and
-// then each project's. fromPool picks reset over setup.
-func Plan(c *config.Config, fromPool bool) []Step {
+// then each project's. fromPool picks reset over setup. hooks are the projects' post-checkout hooks.
+func Plan(c *config.Config, fromPool bool, hooks map[string]string) []Step {
 	var out []Step
 	data := make([]string, 0, len(c.Lanes.Data))
 	for name := range c.Lanes.Data {
@@ -88,6 +115,9 @@ func Plan(c *config.Config, fromPool bool) []Step {
 			out = append(out, Step{Name: name + "." + PhaseInstall, Phase: PhaseInstall, Project: name,
 				Hook: &config.Hook{Run: p.Install}, Stamp: p.InstallStamp})
 		}
+		if h := hooks[name]; h != "" {
+			out = append(out, Step{Name: name + "." + PhaseCheckout, Phase: PhaseCheckout, Project: name, Hook: &config.Hook{Run: checkoutCommand(h)}})
+		}
 		phase, h := PhaseSetup, p.Lifecycle.Setup
 		if fromPool {
 			phase, h = PhaseReset, p.Lifecycle.Reset
@@ -97,6 +127,11 @@ func Plan(c *config.Config, fromPool bool) []Step {
 		}
 	}
 	return out
+}
+
+// checkoutCommand runs a post-checkout hook as Git would after creating a worktree.
+func checkoutCommand(hook string) string {
+	return "exec '" + strings.ReplaceAll(hook, "'", `'\''`) + `' 0000000000000000000000000000000000000000 "$(git rev-parse HEAD)" 1`
 }
 
 // Names returns the names of a plan's steps.
@@ -129,7 +164,40 @@ func Incomplete(name string, s state.Step) error {
 	if s.Log != "" {
 		where = ", log " + s.Log
 	}
-	return fmt.Errorf("lane %s: setup incomplete (%s%s) → aw setup %s", name, why, where, name)
+	err := fmt.Sprintf("lane %s: setup incomplete (%s%s) → aw setup %s", name, why, where, name)
+	if t := Tail(s.Log); t != "" {
+		err += "\nThe end of its log:\n" + t
+	}
+	return errors.New(err)
+}
+
+const (
+	tailLines = 20
+	tailWidth = 300
+)
+
+// Tail is the end of a hook's log, for an error: its last lines, none of them long. The whole log
+// stays in its file.
+func Tail(path string) string {
+	if path == "" {
+		return ""
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
+	if len(lines) > tailLines {
+		lines = lines[len(lines)-tailLines:]
+	}
+	for i, l := range lines {
+		l = ui.Clean(l)
+		if len(l) > tailWidth {
+			l = l[:tailWidth] + "…"
+		}
+		lines[i] = "  " + l
+	}
+	return strings.TrimRight(strings.Join(lines, "\n"), " \n")
 }
 
 func firstFailed(steps []state.Step, want func(string) bool) *state.Step {
@@ -269,6 +337,8 @@ type Runner struct {
 	// project runs on the host. What starting the container says goes to the log. Project-level
 	// prepare stays on the host: it writes the env files that commands in the container read.
 	InContainer func(ctx context.Context, project, dir string, env []string, run, log string) ([]string, error)
+	// Hooks are the projects' post-checkout hooks, from CheckoutHooks.
+	Hooks map[string]string
 	// After runs once the steps have, even if one failed. Its failure is reported, not fatal.
 	After func(ctx context.Context) error
 	// Out is told about each step. It may be nil.
@@ -288,7 +358,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	steps := Plan(r.Cfg, done.fromPool)
+	steps := Plan(r.Cfg, done.fromPool, r.Hooks)
 	var serial []Step
 	projects := map[string][]Step{}
 	for _, s := range steps {
@@ -350,7 +420,7 @@ func (r *Runner) begin(ctx context.Context) (*begun, error) {
 		} else if !errors.Is(err, state.ErrNotFound) {
 			return err
 		}
-		if err := state.PlanSetup(tx, r.Lane.Number, r.Lane.Generation, b.fromPool, Names(Plan(r.Cfg, b.fromPool))); err != nil {
+		if err := state.PlanSetup(tx, r.Lane.Number, r.Lane.Generation, b.fromPool, Names(Plan(r.Cfg, b.fromPool, r.Hooks))); err != nil {
 			return err
 		}
 		if err := state.SetSetupRunner(tx, r.Lane.Number, pid, start); err != nil {
@@ -431,7 +501,7 @@ func (r *Runner) step(ctx context.Context, s Step, b *begun) bool {
 	defer release()
 	r.say("%s: running", s.Name)
 	var argv []string
-	if r.InContainer != nil && s.Project != "" && s.Phase != PhasePrepare {
+	if r.InContainer != nil && s.Project != "" && s.Phase != PhasePrepare && s.Phase != PhaseCheckout {
 		if argv, err = r.InContainer(ctx, s.Project, dir, append(append([]string{}, env...), HookEnv(s.Phase, r.Fresh)...), s.Hook.Run, log); err != nil {
 			r.say("%s: %v", s.Name, err)
 			return end(state.StepFailed, err.Error(), nil)

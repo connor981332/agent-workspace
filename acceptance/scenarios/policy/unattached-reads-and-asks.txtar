@@ -1,0 +1,31 @@
+# A session with no lane can diagnose: read-only Git and curl run, what aw cannot classify goes to the
+# human, and the owner-checkout rule stops at the edge of the workspace.
+# req: R58 R60
+# source: dogfood of 0.1.0-rc.2
+# milestone: M12
+
+workspace shop --init
+exec awtest-hook bash 'git -C web worktree list'
+! stdout .
+exec awtest-hook bash 'git -C web branch --list aw/x'
+! stdout .
+exec awtest-hook bash 'curl -sI https://example.com/graphql'
+! stdout .
+exec awtest-hook bash 'python3 -I -c 1'
+stdout '"permissionDecision":"ask"'
+exec awtest-hook bash 'curl -o x https://example.com'
+stdout '"permissionDecision":"ask"'
+! exec awtest-hook bash 'rm web/x'
+stderr 'not attached to a lane'
+
+# Outside the workspace is not the owner checkout.
+exec awtest-hook write $WORK/vault/note.md
+! stdout .
+exec awtest-hook bash 'echo hi > "'$WORK'/vault/note.md"'
+! stdout .
+! exec awtest-hook write notes.md
+stderr 'not attached to a lane'
+
+# A harness that cannot ask gets the refusal, which says what to do.
+! exec awtest-hook -harness codex bash 'python3 -I -c 1'
+stderr 'bin/aw attach'

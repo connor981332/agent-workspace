@@ -1,0 +1,26 @@
+# aw onboard does the setup itself, and needs nothing committed: the lane gets the workspace's files
+# as they are, and they do not count as the lane's work.
+# req: R85
+# source: dogfood of 0.1.0-rc.2
+# milestone: M12
+
+owner-may-change
+stubs claude
+workspace solo --single
+exec aw init
+exec aw onboard --harness claude
+stderr 'aw onboard: setting up'
+stderr 'creating its worktree'
+grep 'claude .*aw-workspace-design' $STUB_LOG
+exists .worktrees/01/bin/aw
+exists .worktrees/01/workspace.toml
+exists .worktrees/01/.claude/settings.json
+exec git status --porcelain
+stdout 'workspace.toml'
+exec git -C .worktrees/01 status --porcelain
+stdout 'workspace.toml'
+cd .worktrees/01
+exec aw whoami
+cd ../..
+exec aw discard onboard-workspace --yes
+! exists .worktrees/01

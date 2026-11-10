@@ -222,7 +222,7 @@ var ownerOnly = map[string]string{
 	"new": "starts a session", "resume": "reopens sessions", "open": "starts a session",
 	"park": "shelves a lane", "unpark": "restores a lane", "discard": "abandons a lane's work",
 	"pair": "grants a pair session", "move-to-lane": "moves the owner's work", "try": "changes the owner checkout",
-	"setup": "sets up the workspace", "rehearse": "rehearses onboarding", "delegate": "grants authority",
+	"setup": "sets up the workspace", "onboard": "starts an onboarding session", "rehearse": "rehearses onboarding", "delegate": "grants authority",
 	"upgrade": "changes the pinned version", "init": "creates a workspace",
 	"containers": "starts, recreates or stops shared containers",
 	"infra":      "takes down the shared infrastructure", "supervise": "installs a user service",

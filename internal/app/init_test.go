@@ -10,7 +10,7 @@ import (
 func TestInitRefusals(t *testing.T) {
 	dir := t.TempDir()
 	_, err := Init(InitOptions{Dir: dir, Version: "1.2.3", Mirror: "/nowhere"})
-	if err == nil || !strings.Contains(err.Error(), "not a Git repository") {
+	if err == nil || !strings.Contains(err.Error(), "has no Git repositories") {
 		t.Fatalf("non-repository: %v", err)
 	}
 	if err := os.Mkdir(filepath.Join(dir, ".git"), 0o755); err != nil {

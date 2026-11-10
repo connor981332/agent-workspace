@@ -57,6 +57,9 @@ func (m *Manager) LocateIn(n int, project string) (*Where, error) {
 	}
 	if project != "" {
 		env = append(env, "AW_PROJECT="+project)
+		for _, name := range sortedKeys(p.Env) {
+			env = append(env, name+"="+p.Env[name])
+		}
 	}
 	for _, group := range sortedKeys(m.Cfg.LaneEnv) {
 		for _, name := range sortedKeys(m.Cfg.LaneEnv[group]) {

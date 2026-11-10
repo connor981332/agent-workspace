@@ -20,9 +20,9 @@ stderr 'is inside the workspace'
 cd ..
 exec rm -rf notes
 
-# So is a directory that is not a Git repository: the state lives in its Git directory.
+# So is a directory with no repositories in it, and which is not one: there are no projects.
 exec mkdir $WORK/plain
 cd $WORK/plain
 ! exec aw init
-stderr 'is not a Git repository → run git init there first'
+stderr 'has no Git repositories'
 ! exists workspace.toml

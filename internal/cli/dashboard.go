@@ -283,11 +283,64 @@ func ago(ts string) string {
 	return fmt.Sprintf("%d days", int(d.Hours()/24))
 }
 
+func newLanesCmd() *cobra.Command {
+	var asJSON bool
+	cmd := &cobra.Command{
+		Use:   "lanes",
+		Short: "List the lanes: number, name, state, purpose and where each one is",
+		Long: `List the lanes. A lane is created by aw new or aw attach, and is named from the purpose you give
+(aw attach "fix checkout tax rounding" gives checkout-tax). Commands that take a lane accept its name
+or its number. aw recap shows each lane in full. It writes nothing.`,
+		Args: cobra.NoArgs,
+		RunE: run(func(cmd *cobra.Command, _ []string) error {
+			m, done, err := openForRead()
+			if err != nil {
+				return err
+			}
+			defer done()
+			var all []state.Lane
+			if m.Store != nil {
+				if all, err = state.Lanes(m.Store.DB()); err != nil {
+					return err
+				}
+			}
+			out := cmd.OutOrStdout()
+			type row struct {
+				Number  int    `json:"number"`
+				Dir     string `json:"dir"`
+				Name    string `json:"name"`
+				State   string `json:"state"`
+				Purpose string `json:"purpose"`
+				Root    string `json:"root"`
+			}
+			rows := []row{}
+			for _, l := range all {
+				if l.State != state.LanePool {
+					rows = append(rows, row{l.Number, lanes.Dir(l.Number, m.Cfg.Lanes.Max), l.Name, l.State, l.Purpose, m.Root(l.Number)})
+				}
+			}
+			if asJSON {
+				return writeJSON(out, map[string]any{"lanes": rows})
+			}
+			if len(rows) == 0 {
+				fmt.Fprintln(out, `No lanes. aw new "<purpose>" starts one with a harness, and aw attach "<purpose>" claims one for this session.`)
+				return nil
+			}
+			for _, r := range rows {
+				fmt.Fprintf(out, "%s %-24s %-12s %s\n   %s\n", r.Dir, ui.Clean(r.Name), r.State, quoted(r.Purpose), ui.Clean(r.Root))
+			}
+			return nil
+		}),
+	}
+	cmd.Flags().BoolVar(&asJSON, "json", false, "print the lanes as JSON")
+	return cmd
+}
+
 func newRecapCmd() *cobra.Command {
 	var asJSON, remote, all bool
 	cmd := &cobra.Command{
 		Use:   "recap [--remote]",
-		Short: "Full status, for after a reboot or a weekend",
+		Short: "Every lane in full: what needs you, what runs, each handoff (aw lanes is the short list)",
 		Long: `Show every lane in full: what needs you, what is running, what is parked and what can be cleaned
 up, with each lane's handoff and each repository's head and push state. In a lane it shows that
 lane only, unless --all. It reads local state only; --remote also asks the forge for each change's

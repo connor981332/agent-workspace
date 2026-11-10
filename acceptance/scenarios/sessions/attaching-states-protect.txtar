@@ -21,7 +21,7 @@ real=$(command -v git)
 cat > "$WORK/slow/git" <<EOS
 #!/bin/sh
 case "\$*" in
-worktree\ add*web/.worktrees/01*) touch "$WORK/slow/started"; sleep 1 ;;
+*worktree\ add*web/.worktrees/01*) touch "$WORK/slow/started"; sleep 1 ;;
 esac
 exec "$real" "\$@"
 EOS

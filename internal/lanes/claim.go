@@ -31,6 +31,8 @@ type Manager struct {
 	Store *state.Store
 	// Seats takes resources for a lane's teardown, and returns how to give them back.
 	Seats func(ctx context.Context, l state.Lane, needs []string) (func(), error)
+	// Progress is told what a claim is doing, for a person waiting at a terminal. It may be nil.
+	Progress func(string)
 
 	forges        map[string]*forge.Client // by host, for one sweep
 	forgeDeadline time.Time
@@ -79,6 +81,8 @@ type repoPlan struct {
 	// existing: --branch named a branch this repository already has locally.
 	existing bool
 	secrets  []string
+	// localFiles are the project's declared gitignored files that are not secrets.
+	localFiles []string
 	// lacksBranch: --branch named a branch this repository does not have.
 	lacksBranch bool
 }
@@ -174,7 +178,10 @@ func (m *Manager) Claim(ctx context.Context, req ClaimRequest) (*Claimed, error)
 	}
 
 	t.Mark("reserve")
+	found := make(chan map[string]string, 1)
+	go func() { found <- lifecycle.CheckoutHooks(ctx, m.WS.Owner, m.Cfg) }() // alongside the build, which is the wait
 	repos, buildErr := m.build(ctx, lane, plans, fromPool)
+	hooks := <-found
 	t.Mark("build")
 	if buildErr != nil {
 		if rbErr := m.rollback(ctx, lane, repos, fromPool, req.Who); rbErr != nil {
@@ -188,7 +195,7 @@ func (m *Manager) Claim(ctx context.Context, req ClaimRequest) (*Claimed, error)
 			return err
 		}
 		lane.State, lane.Updated = state.LaneWorking, state.Now()
-		if steps := lifecycle.Plan(m.Cfg, fromPool); len(steps) > 0 {
+		if steps := lifecycle.Plan(m.Cfg, fromPool, hooks); len(steps) > 0 {
 			lane.State = state.LaneSettingUp
 			if err := state.PlanSetup(tx, lane.Number, lane.Generation, fromPool, lifecycle.Names(steps)); err != nil {
 				return err
@@ -301,7 +308,8 @@ func maxLanesError(max int, lanes []state.Lane) error {
 }
 
 // plan works out every worktree a new lane needs and checks what can refuse: missing repositories,
-// a detached owner checkout, a launcher that is not committed, and lane guards.
+// a detached owner checkout, and lane guards. What the lane root needs and its commit lacks, such as
+// a launcher nobody has committed yet, is copied in when the lane is built.
 func (m *Manager) plan(ctx context.Context, req ClaimRequest) ([]repoPlan, error) {
 	var plans []repoPlan
 	single := false
@@ -310,12 +318,14 @@ func (m *Manager) plan(ctx context.Context, req ClaimRequest) ([]repoPlan, error
 			single = true
 		}
 	}
-	if !single {
-		p, err := m.planRepo(ctx, "", ".", req.Branch, nil)
-		if err != nil {
+	if !single && workspace.IsGitRepo(m.WS.Owner) {
+		switch p, err := m.planRepo(ctx, "", ".", req.Branch, nil); {
+		case errors.Is(err, errNoCommit): // the lane root is a plain directory
+		case err != nil:
 			return nil, err
+		default:
+			plans = append(plans, p)
 		}
-		plans = append(plans, p)
 	}
 	var missing []string
 	for _, name := range sortedKeys(m.Cfg.Projects) {
@@ -332,6 +342,7 @@ func (m *Manager) plan(ctx context.Context, req ClaimRequest) ([]repoPlan, error
 		if err != nil {
 			return nil, err
 		}
+		p.localFiles = pr.LocalFiles
 		if err := checkGuards(ctx, name, p, pr.LaneGuards); err != nil {
 			return nil, err
 		}
@@ -343,14 +354,6 @@ func (m *Manager) plan(ctx context.Context, req ClaimRequest) ([]repoPlan, error
 	}
 	if req.Branch != "" && !slices.ContainsFunc(plans, func(p repoPlan) bool { return !p.lacksBranch }) {
 		return nil, fmt.Errorf("no lane was created: no repository has a branch %q, locally or on origin → fetch it first (git fetch origin %s), or check the name", req.Branch, req.Branch)
-	}
-	// The lane root runs its own bin/aw, so the workspace repository's branch must contain it.
-	root := plans[0]
-	for _, f := range []string{"bin/aw", ".aw/version", ".aw/lock", "workspace.toml"} {
-		if ok, _ := run.In(root.owner).OK(ctx, "cat-file", "-e", root.baseSHA+":"+f); !ok {
-			return nil, fmt.Errorf("no lane was created: %s does not contain %s at %s, so a lane root would have no launcher → commit the files aw init wrote (git add workspace.toml .aw bin .gitignore && git commit), then attach again",
-				label(root), f, root.baseRef)
-		}
 	}
 	return plans, nil
 }
@@ -393,12 +396,19 @@ func (m *Manager) planRepo(ctx context.Context, project, rel, branch string, sec
 		}
 	}
 	if p.baseSHA, err = g.Line(ctx, "rev-parse", "--verify", start+"^{commit}"); err != nil {
-		return p, err
+		return p, fmt.Errorf("no lane was created: %s in %s has no commit on %s, and a lane's worktree starts from one → make a first commit there%w", label(p), owner, current, errNoCommit)
 	}
 	return p, nil
 }
 
 func ok(b bool, _ error) bool { return b }
+
+// errNoCommit marks a repository with no commit yet. It adds nothing to the message.
+var errNoCommit = noCommit{}
+
+type noCommit struct{}
+
+func (noCommit) Error() string { return "" }
 
 // checkGuards runs a project's lane guards against the commit the lane would start from, by
 // reading files with git show: no project code runs.
@@ -437,11 +447,16 @@ func (m *Manager) build(ctx context.Context, lane state.Lane, plans []repoPlan, 
 		if p.branch == "" {
 			p.branch = m.Cfg.Lanes.BranchPrefix + lane.Name
 			if ok(run.In(p.owner).OK(ctx, "rev-parse", "--verify", "--quiet", "refs/heads/"+p.branch)) {
-				return made, fmt.Errorf("no lane was created: %s already has a branch %s → finish or discard the lane that used it, or delete the branch", label(*p), p.branch)
+				return made, m.branchTaken(*p)
 			}
 		}
-		g := run.In(p.owner)
+		g := run.In(p.owner, noHooks...)
+		m.say("%s: creating its worktree", label(*p))
+		stopBeat := Beat(m.Progress, label(*p)+": still creating its worktree")
 		if _, err := os.Stat(p.path); err == nil && fromPool {
+			if p.rel == "." {
+				removeMaterialized(p.path) // a commit since may have them, and Git must not trip over the copies
+			}
 			// A warm lane: its worktree is clean at the base; start the new branch there.
 			args := []string{"switch", "--quiet", "--no-track", "-c", p.branch, p.baseSHA}
 			if p.existing {
@@ -449,13 +464,18 @@ func (m *Manager) build(ctx context.Context, lane state.Lane, plans []repoPlan, 
 			} else if p.track != "" {
 				args = []string{"switch", "--quiet", "--track", "-c", p.branch, p.track}
 			}
-			if _, err := run.In(p.path).Run(ctx, args...); err != nil {
-				return made, err
+			if _, err := run.In(p.path, noHooks...).Run(ctx, args...); err != nil {
+				stopBeat()
+				return made, m.gitFailure(lane, *p, err)
 			}
+			made = append(made, state.LaneRepo{Lane: lane.Number, Project: p.project, Path: p.path, Branch: p.branch, BaseRef: p.baseRef, BaseSHA: p.baseSHA})
 		} else {
 			if err := os.MkdirAll(filepath.Dir(p.path), 0o755); err != nil {
+				stopBeat()
 				return made, err
 			}
+			// Recorded first: a Git that fails partway can leave the branch and the worktree behind.
+			made = append(made, state.LaneRepo{Lane: lane.Number, Project: p.project, Path: p.path, Branch: p.branch, BaseRef: p.baseRef, BaseSHA: p.baseSHA})
 			args := []string{"worktree", "add", "--quiet"}
 			switch {
 			case p.existing:
@@ -468,13 +488,20 @@ func (m *Manager) build(ctx context.Context, lane state.Lane, plans []repoPlan, 
 				args = append(args, p.path, p.branch) // an existing local branch
 			}
 			if _, err := g.Run(ctx, args...); err != nil {
-				return made, err
+				stopBeat()
+				return made, m.gitFailure(lane, *p, err)
 			}
 		}
-		made = append(made, state.LaneRepo{Lane: lane.Number, Project: p.project, Path: p.path, Branch: p.branch, BaseRef: p.baseRef, BaseSHA: p.baseSHA})
+		stopBeat()
 		if err := linkSecrets(ctx, *p); err != nil {
 			return made, err
 		}
+		if err := copyLocalFiles(ctx, *p); err != nil {
+			return made, err
+		}
+	}
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		return made, err
 	}
 	// Links from the lane root to each project's worktree, and the owner pointer.
 	for _, p := range plans {
@@ -500,6 +527,9 @@ func (m *Manager) build(ctx context.Context, lane state.Lane, plans []repoPlan, 
 		return made, err
 	}
 	if err := os.WriteFile(filepath.Join(root, workspace.OwnerPointer), []byte(m.WS.Owner+"\n"), 0o644); err != nil {
+		return made, err
+	}
+	if err := m.materialize(ctx, root, plans); err != nil {
 		return made, err
 	}
 	if err := sandbox.Exclude(m.WS.Owner); err != nil {
@@ -598,31 +628,39 @@ func addExcludes(path string, entries []string) error {
 	return nil
 }
 
-// rollback undoes a failed build without forcing anything: new worktrees are clean, so a plain
-// remove works, and new branches still point at their start.
+// rollback undoes a failed build. Everything it removes was made moments ago by this claim, so a new
+// worktree is forced out whatever a failed step left in it, and a new branch still points at its
+// start. What never got as far as existing is skipped.
 func (m *Manager) rollback(ctx context.Context, lane state.Lane, made []state.LaneRepo, fromPool bool, who Identity) error {
 	var errs []string
 	if !fromPool {
 		for i := len(made) - 1; i >= 0; i-- {
 			r := made[i]
 			owner := filepath.Join(m.WS.Owner, m.relOf(r))
-			if _, err := run.In(owner).Run(ctx, "worktree", "remove", r.Path); err != nil {
+			g := run.In(owner, noHooks...)
+			if _, err := os.Lstat(filepath.Join(r.Path, ".git")); err == nil {
+				if _, err := g.Run(ctx, "worktree", "remove", "--force", r.Path); err != nil {
+					errs = append(errs, err.Error())
+					continue
+				}
+			} else if _, err := g.Run(ctx, "worktree", "prune"); err != nil {
 				errs = append(errs, err.Error())
 				continue
 			}
-			if strings.HasPrefix(r.Branch, m.Cfg.Lanes.BranchPrefix) {
-				if _, err := run.In(owner).Run(ctx, "branch", "-d", r.Branch); err != nil {
+			if strings.HasPrefix(r.Branch, m.Cfg.Lanes.BranchPrefix) && ok(g.OK(ctx, "rev-parse", "--verify", "--quiet", "refs/heads/"+r.Branch)) {
+				if _, err := g.Run(ctx, "branch", "-D", r.Branch); err != nil {
 					errs = append(errs, err.Error())
 				}
 			}
 		}
-		os.RemoveAll(filepath.Join(m.Root(lane.Number), ".aw")) // the owner pointer, if written
-		os.Remove(m.Root(lane.Number))
+		if len(errs) == 0 {
+			os.RemoveAll(m.Root(lane.Number)) // the links, the owner pointer and any copied files
+		}
 	}
 	if fromPool {
 		// A warm lane keeps its worktrees: put each back at its base, without the new branch.
 		for _, r := range made {
-			if _, err := run.In(r.Path).Run(ctx, "switch", "--quiet", "--detach", r.BaseSHA); err != nil {
+			if _, err := run.In(r.Path, noHooks...).Run(ctx, "switch", "--quiet", "--detach", r.BaseSHA); err != nil {
 				errs = append(errs, err.Error())
 				continue
 			}
@@ -655,6 +693,66 @@ func (m *Manager) rollback(ctx context.Context, lane state.Lane, made []state.La
 		}
 		return state.DeleteLane(tx, lane.Number)
 	})
+}
+
+// noHooks keeps a repository's own hooks out of creating and undoing a lane: a failing post-checkout
+// hook must not abort the worktree, and it runs afterwards as a setup step that can be retried.
+var noHooks = []string{"core.hooksPath=/dev/null"}
+
+// branchTaken says who holds a branch a new lane wanted, which is not always a lane.
+func (m *Manager) branchTaken(p repoPlan) error {
+	lanes, _ := state.Lanes(m.Store.DB())
+	for _, l := range lanes {
+		repos, _ := state.LaneRepos(m.Store.DB(), l.Number)
+		if slices.ContainsFunc(repos, func(r state.LaneRepo) bool { return r.Branch == p.branch && r.Project == p.project }) {
+			return fmt.Errorf("no lane was created: %s already has a branch %s, used by lane %s → finish or discard lane %s, or use another purpose", label(p), p.branch, l.Name, l.Name)
+		}
+	}
+	return fmt.Errorf("no lane was created: %s has a branch %s that no lane uses, left by something that did not finish → run aw discard --orphans, which archives it, then try again", label(p), p.branch)
+}
+
+// gitFailure keeps all of what Git said in a log, and gives back a short error with its end.
+func (m *Manager) gitFailure(lane state.Lane, p repoPlan, err error) error {
+	var ge *run.Error
+	if !errors.As(err, &ge) || m.Store == nil {
+		return err
+	}
+	log := filepath.Join(filepath.Dir(m.Store.Path()), "logs", "lane-create", fmt.Sprintf("%s-%s.log", Dir(lane.Number, m.Cfg.Lanes.Max), strings.ReplaceAll(label(p), " ", "-")))
+	if os.MkdirAll(filepath.Dir(log), 0o700) != nil || os.WriteFile(log, []byte(ge.Stderr), 0o600) != nil {
+		return err
+	}
+	return fmt.Errorf("creating the worktree of %s failed, so the lane was rolled back: %w (full output in %s)", label(p), err, log)
+}
+
+func (m *Manager) say(format string, args ...any) {
+	if m.Progress != nil {
+		m.Progress(fmt.Sprintf(format, args...))
+	}
+}
+
+// beatEvery is how often a slow step says it is still going.
+var beatEvery = 10 * time.Second
+
+// Beat repeats what a slow step is doing, with how long it has taken, until stop is called.
+func Beat(progress func(string), what string) (stop func()) {
+	if progress == nil {
+		return func() {}
+	}
+	done := make(chan struct{})
+	began := time.Now()
+	go func() {
+		t := time.NewTicker(beatEvery)
+		defer t.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-t.C:
+				progress(fmt.Sprintf("%s (%s)", what, time.Since(began).Round(time.Second)))
+			}
+		}
+	}()
+	return func() { close(done) }
 }
 
 // relOf is a lane repository's directory in the owner checkout.

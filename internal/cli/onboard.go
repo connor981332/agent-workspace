@@ -3,6 +3,7 @@ package cli
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -195,8 +196,15 @@ func installOwner(cmd *cobra.Command, ws *workspace.Workspace, c *config.Config,
 			continue
 		}
 		fmt.Fprintf(out, "%s: installing dependencies\n", name)
-		if _, err := lifecycle.Exec(ctx, lifecycle.Command{Dir: where.Dir, Env: where.Env, Run: p.Install, Argv: argv, Log: log, Phase: lifecycle.PhaseInstall}); err != nil {
-			fail(name, fmt.Errorf("%v (log %s)", err, log))
+		stop := heartbeat(out, name+": still installing dependencies")
+		_, err = lifecycle.Exec(ctx, lifecycle.Command{Dir: where.Dir, Env: where.Env, Run: p.Install, Argv: argv, Log: log, Phase: lifecycle.PhaseInstall})
+		stop()
+		if err != nil {
+			why := fmt.Sprintf("%v (full log: %s)", err, log)
+			if t := lifecycle.Tail(log); t != "" {
+				why += "\nThe end of its log:\n" + t
+			}
+			fail(name, errors.New(why))
 			continue
 		}
 		if err := os.WriteFile(stampPath, []byte(stamp), 0o600); err != nil {
@@ -208,6 +216,10 @@ func installOwner(cmd *cobra.Command, ws *workspace.Workspace, c *config.Config,
 
 // confirm asks a yes-or-no question on a terminal. Anywhere else the answer is no: nothing starts
 // unexpectedly.
+func heartbeat(out io.Writer, what string) (stop func()) {
+	return lanes.Beat(func(line string) { fmt.Fprintln(out, line) }, what)
+}
+
 func confirm(in io.Reader, out io.Writer, question string) bool {
 	f, ok := in.(*os.File)
 	if !ok || !term.IsTerminal(int(f.Fd())) {

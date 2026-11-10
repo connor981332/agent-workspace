@@ -68,7 +68,7 @@ authority the CLI lacks.
 ├── .aw/lock                              sha256 per platform for that version (committed)
 ├── .aw/managed                           hashes of managed files, for edit detection (committed)
 ├── bin/aw                                launcher (committed, managed)
-├── AGENTS.md  CLAUDE.md  ...             instructions with generated blocks (committed)
+├── AGENTS.md  ...                        instructions with generated blocks (committed)
 ├── modules/…                             installed module files (committed, managed)
 ├── web/                                  project repo (gitignored in the workspace repo)
 │   └── .worktrees/03/                    lane 03's worktree of web

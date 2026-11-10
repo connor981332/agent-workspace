@@ -17,7 +17,8 @@ func newDoctorCmd() *cobra.Command {
 		Use:   "doctor",
 		Short: "Check the workspace and this machine, and name the fix for every problem",
 		Long: `Check the workspace and this machine: the configuration, the pin and its checksums, the
-launcher, the state, the .gitignore entries, Git and the tools bin/aw needs.
+launcher, the state, the .gitignore entries, Git and the tools bin/aw needs. It also dry-runs lane
+creation in each project, and lists branches and worktrees that a failed lane left behind.
 
 It only reads, so it is safe before setup and from any lane. It exits 1 if any check fails.`,
 		Args: cobra.NoArgs,

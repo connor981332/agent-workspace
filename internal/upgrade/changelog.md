@@ -9,4 +9,10 @@ Newest first. A line starting with **Breaking:** is called out by `aw upgrade`.
 
 ## 0.1.0
 
+- `aw onboard` is the one command to start with: it includes `aw setup`, needs nothing committed, shows progress, and hands any failure to the agent.
+- A workspace can be plain files, with only its projects in Git.
+- A repository's post-checkout hook no longer stops a lane: it runs as a retryable setup step. A failed lane is rolled back, and `aw doctor` and `aw discard --orphans` deal with what older failures left.
+- `local_files` and `[projects.<name>.env]` declare a project's gitignored files and settings. `aw inspect` reports checkout hooks, missing files and missing tools.
+- Sessions with no lane can run read-only Git and curl, are asked about what aw cannot classify, and may write outside the workspace. A standalone shell assignment no longer crashes the guard.
+- `aw lanes` lists the lanes. `aw delegate` needs no arguments. `aw setup` no longer creates `CLAUDE.md`.
 - First release a team can use daily: lanes, merge proof, guards for Claude Code, Codex, Grok and OpenCode, the resource queue, lifecycle hooks, providers, devcontainers, signed releases, and `aw setup` from a fresh clone.

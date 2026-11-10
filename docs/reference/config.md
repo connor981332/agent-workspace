@@ -92,6 +92,9 @@ The project repositories. The key is the project's name.
 | `publication` | array of strings | — | Actions pre-authorized in this project, as in [publication] allow. |
 | `generated_contracts` | array of strings | — | Files generated from a contract, from the project root (** matches directories). Agents may not edit them (R70). |
 | `secrets` | array of strings | — | Files that are not in Git, such as .env, linked read-only into every lane from the owner checkout, relative to the project. |
+| `local_files` | array of strings | — | Gitignored files that are not secrets, such as a local properties file or a large generated schema, copied into every new lane from the owner checkout, relative to the project. Only the files named here are copied, as a clone where the file system can. Use secrets for anything an agent should not read. |
+| `post_checkout` | one of `"run"`, `"skip"` | `"run"` | run: the repository's own post-checkout hook runs as a setup step of each lane, which can be retried. skip: it does not run in lanes. |
+| `env` | table of string | — | Variables for this project's hooks and aw run commands, such as a switch one of its hooks reads. |
 | `generated` | array of strings | — | Ignored paths (Git pathspecs) that builds create and that do not block recycling a lane, such as node_modules or tmp. Other ignored files may be someone's work, so they keep the lane. |
 
 ### `[projects."<name>".lane_guards.<name>]`

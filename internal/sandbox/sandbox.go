@@ -166,6 +166,9 @@ func Missing(root string, writable []string) []string {
 // Exclude keeps the files out of Git in every worktree of the repository at dir, through the
 // exclude file they share, which no commit carries.
 func Exclude(dir string) error {
+	if _, err := os.Lstat(filepath.Join(dir, ".git")); err != nil {
+		return nil // a workspace kept as plain files has no Git to keep them out of
+	}
 	path := filepath.Join(dir, ".git", "info", "exclude")
 	old, err := os.ReadFile(path)
 	if err != nil && !os.IsNotExist(err) {

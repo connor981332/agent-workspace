@@ -1,0 +1,45 @@
+# A repository's post-checkout hook does not stop a lane being created. It runs afterwards as a
+# setup step: a failure leaves a lane, shows the hook's name and the end of its output, keeps the rest
+# in a log, and can be retried.
+# req: R5 R26
+# source: dogfood of 0.1.0-rc.2
+# milestone: M12
+
+workspace shop --init
+owner-may-change
+exec sh $WORK/hook.sh
+exec aw inspect
+stdout 'post-checkout hook'
+exec aw attach 'hooked work' --json
+json stdout .name hooked-work
+exists web/.worktrees/01/README.md
+exec sh $WORK/wait.sh
+cd .worktrees/01
+! exec aw run web true
+stderr 'web.post-checkout failed'
+stderr 'the last line of the hook'
+! stderr 'line 1 of the noise'
+cd ../..
+exec grep -c 'line 1 of the noise' $WORK/noise-copy
+cd .worktrees/01
+exec touch $WORK/ok
+exec aw setup hooked-work
+exec aw run web true
+exec sh -c 'cat "$WORK/args"'
+stdout '^0{40} [0-9a-f]{40} 1$'
+
+-- hook.sh --
+hook=web/.git/hooks/post-checkout
+cat > "$hook" <<EOS
+#!/bin/sh
+if [ -e "$WORK/ok" ]; then echo "\$*" > "$WORK/args"; exit 0; fi
+i=0; while [ \$i -lt 200 ]; do i=\$((i + 1)); echo "line \$i of the noise"; done | tee "$WORK/noise-copy"
+echo 'the last line of the hook'
+exit 3
+EOS
+chmod +x "$hook"
+-- wait.sh --
+i=0
+until aw lanes --json | grep -Eq '"state": *"incomplete"'; do
+  i=$((i + 1)); [ $i -lt 200 ] || exit 1; sleep 0.05
+done
