@@ -529,3 +529,31 @@ func TestLaneNewBranchRefusedBeforeGitRuns(t *testing.T) {
 	s := f.scope(Pair)
 	run(t, s, f.owner, []tcase{{"git switch -c other", Allow, ""}})
 }
+
+// A message is prose, so a slash in it is not a path, while a path argument is still checked.
+func TestMessagesAreNotPaths(t *testing.T) {
+	f := newFixture(t)
+	run(t, f.scope(Lane), f.lane, []tcase{
+		{`git commit -m "Record 2WD/4WD/AWD ../../x"`, Allow, ""},
+		{`git commit --message="fix ../../x"`, Allow, ""},
+		{`git commit -m "uses $HOME/x"`, Allow, ""},
+		{`glab mr note --message "see ../../x"`, Deny, "publication"}, // past the path check, to the policy
+		{`git commit -F ../../msg`, Deny, "boundary"},
+		{`git -C ../.. commit -m ok`, Deny, "boundary"},
+		{`cat -m ../../x`, Deny, "boundary"},
+	})
+}
+
+// Someone who has pre-authorized merging should be told why a merge still asks, and how to avoid it.
+func TestMergeByNumberExplainsWhyItAsks(t *testing.T) {
+	f := newFixture(t)
+	s := f.scope(Lane)
+	s.AskSupported, s.Publication = true, []string{"merge"}
+	d := Decide(s, Call{Tool: Shell, Cwd: f.lane, Command: "glab mr merge 132 --yes"})
+	if d.Verdict != Ask || !strings.Contains(d.Message, "with no number") || strings.Contains(d.Message, "[publication]") {
+		t.Errorf("got %s: %s", d.Verdict, d.Message)
+	}
+	if d := Decide(s, Call{Tool: Shell, Cwd: f.lane, Command: "glab mr merge --auto-merge --yes"}); d.Verdict != Allow {
+		t.Errorf("own merge request: got %s: %s", d.Verdict, d.Message)
+	}
+}
