@@ -543,3 +543,17 @@ func TestMessagesAreNotPaths(t *testing.T) {
 		{`cat -m ../../x`, Deny, "boundary"},
 	})
 }
+
+// Someone who has pre-authorized merging should be told why a merge still asks, and how to avoid it.
+func TestMergeByNumberExplainsWhyItAsks(t *testing.T) {
+	f := newFixture(t)
+	s := f.scope(Lane)
+	s.AskSupported, s.Publication = true, []string{"merge"}
+	d := Decide(s, Call{Tool: Shell, Cwd: f.lane, Command: "glab mr merge 132 --yes"})
+	if d.Verdict != Ask || !strings.Contains(d.Message, "with no number") || strings.Contains(d.Message, "[publication]") {
+		t.Errorf("got %s: %s", d.Verdict, d.Message)
+	}
+	if d := Decide(s, Call{Tool: Shell, Cwd: f.lane, Command: "glab mr merge --auto-merge --yes"}); d.Verdict != Allow {
+		t.Errorf("own merge request: got %s: %s", d.Verdict, d.Message)
+	}
+}

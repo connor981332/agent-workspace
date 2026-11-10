@@ -1195,5 +1195,9 @@ func publicationRule(s Scope, c shell.Command) Decision {
 	if what == "" {
 		return allow()
 	}
+	if action := publishAction(name, sub, sub2, c, args); action != "" && actsOnAnMR(args) && s.Role == Lane &&
+		(slices.Contains(s.Publication, action) || slices.Contains(s.RoleAllow, action)) && !s.ownMergeRequest(args) {
+		return ask("publication", "%s, and only this lane's own merge request is pre-approved, which aw cannot tell from a number or another repository → approve it, or run it from the worktree with no number, so that it means this lane's branch", what)
+	}
 	return ask("publication", "%s, which needs the human's approval → approve it, or stop being asked by adding it to [publication] allow in workspace.toml or your own aw settings (push, open-merge-request, merge)", what)
 }

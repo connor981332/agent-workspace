@@ -45,7 +45,7 @@ exec awtest-hook bash 'gh pr comment --body done'
 # Anyone else's merge request is not.
 exec awtest-hook bash 'glab mr merge 118 --yes'
 stdout '"permissionDecision":"ask"'
-stdout 'publication'
+stdout 'own merge request'
 exec awtest-hook bash 'gh --repo a/b pr merge'
 stdout '"permissionDecision":"ask"'
 exec awtest-hook bash 'git push origin main'
