@@ -63,7 +63,10 @@ func newInspectCmd() *cobra.Command {
 			}
 			inspect.Preflight(cmd.Context(), ws.Owner, c, projects)
 			if asJSON {
-				return writeJSON(cmd.OutOrStdout(), map[string]any{"projects": projects})
+				return writeJSON(cmd.OutOrStdout(), map[string]any{"projects": projects, "other_hooks": app.OtherHooks(ws.Owner)})
+			}
+			for _, h := range app.OtherHooks(ws.Owner) {
+				fmt.Fprintf(cmd.OutOrStdout(), "! a hook that is not aw's, which also runs in lanes: %s\n", ui.Clean(h))
 			}
 			for _, p := range projects {
 				fmt.Fprintf(cmd.OutOrStdout(), "%s (%s): %s; %d environment variables, %d findings\n", p.Name, p.Directory, strings.Join(p.Stacks, ", "), len(p.EnvVars), len(p.Findings))
@@ -110,10 +113,10 @@ func doctorProjects(cmd *cobra.Command, asJSON bool) error {
 }
 
 func newOnboardCmd() *cobra.Command {
-	var review bool
+	var review, awHooksOnly bool
 	var harness string
 	cmd := &cobra.Command{
-		Use:   "onboard [--review] [--harness h]",
+		Use:   "onboard [--review] [--harness h] [--without-other-hooks]",
 		Short: "Set this workspace up, and have an agent design its configuration for you to review",
 		Long: `The one command to start with. It runs everything aw setup does, reports what aw inspect finds, and
 then starts a harness with the workspace-design skill. If setup or creating the lane fails, the agent
@@ -167,12 +170,24 @@ for what is new or has drifted.`,
 			if err := os.Chdir(ws.Owner); err != nil {
 				return err
 			}
+			if others := app.OtherHooks(ws.Owner); len(others) > 0 {
+				fmt.Fprintf(errOut, "aw onboard: this workspace has hooks that are not aw's, and they also run in lanes. Another system's guard can refuse everything in a lane:\n  %s\n", strings.Join(others, "\n  "))
+				if !awHooksOnly {
+					awHooksOnly = confirm(cmd.InOrStdin(), errOut, "Turn them off in the onboarding lane? Your own checkout keeps them.")
+				}
+				list := strings.Join(others, "\n")
+				if awHooksOnly {
+					prompt += "\n\nThese hooks are not aw's, and the human turned them off in this lane only. Decide whether the workspace should keep each one, and change the harness files on your branch to match:\n" + list
+				} else {
+					prompt += "\n\nThese hooks are not aw's, and they run in this lane too. If one refuses your tool calls, tell the human to rerun aw onboard and turn them off for the lane:\n" + list
+				}
+			}
 			m := &lanes.Manager{WS: ws, Cfg: c}
 			var failed error
 			if !m.CanReview(cmd.Context()) {
 				prompt += "\n\nThis workspace is not in a Git repository with a commit, so there is no lane branch to review: you are a pair session in the owner checkout. Leave your changes there, and report them."
 			} else {
-				failed = startLaneSession(cmd, purpose, harness, "", "", false, launch.PromptArgs(harness, prompt))
+				failed = startLaneSession(cmd, purpose, harness, "", "", false, awHooksOnly, launch.PromptArgs(harness, prompt))
 				if failed == nil {
 					return nil
 				}
@@ -192,6 +207,7 @@ for what is new or has drifted.`,
 	}
 	cmd.Flags().BoolVar(&review, "review", false, "propose changes only for what is new or has drifted")
 	cmd.Flags().StringVar(&harness, "harness", "", "the harness to launch")
+	cmd.Flags().BoolVar(&awHooksOnly, "without-other-hooks", false, "turn off hooks that are not aw's in the onboarding lane, without asking")
 	return cmd
 }
 

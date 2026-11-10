@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -42,6 +44,85 @@ func isAWHook(entry any) bool {
 		}
 	}
 	return false
+}
+
+// IsHarnessConfig reports whether a path in the workspace is a file aw merges hooks into.
+func IsHarnessConfig(rel string) bool {
+	for _, c := range harnessConfigs {
+		if c.path == rel {
+			return true
+		}
+	}
+	return false
+}
+
+// OtherHooks lists the hooks in the workspace's harness files that are not aw's, as "<event>: <end
+// of the command>". They run alongside aw's, in every lane, and another system's guard can refuse
+// everything in a lane it does not recognize.
+func OtherHooks(root string) []string {
+	const shown = 60
+	seen := map[string]bool{}
+	var out []string
+	for _, c := range harnessConfigs {
+		data, err := os.ReadFile(filepath.Join(root, c.path))
+		var settings map[string]any
+		if err != nil || json.Unmarshal(data, &settings) != nil {
+			continue
+		}
+		events, _ := settings["hooks"].(map[string]any)
+		for _, event := range slices.Sorted(maps.Keys(events)) {
+			groups, _ := events[event].([]any)
+			for _, g := range groups {
+				if isAWHook(g) {
+					continue
+				}
+				m, _ := g.(map[string]any)
+				hooks, _ := m["hooks"].([]any)
+				for _, h := range hooks {
+					hm, _ := h.(map[string]any)
+					cmd, _ := hm["command"].(string)
+					if len(cmd) > shown {
+						cmd = "…" + cmd[len(cmd)-shown:]
+					}
+					if line := event + ": " + cmd; !seen[line] {
+						seen[line] = true
+						out = append(out, line)
+					}
+				}
+			}
+		}
+	}
+	return out
+}
+
+// DropOtherHooks rewrites one harness file with only aw's hooks in it.
+func DropOtherHooks(path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	var settings map[string]any
+	if err := json.Unmarshal(data, &settings); err != nil {
+		return err
+	}
+	events, _ := settings["hooks"].(map[string]any)
+	for event, v := range events {
+		groups, _ := v.([]any)
+		kept := slices.DeleteFunc(slices.Clone(groups), func(g any) bool { return !isAWHook(g) })
+		if len(kept) == 0 {
+			delete(events, event)
+		} else {
+			events[event] = kept
+		}
+	}
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(settings); err != nil {
+		return err
+	}
+	return os.WriteFile(path, buf.Bytes(), 0o644)
 }
 
 // OpenCodePluginPath is where OpenCode loads aw's plugin from, in the workspace.

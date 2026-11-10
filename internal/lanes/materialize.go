@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/connor981332/agent-workspace/internal/app"
 	"github.com/connor981332/agent-workspace/internal/gitx/run"
 	"github.com/connor981332/agent-workspace/internal/sandbox"
 	"github.com/connor981332/agent-workspace/internal/workspace"
@@ -65,6 +66,11 @@ func (m *Manager) materialize(ctx context.Context, root string, plans []repoPlan
 		copied, err := copyOne(src, dst)
 		if err != nil {
 			return fmt.Errorf("copying %s into the lane: %w", rel, err)
+		}
+		if copied && m.AWHooksOnly && app.IsHarnessConfig(rel) {
+			if err := app.DropOtherHooks(dst); err != nil {
+				return fmt.Errorf("turning off other hooks in %s: %w", rel, err)
+			}
 		}
 		if copied {
 			fmt.Fprintf(&list, "%s  %s\n", workspace.HashFile(dst), rel)
