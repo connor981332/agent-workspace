@@ -11,6 +11,9 @@ Newest first. A line starting with **Breaking:** is called out by `aw upgrade`.
 
 - `aw onboard` lets its lane's agent run `bin/aw rehearse` without a Claude Code permission prompt, through one allow rule in that lane's own gitignored settings.
 - The onboarding skill runs the rehearsal exactly as that rule expects.
+- `accepted_findings` marks readiness findings a person has reviewed, with the reason, so they no longer fail a rehearsal.
+- A rehearsal says exactly which files it wrote, and warns if your real checkout changed meanwhile.
+- The Postgres provider waits out a new container's restart. `--help` works on the human's commands from an agent session.
 
 ## 0.1.1
 

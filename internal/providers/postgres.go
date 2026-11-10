@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/connor981332/agent-workspace/internal/config"
 )
@@ -59,7 +60,31 @@ func checkLength(name string) error {
 
 // psql runs one statement against the maintenance database. Connection settings go through the
 // environment, so that a password never appears in a process list.
+// A new Postgres container starts a temporary server, shuts it down, and starts the real one, so a
+// volume that is still empty refuses connections for a few seconds even after the container is up.
+const postgresStartWait = 30 * time.Second
+
+func postgresStarting(message string) bool {
+	return strings.Contains(message, "the database system is") ||
+		(strings.Contains(message, "/.s.PGSQL.") && strings.Contains(message, "No such file or directory"))
+}
+
 func (p *postgres) psql(ctx context.Context, statement string) (string, error) {
+	deadline := time.Now().Add(postgresStartWait)
+	for {
+		out, err := p.psqlOnce(ctx, statement)
+		if err == nil || !postgresStarting(err.Error()) || time.Now().After(deadline) {
+			return out, err
+		}
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-time.After(time.Second):
+		}
+	}
+}
+
+func (p *postgres) psqlOnce(ctx context.Context, statement string) (string, error) {
 	user := "postgres"
 	if p.u.User != nil && p.u.User.Username() != "" {
 		user = p.u.User.Username()

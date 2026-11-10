@@ -215,6 +215,23 @@ func ignoredLocal(ctx context.Context, dir string, declared, generated []string)
 	return out
 }
 
+// DropAccepted removes the findings in files a person has reviewed, and says how many it removed.
+func (p *Project) DropAccepted(accepted map[string]string) int {
+	before := len(p.Findings)
+	p.Findings = slices.DeleteFunc(p.Findings, func(f Finding) bool {
+		for pattern := range accepted {
+			if dir, ok := strings.CutSuffix(pattern, "/**"); ok && strings.HasPrefix(f.File, dir+"/") {
+				return true
+			}
+			if ok, _ := path.Match(pattern, f.File); ok {
+				return true
+			}
+		}
+		return false
+	})
+	return before - len(p.Findings)
+}
+
 // PreflightLines says what Preflight found, one thing per line.
 func (p *Project) PreflightLines() []string {
 	var out []string

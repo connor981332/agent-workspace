@@ -242,6 +242,9 @@ func ownerOnlyRule(s Scope, c shell.Command) Decision {
 		return allow()
 	}
 	sub, rest := subcommand(c.Args[1:])
+	if hasArg(rest, "--help", "-h") {
+		return allow() // help changes nothing, and the human's commands document themselves too
+	}
 	where := ""
 	if c.Nested {
 		where = " (inside a substitution)"
