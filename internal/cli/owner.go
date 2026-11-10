@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -145,8 +146,12 @@ func ownerRepos(ws *workspace.Workspace, c *config.Config) []string {
 	return out
 }
 
+// notLanes is a pathspec for a repository's own files: the lanes aw keeps in it are not its work,
+// and a project need not ignore them.
+var notLanes = []string{".", ":(exclude).worktrees"}
+
 func gitDirty(ctx context.Context, dir string) (bool, error) {
-	out, err := gitrun.In(dir).Run(ctx, "status", "--porcelain")
+	out, err := gitrun.In(dir).Run(ctx, append([]string{"status", "--porcelain", "--"}, notLanes...)...)
 	return strings.TrimSpace(out) != "", err
 }
 
@@ -193,7 +198,7 @@ session there.`,
 				}
 				for _, step := range [][]string{
 					{"switch", "-c", branch},
-					{"add", "-A"},
+					append([]string{"add", "-A", "--"}, notLanes...),
 					{"commit", "-m", args[0]},
 					{"switch", original},
 				} {
@@ -229,7 +234,99 @@ session there.`,
 	}
 }
 
-const tryKey = "try"
+const (
+	tryKey      = "try"
+	tryAsideKey = "try-aside"
+)
+
+// asideFile is one of aw's own uncommitted files, kept safe while the owner checkout tries a lane.
+type asideFile struct {
+	Dir     string `json:"dir"`
+	Path    string `json:"path"`
+	Tracked bool   `json:"tracked"`
+}
+
+// splitForTry sorts what is uncommitted in a repository into aw's own workspace files, which aw try
+// can keep safe, and everything else, which is someone's work. target is the commit being tried: an
+// untracked file it does not have stays where it is, so aw itself is still there to run --back.
+func splitForTry(ctx context.Context, dir, target string, isRoot bool) (aside []asideFile, work []string, err error) {
+	g := gitrun.In(dir)
+	out, err := g.Run(ctx, append([]string{"status", "--porcelain=v1", "-uall", "-z", "--"}, notLanes...)...)
+	if err != nil {
+		return nil, nil, err
+	}
+	tree, err := g.Run(ctx, "ls-tree", "-r", "-z", "--name-only", target)
+	if err != nil {
+		return nil, nil, err
+	}
+	inTarget := strings.Split(tree, "\x00")
+	entries := strings.Split(out, "\x00")
+	for i := 0; i < len(entries); i++ {
+		e := entries[i]
+		if len(e) < 4 {
+			continue
+		}
+		code, path := e[:2], e[3:]
+		if strings.ContainsAny(code, "RC") {
+			i++ // a rename has its old name in the next field
+		}
+		switch {
+		case isRoot && lanes.IsWorkspaceFile(path) && code == "??":
+			if slices.Contains(inTarget, path) {
+				aside = append(aside, asideFile{Dir: dir, Path: path})
+			}
+		case isRoot && lanes.IsWorkspaceFile(path) && (code == " M" || code == "M " || code == "MM"):
+			aside = append(aside, asideFile{Dir: dir, Path: path, Tracked: true})
+		default:
+			work = append(work, path)
+		}
+	}
+	return aside, work, nil
+}
+
+func (a asideFile) stored(store string) string {
+	return filepath.Join(store, "try-aside", url.PathEscape(a.Dir), filepath.FromSlash(a.Path))
+}
+
+// setAside moves a file to the state directory, and leaves a tracked one as its commit has it.
+func setAside(ctx context.Context, a asideFile, store string) error {
+	to := a.stored(store)
+	if err := os.MkdirAll(filepath.Dir(to), 0o700); err != nil {
+		return err
+	}
+	if err := os.Rename(filepath.Join(a.Dir, filepath.FromSlash(a.Path)), to); err != nil {
+		return err
+	}
+	if a.Tracked {
+		_, err := gitrun.In(a.Dir).Run(ctx, "restore", "--source=HEAD", "--staged", "--worktree", "--", a.Path)
+		return err
+	}
+	return nil
+}
+
+// restoreAside puts the files back. One already restored is skipped, so it can be run again.
+func restoreAside(saved, store string) error {
+	var files []asideFile
+	if saved == "" {
+		return nil
+	}
+	if err := json.Unmarshal([]byte(saved), &files); err != nil {
+		return err
+	}
+	for _, a := range files {
+		from, to := a.stored(store), filepath.Join(a.Dir, filepath.FromSlash(a.Path))
+		if _, err := os.Lstat(from); err != nil {
+			continue
+		}
+		if err := os.MkdirAll(filepath.Dir(to), 0o755); err != nil {
+			return err
+		}
+		if err := os.Rename(from, to); err != nil {
+			return err
+		}
+	}
+	return os.RemoveAll(filepath.Join(store, "try-aside"))
+}
 
 func newTryCmd() *cobra.Command {
 	var back bool
@@ -237,8 +334,9 @@ func newTryCmd() *cobra.Command {
 		Use:   "try <lane> | --back",
 		Short: "Check out a lane's exact heads in the owner checkout, to run them yourself",
 		Long: `Check out a lane's exact heads, detached, in the owner checkout, so that you can run the work in
-your own environment. It refuses when the owner checkout has uncommitted changes. aw try --back
-returns each repository to the branch it was on.`,
+your own environment. aw's own uncommitted setup files are kept safe meanwhile. It refuses when the
+owner checkout has any other uncommitted changes. aw try --back returns each repository to the branch
+it was on, and puts those files back.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: run(func(cmd *cobra.Command, args []string) error {
 			w, err := openForWrite()
@@ -264,6 +362,13 @@ returns each repository to the branch it was on.`,
 						return fmt.Errorf("returning %s to %s: %w → commit or stash what changed there, then run this again", ui.Clean(dir), branch, err)
 					}
 				}
+				asideSaved, _ := w.store.Meta(tryAsideKey)
+				if err := restoreAside(asideSaved, filepath.Dir(w.store.Path())); err != nil {
+					return fmt.Errorf("putting aw's setup files back: %w → run aw try --back again", err)
+				}
+				if err := w.store.SetMeta(ctx, tryAsideKey, ""); err != nil {
+					return err
+				}
 				if err := w.store.SetMeta(ctx, tryKey, ""); err != nil {
 					return err
 				}
@@ -288,6 +393,7 @@ returns each repository to the branch it was on.`,
 				return err
 			}
 			heads, places := map[string]string{}, map[string]string{}
+			var aside []asideFile
 			for _, r := range repos {
 				dir := w.ws.Owner
 				if r.Project != "" {
@@ -297,15 +403,19 @@ returns each repository to the branch it was on.`,
 					}
 					dir = filepath.Join(w.ws.Owner, p.Directory)
 				}
-				if dirty, err := gitDirty(ctx, dir); err != nil {
-					return err
-				} else if dirty {
-					return fmt.Errorf("%s has uncommitted changes, so aw try would disturb them → commit or stash them first", ui.Clean(dir))
-				}
 				head, err := gitrun.In(r.Path).Run(ctx, "rev-parse", "HEAD")
 				if err != nil {
 					return err
 				}
+				mine, work, err := splitForTry(ctx, dir, strings.TrimSpace(head), dir == w.ws.Owner)
+				if err != nil {
+					return err
+				}
+				if len(work) > 0 {
+					shown := work[:min(len(work), 5)]
+					return fmt.Errorf("%s has uncommitted work (%s), so aw try would disturb it; nothing was changed → commit it, or move it out of the way, then try again", ui.Clean(dir), ui.Clean(strings.Join(shown, ", ")))
+				}
+				aside = append(aside, mine...)
 				branch, err := gitrun.In(dir).Run(ctx, "rev-parse", "--abbrev-ref", "HEAD")
 				if err != nil {
 					return err
@@ -316,13 +426,29 @@ returns each repository to the branch it was on.`,
 			if err != nil {
 				return err
 			}
+			asideData, err := json.Marshal(aside)
+			if err != nil {
+				return err
+			}
+			// Recorded first, so that aw try --back can undo a try that stops partway.
+			if err := w.store.SetMeta(ctx, tryAsideKey, string(asideData)); err != nil {
+				return err
+			}
 			if err := w.store.SetMeta(ctx, tryKey, string(data)); err != nil {
 				return err
+			}
+			for _, a := range aside {
+				if err := setAside(ctx, a, filepath.Dir(w.store.Path())); err != nil {
+					return fmt.Errorf("keeping %s safe: %w → run aw try --back", ui.Clean(a.Path), err)
+				}
 			}
 			for dir, head := range heads {
 				if _, err := gitrun.In(dir).Run(ctx, "switch", "--detach", head); err != nil {
 					return fmt.Errorf("checking out %s in %s: %w → run aw try --back", head, ui.Clean(dir), err)
 				}
+			}
+			if len(aside) > 0 {
+				fmt.Fprintf(out, "Kept %d of aw's uncommitted setup files safe. aw try --back puts them back.\n", len(aside))
 			}
 			fmt.Fprintf(out, "The owner checkout is on lane %s's exact heads. aw try --back returns it.\n", ui.Clean(l.Name))
 			return nil

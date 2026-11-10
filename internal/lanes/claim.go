@@ -505,6 +505,15 @@ func (m *Manager) build(ctx context.Context, lane state.Lane, plans []repoPlan, 
 		if err := copyLocalFiles(ctx, *p); err != nil {
 			return made, err
 		}
+		if p.rel != "." { // a project need not ignore the lanes aw keeps inside it
+			common, err := workspace.GitCommonDir(p.owner)
+			if err != nil {
+				return made, err
+			}
+			if err := addExcludes(filepath.Join(common, "info", "exclude"), []string{"/.worktrees/"}); err != nil {
+				return made, err
+			}
+		}
 	}
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		return made, err

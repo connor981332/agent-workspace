@@ -12,7 +12,7 @@ lane-commit 01 lane.txt 'lane work'
 stderr 'not trying a lane'
 exec sh -c 'echo mine >> README.md'
 ! exec aw try one
-stderr 'uncommitted changes'
+stderr 'uncommitted work'
 exec git checkout README.md
 exec aw try one
 stdout 'exact heads'

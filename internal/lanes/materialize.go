@@ -36,6 +36,18 @@ func (m *Manager) plainRoot(ctx context.Context) bool {
 // single project that is the workspace, has a commit. Otherwise onboarding works in the owner checkout.
 func (m *Manager) CanReview(ctx context.Context) bool { return !m.plainRoot(ctx) }
 
+// IsWorkspaceFile reports whether a path in the workspace repository is one aw init or aw setup
+// writes, or a harness's own configuration beside them.
+func IsWorkspaceFile(rel string) bool {
+	if rel == ".gitignore" {
+		return true
+	}
+	if neverCopied(rel) {
+		return false
+	}
+	return slices.ContainsFunc(workspaceRoots, func(r string) bool { return rel == r || strings.HasPrefix(rel, r+"/") })
+}
+
 // neverCopied are aw's records for one checkout, and files each lane gets its own of.
 func neverCopied(rel string) bool {
 	return rel == workspace.OwnerPointer || rel == workspace.MaterializedPath || rel == workspace.LocalStateDir ||
