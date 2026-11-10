@@ -123,7 +123,7 @@ func (m *Manager) FindOrphans(ctx context.Context, recorded []state.LaneRepo) []
 				out = append(out, Orphan{Repo: r.dir, Label: r.label, Branch: b})
 			}
 		}
-		trees, err := g.Run(ctx, "worktree", "list", "--porcelain")
+		trees, err := worktreeGit(ctx, g, "", "worktree", "list", "--porcelain")
 		if err != nil {
 			continue
 		}
@@ -203,7 +203,7 @@ func (m *Manager) DiscardOrphans(ctx context.Context, now time.Time) ([]Discarde
 			}
 		}
 		if o.Worktree != "" {
-			if _, err := g.Run(ctx, "worktree", "remove", o.Worktree); err != nil {
+			if _, err := worktreeGit(ctx, g, "", "worktree", "remove", o.Worktree); err != nil {
 				return out, err
 			}
 		}

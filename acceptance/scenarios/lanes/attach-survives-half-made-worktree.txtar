@@ -1,0 +1,37 @@
+# Two lanes created at once can each see the other's half-written entry in .git/worktrees, which makes
+# Git fail for a moment. The lane is still created, with nothing left over from the failed try.
+# req: R25
+# source: release run of v0.1.0, e2e/rehearse-two-projects
+# milestone: M12
+
+workspace shop --init
+owner-may-change
+exec sh $WORK/race.sh
+env PATH=$WORK/race:$PATH
+exec aw attach 'racing work' --json
+json stdout .name racing-work
+exists web/.worktrees/01
+exists $WORK/race/failed-once
+exec git -C web rev-parse --abbrev-ref HEAD
+stdout main
+exec git -C web/.worktrees/01 rev-parse --abbrev-ref HEAD
+stdout aw/racing-work
+
+-- race.sh --
+# A git that fails like the race the first time it adds web's worktree, after making the branch.
+mkdir -p "$WORK/race"
+real=$(command -v git)
+cat > "$WORK/race/git" <<EOS
+#!/bin/sh
+case "\$*" in
+*worktree\ add*web/.worktrees/01*)
+	if [ ! -e "$WORK/race/failed-once" ]; then
+		touch "$WORK/race/failed-once"
+		"$real" branch aw/racing-work
+		echo 'fatal: failed to read .git/worktrees/02/commondir: Success' >&2
+		exit 128
+	fi ;;
+esac
+exec "$real" "\$@"
+EOS
+chmod +x "$WORK/race/git"

@@ -487,7 +487,11 @@ func (m *Manager) build(ctx context.Context, lane state.Lane, plans []repoPlan, 
 			default:
 				args = append(args, p.path, p.branch) // an existing local branch
 			}
-			if _, err := g.Run(ctx, args...); err != nil {
+			created := ""
+			if slices.Contains(args, "-b") {
+				created = p.branch
+			}
+			if _, err := worktreeGit(ctx, g, created, args...); err != nil {
 				stopBeat()
 				return made, m.gitFailure(lane, *p, err)
 			}
@@ -639,11 +643,11 @@ func (m *Manager) rollback(ctx context.Context, lane state.Lane, made []state.La
 			owner := filepath.Join(m.WS.Owner, m.relOf(r))
 			g := run.In(owner, noHooks...)
 			if _, err := os.Lstat(filepath.Join(r.Path, ".git")); err == nil {
-				if _, err := g.Run(ctx, "worktree", "remove", "--force", r.Path); err != nil {
+				if _, err := worktreeGit(ctx, g, "", "worktree", "remove", "--force", r.Path); err != nil {
 					errs = append(errs, err.Error())
 					continue
 				}
-			} else if _, err := g.Run(ctx, "worktree", "prune"); err != nil {
+			} else if _, err := worktreeGit(ctx, g, "", "worktree", "prune"); err != nil {
 				errs = append(errs, err.Error())
 				continue
 			}
@@ -693,6 +697,34 @@ func (m *Manager) rollback(ctx context.Context, lane state.Lane, made []state.La
 		}
 		return state.DeleteLane(tx, lane.Number)
 	})
+}
+
+// worktreeRetries is how many times a worktree command is tried when it meets another's half-made one.
+const worktreeRetries = 6
+
+// worktreeGit runs a git worktree command that another lane may be running at the same moment. Git
+// reads every entry in .git/worktrees, and fails on one that another process has only begun to write.
+// That lasts an instant, and holding a lock around a whole checkout would make lanes wait for each
+// other, so the command is simply tried again. newBranch is the branch a failed attempt may have left.
+func worktreeGit(ctx context.Context, g run.Git, newBranch string, args ...string) (string, error) {
+	for attempt := 1; ; attempt++ {
+		out, err := g.Run(ctx, args...)
+		var ge *run.Error
+		if err == nil || attempt == worktreeRetries || !errors.As(err, &ge) ||
+			!strings.Contains(ge.Stderr, "failed to read") || !strings.Contains(ge.Stderr, "worktrees/") {
+			return out, err
+		}
+		if newBranch != "" && ok(g.OK(ctx, "rev-parse", "--verify", "--quiet", "refs/heads/"+newBranch)) {
+			if _, err := g.Run(ctx, "branch", "-D", newBranch); err != nil {
+				return out, err
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return out, ctx.Err()
+		case <-time.After(time.Duration(attempt) * 20 * time.Millisecond):
+		}
+	}
 }
 
 // noHooks keeps a repository's own hooks out of creating and undoing a lane: a failing post-checkout
