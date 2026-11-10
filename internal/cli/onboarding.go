@@ -10,10 +10,12 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -159,10 +161,10 @@ for what is new or has drifted.`,
 			preflight := reportPreflight(cmd, ws, c, errOut)
 
 			prompt := "Use the aw-workspace-design skill to design this workspace, then stop and report."
-			purpose := "onboard this workspace"
+			purpose := lanes.PurposeOnboard
 			if review {
 				prompt = "Use the aw-workspace-design skill, but only for what is new or has drifted: compare workspace.toml with aw inspect --json, and propose changes for a new project, a new server or a new dependency on data. Leave the rest. Then stop and report."
-				purpose = "review onboarding"
+				purpose = lanes.PurposeReview
 			}
 			if preflight != "" {
 				prompt += "\n\nWhat aw inspect found before anything was created:\n" + preflight
@@ -376,22 +378,30 @@ func parseEnv(text string) map[string]string {
 
 func newRehearseCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "rehearse",
+		Use:   "rehearse [lane]",
 		Short: "Create two lanes at once, start their servers, check they do not collide, and clean up",
 		Long: `Create two lanes at the same time, run their setup and start their servers, then check that the lanes
 do not collide: ports, hostnames and data must differ, and nothing may be written into the owner
 checkout. Each project's smoke command runs if it has one. Both lanes are then torn down, and aw
-confirms that nothing is left behind.`,
-		Args: cobra.NoArgs,
-		RunE: run(func(cmd *cobra.Command, _ []string) error {
+confirms that nothing is left behind.
+
+With a lane, or from inside one, it rehearses that lane's proposal as the lane has it now, committed
+or not, in a throwaway copy of the workspace with its own name, ports and containers. Your checkout,
+containers and configuration are not touched, and the copy is removed afterwards. The agent onboarding
+a workspace may do this for its own lane.`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: run(func(cmd *cobra.Command, args []string) error {
 			ctx, stop := context.WithTimeout(cmd.Context(), 20*time.Minute)
 			defer stop()
 			ws, c, err := loadConfig()
 			if err != nil {
 				return err
 			}
-			if ws.LaneRoot != "" {
-				return fmt.Errorf("aw rehearse runs in the owner checkout → run it in %s", ui.Clean(ws.Owner))
+			if len(args) == 1 || ws.LaneRoot != "" {
+				return rehearseLane(cmd, args)
+			}
+			if why := agentContext(); why != "" {
+				return fmt.Errorf("aw rehearse in the owner checkout is only for the human, and this looks like an agent session (%s) → from your own onboarding lane, run bin/aw rehearse", why)
 			}
 			exe, err := os.Executable()
 			if err != nil {
@@ -469,6 +479,101 @@ confirms that nothing is left behind.`,
 			return nil
 		}),
 	}
+}
+
+// rehearseLane rehearses a lane's proposal in a throwaway copy of the workspace.
+func rehearseLane(cmd *cobra.Command, args []string) error {
+	m, done, err := openForRead()
+	if err != nil {
+		return err
+	}
+	defer done()
+	if m.Store == nil {
+		return errors.New("this workspace has no lanes yet → aw new starts one")
+	}
+	var l state.Lane
+	if len(args) == 1 {
+		l, err = m.Resolve(args[0])
+	} else {
+		l, err = laneArg(m, nil)
+	}
+	if err != nil {
+		return err
+	}
+	if why := agentContext(); why != "" && (m.CallerLane() != l.Number || !lanes.IsOnboarding(l)) {
+		return fmt.Errorf("an agent may only rehearse its own onboarding lane, and this looks like an agent session (%s) → ask the human to run aw rehearse %s", why, ui.Clean(l.Name))
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	ctx, stop := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
+	defer stop()
+	out, errOut := cmd.OutOrStdout(), cmd.ErrOrStderr()
+	fmt.Fprintf(out, "Rehearsing lane %s in a throwaway copy of the workspace. Your checkout and containers are not touched.\n", ui.Clean(l.Name))
+	copied, err := m.BuildRehearsal(ctx, l, randomHex(4), func(line string) { fmt.Fprintln(errOut, "aw: "+line) })
+	if copied != nil {
+		defer func() {
+			cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+			defer cancel()
+			if err := destroyRehearsal(cleanup, copied, errOut); err != nil {
+				fmt.Fprintf(errOut, "aw: warning: the throwaway copy was not fully removed: %v\n", err)
+			}
+		}()
+	}
+	if err != nil {
+		return err
+	}
+	env := rehearsalEnv(exe, copied.Owner)
+	infra := infraOf(&workspace.Workspace{Owner: copied.Owner}, copied.Cfg)
+	if infra.Configured() {
+		c := exec.CommandContext(ctx, exe, "infra", "up")
+		c.Dir, c.Env, c.Stdout, c.Stderr = copied.Owner, env, errOut, errOut
+		if err := c.Run(); err != nil {
+			return fmt.Errorf("the proposal's shared infrastructure did not start: %w", err)
+		}
+	}
+	c := exec.CommandContext(ctx, exe, "rehearse")
+	c.Dir, c.Env, c.Stdout, c.Stderr = copied.Owner, env, out, errOut
+	if err := c.Run(); err != nil {
+		return &silentError{fmt.Errorf("the rehearsal of lane %s failed: %w", l.Name, err)}
+	}
+	return nil
+}
+
+// rehearsalEnv runs aw in the copy as nobody's session, with this very binary.
+func rehearsalEnv(exe, dir string) []string {
+	drop := []string{"AW_SESSION=", "AW_SESSION_PID=", "AW_TOOL_PATH=", "AW_LAUNCHED=", "PWD="}
+	for _, e := range harnessEnv {
+		drop = append(drop, e.env+"=")
+	}
+	env := slices.DeleteFunc(os.Environ(), func(kv string) bool {
+		return slices.ContainsFunc(drop, func(p string) bool { return strings.HasPrefix(kv, p) })
+	})
+	return append(env, "AW_LAUNCHED=1", "AW_TOOL_PATH="+exe, "PWD="+dir)
+}
+
+// destroyRehearsal removes everything the copy made: its containers, infrastructure and files.
+func destroyRehearsal(ctx context.Context, r *lanes.Rehearsal, out io.Writer) error {
+	var errs []error
+	ws := &workspace.Workspace{Owner: r.Owner}
+	if r.Cfg != nil {
+		for _, name := range slices.Sorted(mapsKeys(r.Cfg.Projects)) {
+			if r.Cfg.Projects[name].Runner != "devcontainer" {
+				continue
+			}
+			d, err := devcontainerIn(ws, r.Cfg, name)
+			if err == nil {
+				err = d.Destroy(ctx)
+			}
+			errs = append(errs, err)
+		}
+		if infra := infraOf(ws, r.Cfg); infra.Configured() {
+			errs = append(errs, infra.Destroy(ctx, out))
+		}
+	}
+	errs = append(errs, r.Remove())
+	return errors.Join(errs...)
 }
 
 type laneRun struct {

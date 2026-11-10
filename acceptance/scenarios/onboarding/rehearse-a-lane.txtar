@@ -1,0 +1,81 @@
+# aw rehearse can test a lane's proposal in a throwaway copy, so the owner's checkout is untouched
+# and the onboarding agent can run the loop itself. Only its own onboarding lane is open to an agent.
+# req: R87 R60
+# source: onboarding RideTracker: rehearsing needed aw try and recreating the human's containers
+# milestone: M12
+
+workspace shop --init
+
+exec aw attach 'onboard this workspace'
+exec aw attach 'other work'
+cd .worktrees/01
+
+# The proposal is uncommitted, and is what gets rehearsed: its smoke command proves it.
+exec sh -c 'sed "s/smoke = \"true\"/smoke = \"test -e rehearsal-saw-this\"/" workspace.toml > x && mv x workspace.toml'
+exec sh -c 'touch web/rehearsal-saw-this'
+exec aw rehearse
+stdout 'throwaway copy'
+stdout 'The rehearsal passed'
+cd ../..
+! exists .worktrees/rehearsal-*
+exec sh $WORK/nothing-left.sh
+
+# The same from the owner checkout, by name.
+exec aw rehearse onboard-workspace
+stdout 'The rehearsal passed'
+
+# An agent: its own onboarding lane only, and never the owner's checkout.
+! exec awtest-hook bash 'aw rehearse'
+stderr 'only the human'
+cd .worktrees/01
+exec awtest-hook bash 'aw rehearse'
+! stdout .
+cd ../..
+env CLAUDE_CODE_SESSION_ID=s-1
+! exec aw rehearse
+stderr 'only for the human'
+! exec aw rehearse onboard-workspace
+stderr 'may only rehearse its own onboarding lane'
+cd .worktrees/02
+! exec aw rehearse
+stderr 'may only rehearse its own onboarding lane'
+cd ../01
+exec aw rehearse
+stdout 'The rehearsal passed'
+
+-- nothing-left.sh --
+ls -d .worktrees/rehearsal-* 2>/dev/null && exit 1
+ls "$XDG_CONFIG_HOME/agent-workspace" 2>/dev/null | grep '^rh' && exit 1
+exit 0
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[lane_env.app]
+DATABASE_URL = "postgres://localhost/shop_{lane}"
+
+[projects.web]
+directory = "web"
+smoke = "true"
+
+[projects.web.servers.app]
+command = "exec awtest-server -port {port}"
+port = 43300
+ready = "awtest-http 127.0.0.1:{port}"
+
+[projects.api]
+directory = "api"
+
+[projects.api.servers.main]
+command = "exec awtest-server -port {port}"
+port = 43500
+
+[resources.stack]
+kind = "process"
+capacity = 2
+servers = ["web.app", "api.main"]

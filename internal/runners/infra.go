@@ -89,6 +89,15 @@ func (i *Infra) Up(ctx context.Context, out io.Writer) error {
 // Down stops the shared infrastructure. Its volumes are kept.
 func (i *Infra) Down(ctx context.Context, out io.Writer) error { return i.compose(ctx, out, "down") }
 
+// Destroy removes throwaway infrastructure, its volumes and its network.
+func (i *Infra) Destroy(ctx context.Context, out io.Writer) error {
+	err := i.compose(ctx, out, "down", "-v")
+	if _, nerr := docker(ctx, "network", "rm", i.Network); err == nil && nerr != nil {
+		err = nerr
+	}
+	return err
+}
+
 // Status shows the shared infrastructure's containers.
 func (i *Infra) Status(ctx context.Context, out io.Writer) error { return i.compose(ctx, out, "ps") }
 

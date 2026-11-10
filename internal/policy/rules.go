@@ -249,6 +249,9 @@ func ownerOnlyRule(s Scope, c shell.Command) Decision {
 	if sub == "setup" && ownLaneSetup(s, rest) {
 		return allow()
 	}
+	if sub == "rehearse" && s.LaneRoot != "" && (len(rest) == 0 || ownLaneSetup(s, rest)) {
+		return allow() // on a throwaway copy of its own lane; aw checks the lane again when it runs
+	}
 	if s.Delegated && delegable(sub, rest) {
 		return allow()
 	}

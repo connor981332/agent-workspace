@@ -7,10 +7,17 @@ Newest first. A line starting with **Breaking:** is called out by `aw upgrade`.
 - `aw upgrade`: moves a workspace to a release, shows this changelog, migrates configuration, and regenerates managed files. A managed file edited by hand is never overwritten.
 - Homebrew tap, and a Renovate preset.
 
+## 0.1.1
+
+- `aw rehearse <lane>`, or `aw rehearse` from inside a lane, tests a lane's proposal in a throwaway copy with its own containers, without touching your checkout. The agent onboarding a workspace can run it for its own lane.
+- `aw onboard` turns off hooks that are not aw's in its own lane, and says which. `--keep-other-hooks` leaves them on.
+- `aw try` works before the workspace's files are committed: aw's own setup files are kept safe and put back. Lanes no longer make a project look dirty.
+- A lane gets aw's edits to files the commit already tracks, so it has aw's guards before they are committed.
+- `aw discard --orphans` leaves worktrees that are not numbered lanes alone.
+
 ## 0.1.0
 
 - `aw onboard` is the one command to start with: it includes `aw setup`, needs nothing committed, shows progress, and hands any failure to the agent.
-- `aw onboard` turns off hooks that are not aw's in its own lane, and says which. `--keep-other-hooks` leaves them on.
 - A workspace can be plain files, with only its projects in Git.
 - A repository's post-checkout hook no longer stops a lane: it runs as a retryable setup step. A failed lane is rolled back, and `aw doctor` and `aw discard --orphans` deal with what older failures left.
 - `local_files` and `[projects.<name>.env]` declare a project's gitignored files and settings. `aw inspect` reports checkout hooks, missing files and missing tools.

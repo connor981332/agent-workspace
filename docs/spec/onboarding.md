@@ -89,6 +89,12 @@ Proposals are checked before anyone reviews them:
 3. It tears both lanes down and confirms nothing is left: no worktrees, branches, databases,
    processes or containers.
 
+With a lane, or from inside one, `aw rehearse` tests that lane's proposal without touching the owner:
+it builds a throwaway copy of the workspace under `.worktrees/rehearsal-*`, from the lane's heads and
+uncommitted changes, with its own namespace, a port offset and its own containers, and removes it
+afterwards. The agent onboarding a workspace may run it for its own lane, and so needs no human for
+the loop.
+
 The skill iterates until rehearsal passes, then stops and reports.
 
 ## Review and commit

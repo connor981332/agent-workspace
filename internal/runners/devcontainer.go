@@ -19,6 +19,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/connor981332/agent-workspace/internal/config"
+	"github.com/connor981332/agent-workspace/internal/workspace"
 )
 
 // Fragment is the Compose file aw writes in a project's .devcontainer: the same-path mount and the
@@ -217,7 +218,12 @@ func NewDevcontainer(c *config.Config, owner, project, stateDir string) (*Devcon
 		env = append(env, k+"="+v)
 	}
 	slices.Sort(env)
-	return &Devcontainer{Project: project, Dir: dir, Compose: ComposeName(dir), Service: j.Service, User: user,
+	compose := ComposeName(dir)
+	if workspace.IsRehearsal(owner) {
+		// The folder has the owner's name, so its container must not take the owner's Compose name.
+		compose += "_" + c.Workspace.Namespace
+	}
+	return &Devcontainer{Project: project, Dir: dir, Compose: compose, Service: j.Service, User: user,
 		Ports: SeatPorts(c, project), cliEnv: env,
 		cli:  strings.Fields(strings.ReplaceAll(c.Devcontainer.Command, "{version}", c.Devcontainer.Version)),
 		lock: filepath.Join(stateDir, "containers", project+".lock")}, nil
@@ -551,6 +557,12 @@ func (d *Devcontainer) Sessions(ctx context.Context, id string) ([]string, error
 // Remove stops the project's containers, without their volumes.
 func (d *Devcontainer) Remove(ctx context.Context) error {
 	_, err := docker(ctx, "compose", "-p", d.Compose, "down")
+	return err
+}
+
+// Destroy removes a throwaway container and its volumes.
+func (d *Devcontainer) Destroy(ctx context.Context) error {
+	_, err := docker(ctx, "compose", "-p", d.Compose, "down", "-v")
 	return err
 }
 
