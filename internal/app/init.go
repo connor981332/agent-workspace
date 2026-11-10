@@ -180,6 +180,11 @@ var teamTemplate = template.Must(template.New("workspace.toml").Parse(`# The tea
 name = {{ printf "%q" .Name }}
 namespace = {{ printf "%q" .Namespace }}
 schema = {{ .Schema }}
+
+# What agents may do from their lanes without asking: push only the lane's own branch, open a merge
+# request, and comment on or merge the lane's own. Force pushes and deleting branches are never allowed.
+[publication]
+allow = ["push", "open-merge-request", "merge"]
 {{ range .Projects }}
 [projects.{{ .Name }}]
 {{- if ne .Directory .Name }}

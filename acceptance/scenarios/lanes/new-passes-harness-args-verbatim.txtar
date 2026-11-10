@@ -15,7 +15,7 @@ stdout '^claude AW_SESSION=claude:new-[0-9a-f]{16}$'
 
 exec aw new 'add webhook retries' --harness codex
 exec cat $STUB_LOG
-stdout '^codex$'
+stdout '^codex \[-c\] \[sandbox_workspace_write.writable_roots='
 stdout '^codex cwd .*/\.worktrees/02$'
 
 ! exec aw new 'x' --harness nothere

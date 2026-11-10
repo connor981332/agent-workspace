@@ -279,7 +279,7 @@ func newAddProjectCmd() *cobra.Command {
 		Short: "Add a project repository to this workspace",
 		Args:  cobra.RangeArgs(1, 2),
 		RunE: run(func(cmd *cobra.Command, args []string) error {
-			if why := agentContext(); why != "" {
+			if why := unguardedAgent(); why != "" {
 				return &commandError{fmt.Errorf("aw add is only for the human, and this looks like an agent session (%s) → ask the human to run it in their own terminal", why)}
 			}
 			ws, c, err := loadConfig()
@@ -408,7 +408,7 @@ a workspace may do this for its own lane.`,
 			if len(args) == 1 || ws.LaneRoot != "" {
 				return rehearseLane(cmd, args)
 			}
-			if why := agentContext(); why != "" {
+			if why := unguardedAgent(); why != "" {
 				return fmt.Errorf("aw rehearse in the owner checkout is only for the human, and this looks like an agent session (%s) → from your own onboarding lane, run bin/aw rehearse", why)
 			}
 			exe, err := os.Executable()
@@ -505,7 +505,7 @@ func rehearseLane(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	if why := agentContext(); why != "" && (m.CallerLane() != l.Number || !lanes.IsOnboarding(l)) {
+	if why := unguardedAgent(); why != "" && (m.CallerLane() != l.Number || !lanes.IsOnboarding(l)) {
 		return fmt.Errorf("an agent may only rehearse its own onboarding lane, and this looks like an agent session (%s) → ask the human to run aw rehearse %s", why, ui.Clean(l.Name))
 	}
 	exe, err := os.Executable()

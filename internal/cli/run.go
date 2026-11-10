@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/connor981332/agent-workspace/internal/config"
+	"github.com/connor981332/agent-workspace/internal/harness/launch"
 	"github.com/connor981332/agent-workspace/internal/lanes"
 	"github.com/connor981332/agent-workspace/internal/mux"
 	"github.com/connor981332/agent-workspace/internal/runners"
@@ -160,6 +161,7 @@ func startLaneSession(cmd *cobra.Command, purpose, harness, branch, role string,
 	if timing.Debug() {
 		t.Report(cmd.ErrOrStderr(), "new")
 	}
+	extra = append(launch.SandboxArgs(harness, m.SandboxRoots(c.Dir)), extra...)
 	if useMux {
 		return openInMux(cmd, mx, c.Lane.Name, c.Root, harness, id, append([]string{harness}, extra...))
 	}

@@ -19,7 +19,7 @@ exec awtest-hook write .claude/settings.json
 stdout '"permissionDecision":"ask"'
 ! exec awtest-hook -harness codex write workspace.toml
 ! exec awtest-hook bash 'git branch -D main'
-stderr 'deletes, moves or forces a branch'
+stderr 'deletes a branch'
 ! exec awtest-hook bash 'git reset --hard'
 
 -- pair.sh --

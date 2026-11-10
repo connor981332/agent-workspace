@@ -1,0 +1,52 @@
+# A hook cannot see what the human told the agent, so where a person can answer it asks rather than
+# refuses. Force pushes and deleting branches stay refused, and a new workspace lets lanes publish
+# their own work, while a pre-approved merge can only be the lane's own.
+# req: R60 R72
+# source: dogfooding RideTracker: agents kept being refused work the human had asked for
+# milestone: M12
+
+workspace shop --init
+owner-may-change
+grep 'open-merge-request' workspace.toml
+exec aw attach 'add feature flag'
+
+# In a lane, destructive Git and the human's commands reach the human.
+cd .worktrees/01
+exec awtest-hook bash 'git reset --hard'
+stdout '"permissionDecision":"ask"'
+exec awtest-hook bash 'aw discard other --yes'
+stdout '"permissionDecision":"ask"'
+stdout 'only the human does'
+
+# These never do.
+! exec awtest-hook bash 'git push --force origin aw/feature-flag'
+stderr 'rewrites the remote'
+! exec awtest-hook bash 'git branch -D main'
+stderr 'deletes a branch'
+! exec awtest-hook -harness codex bash 'git reset --hard'
+stderr 'discards uncommitted work'
+
+# The owner checkout is the human's: destructive Git stays refused there.
+cd ../..
+! exec awtest-hook bash 'git reset --hard'
+stderr 'discards uncommitted work'
+
+# A lane's own work is pre-approved.
+cd .worktrees/01
+exec awtest-hook bash 'git push origin aw/feature-flag'
+! stdout .
+exec awtest-hook bash 'glab mr create --fill --yes'
+! stdout .
+exec awtest-hook bash 'glab mr merge --yes'
+! stdout .
+exec awtest-hook bash 'gh pr comment --body done'
+! stdout .
+
+# Anyone else's merge request is not.
+exec awtest-hook bash 'glab mr merge 118 --yes'
+stdout '"permissionDecision":"ask"'
+stdout 'publication'
+exec awtest-hook bash 'gh --repo a/b pr merge'
+stdout '"permissionDecision":"ask"'
+exec awtest-hook bash 'git push origin main'
+stdout '"permissionDecision":"ask"'

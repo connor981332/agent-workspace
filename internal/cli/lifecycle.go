@@ -144,7 +144,7 @@ func retrySetup(cmd *cobra.Command, ref string) error {
 	if err != nil {
 		return err
 	}
-	if why := agentContext(); why != "" && m.CallerLane() != l.Number {
+	if why := unguardedAgent(); why != "" && m.CallerLane() != l.Number {
 		return fmt.Errorf("an agent may only rerun its own lane's setup, and this looks like an agent session (%s) outside lane %s → ask the human to run it", why, ui.Clean(l.Name))
 	}
 	ctx, stop := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)

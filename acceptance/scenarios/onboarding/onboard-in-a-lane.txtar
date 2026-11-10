@@ -14,6 +14,7 @@ exec git -C .worktrees/01 rev-parse --abbrev-ref HEAD
 stdout '^aw/'
 exec aw onboard --review
 grep 'new or has drifted' $STUB_LOG
+rm .claude/settings.json .codex/hooks.json
 env CLAUDE_CODE_SESSION_ID=s-1
 ! exec aw new x
 stderr 'only for the human'

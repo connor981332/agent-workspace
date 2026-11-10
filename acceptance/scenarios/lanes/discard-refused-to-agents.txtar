@@ -6,8 +6,8 @@
 workspace shop --init
 exec aw attach 'add feature flag'
 cd .worktrees/01
-! exec awtest-hook bash 'bin/aw discard feature-flag --yes'
+! exec awtest-hook -harness codex bash 'bin/aw discard feature-flag --yes'
 stderr 'aw discard abandons a lane''s work, which only the human does'
-! exec awtest-hook bash 'bin/aw sweep --apply'
+! exec awtest-hook -harness codex bash 'bin/aw sweep --apply'
 stderr 'aw sweep --apply removes lanes'
 exec awtest-hook bash 'bin/aw sweep'

@@ -8,4 +8,4 @@ workspace solo --single --init
 exec rm -rf .git/aw
 exec aw delegate --scope maintenance --ttl 30m
 exec awtest-hook bash 'aw setup'
-! exec awtest-hook bash 'aw delegate --scope maintenance --ttl 1h'
+! exec awtest-hook -harness codex bash 'aw delegate --scope maintenance --ttl 1h'

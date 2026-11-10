@@ -8,11 +8,11 @@ workspace solo --single --init
 exec aw add module mail-catcher
 exec aw attach 'one'
 cd .worktrees/01
-! exec awtest-hook bash 'aw infra down'
+! exec awtest-hook -harness codex bash 'aw infra down'
 stderr 'takes down the shared infrastructure, which only the human does'
 exec awtest-hook bash 'aw infra up'
 exec awtest-hook bash 'aw infra ps'
-! exec awtest-hook bash 'docker compose -p solo-infra down'
+! exec awtest-hook -harness codex bash 'docker compose -p solo-infra down'
 stderr 'changes shared containers'
 env CLAUDE_CODE_SESSION_ID=s-1
 ! exec aw infra down

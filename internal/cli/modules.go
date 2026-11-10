@@ -41,7 +41,7 @@ func newAddCmd() *cobra.Command {
 		Short: "Install first-party modules: their files, configuration and instructions",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: run(func(cmd *cobra.Command, args []string) error {
-			if why := agentContext(); why != "" {
+			if why := unguardedAgent(); why != "" {
 				return &commandError{fmt.Errorf("aw add is only for the human, and this looks like an agent session (%s) → ask the human to run it in their own terminal", why)}
 			}
 			ws, c, err := loadConfig()
@@ -155,7 +155,7 @@ func newInfraCmd() *cobra.Command {
 		})}
 	}
 	down := verb("down", "Take down the shared infrastructure, keeping its volumes (the human's)", func(ctx context.Context, i *runners.Infra, out io.Writer, _ []string) error {
-		if why := agentContext(); why != "" {
+		if why := unguardedAgent(); why != "" {
 			return &commandError{fmt.Errorf("aw infra down is only for the human, and this looks like an agent session (%s) → ask the human to run it", why)}
 		}
 		return i.Down(ctx, out)

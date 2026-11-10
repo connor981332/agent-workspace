@@ -9,9 +9,9 @@ workspace shop --init
 ! exec awtest-hook -session live-1 write web/src/app.ts
 stderr 'aw pair --session claude:live-1'
 
-! exec awtest-hook -session live-1 bash 'bin/aw pair --session claude:live-1'
+! exec awtest-hook -harness codex -session live-1 bash 'bin/aw pair --session claude:live-1'
 stderr 'only the human'
-! exec awtest-hook -session live-1 bash 'echo $(aw pair --session claude:live-1)'
+! exec awtest-hook -harness codex -session live-1 bash 'echo $(aw pair --session claude:live-1)'
 stderr 'only the human'
 
 # With no guard in the way: the harness's marker, then AW_SESSION.
@@ -43,7 +43,7 @@ json stdout .pair_sessions[0].harness claude
 stderr 'inside a Git directory'
 ! exec awtest-hook -session live-1 bash 'sqlite3 .git/aw/state.db "update sessions set pair = 1"'
 stderr 'own record'
-! exec awtest-hook -session live-1 bash 'aw pair --session claude:someone-else'
+! exec awtest-hook -harness codex -session live-1 bash 'aw pair --session claude:someone-else'
 stderr 'only the human'
 
 # A session working in a lane is not pulled out of it.

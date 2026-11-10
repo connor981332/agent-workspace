@@ -221,7 +221,7 @@ func containersVerb(use, short string, remove, start bool) *cobra.Command {
 		Use:   use + " [project…]",
 		Short: short,
 		RunE: run(func(cmd *cobra.Command, args []string) error {
-			if why := agentContext(); why != "" && !(use == "up" && delegatedHere("containers", []string{"up"})) {
+			if why := unguardedAgent(); why != "" && !(use == "up" && delegatedHere("containers", []string{"up"})) {
 				return &commandError{fmt.Errorf("aw containers %s is only for the human, and this looks like an agent session (%s) → ask the human to run it in their own terminal", use, why)}
 			}
 			w, err := openForWrite()

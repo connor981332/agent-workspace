@@ -18,10 +18,10 @@ exec aw new --role infra 'one' -- --print
 cd .worktrees/01
 exec awtest-hook bash 'docker compose restart db'
 ! stdout 'deny'
-! exec awtest-hook bash 'cat ../../README.md'
+! exec awtest-hook -harness codex bash 'cat ../../README.md'
 stderr 'outside lane'
-! exec awtest-hook bash 'git push --force origin aw/one'
-! exec awtest-hook bash 'aw discard one --yes'
+! exec awtest-hook -harness codex bash 'git push --force origin aw/one'
+! exec awtest-hook -harness codex bash 'aw discard one --yes'
 stderr 'only the human'
 exec awtest-hook session-start x
 stdout 'infra role'

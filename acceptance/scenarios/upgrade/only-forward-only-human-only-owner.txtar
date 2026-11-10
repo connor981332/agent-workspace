@@ -12,5 +12,5 @@ exec aw attach 'one'
 cd .worktrees/01
 ! exec aw upgrade --to 9.9.9
 stderr 'this is a lane'
-! exec awtest-hook bash 'aw upgrade --to 9.9.9'
+! exec awtest-hook -harness codex bash 'aw upgrade --to 9.9.9'
 stderr 'only the human'
