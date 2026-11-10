@@ -104,6 +104,9 @@ func pathsRule(s Scope, c shell.Command) Decision {
 		if i == 0 && isAW(c) {
 			continue // running the workspace's launcher touches none of the owner's files
 		}
+		if i > 0 && isMessageText(name, c.Args[i-1], a) {
+			continue // a commit message or a title is prose, whatever slashes it has
+		}
 		always := i > 0 && (name == "cd" || name == "pushd") && !strings.HasPrefix(a.Text, "-")
 		cdTarget = always
 		if i > 0 && c.Args[i-1].Known && dirOptions[c.Args[i-1].Text] {
@@ -131,6 +134,22 @@ func pathsRule(s Scope, c shell.Command) Decision {
 		}
 	}
 	return allow()
+}
+
+// messageOptions take prose for git and the forge CLIs. -F and the like name files, so are not here.
+var messageOptions = map[string]bool{"-m": true, "--message": true, "--title": true, "-t": true, "--body": true, "-b": true, "--description": true, "-d": true}
+
+// isMessageText reports whether an argument is the text of a message: the value after such an
+// option, or the option written with its value as --message=text.
+func isMessageText(name string, prev, arg shell.Word) bool {
+	if name != "git" && name != "gh" && name != "glab" {
+		return false
+	}
+	if prev.Known && messageOptions[prev.Text] {
+		return true
+	}
+	opt, _, ok := strings.Cut(arg.Text, "=")
+	return ok && strings.HasPrefix(opt, "--") && messageOptions[opt]
 }
 
 func isDup(r shell.Redirect) bool {

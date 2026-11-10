@@ -14,6 +14,7 @@ Newest first. A line starting with **Breaking:** is called out by `aw upgrade`.
 - The generated instructions tell agents to ask the human to approve work they were asked for, rather than stop.
 - `aw new`, `aw pair` and `aw onboard` give Codex the writable paths directly, because it ignores an untrusted project's configuration.
 - New lanes tell Claude Code their project worktrees are working directories, so it stops asking about each one.
+- A commit message or merge request title with a slash in it is no longer read as a path.
 - `build_template` commands get `AW_OWNER`.
 - `aw attach` uses the harness's own session ID, so a session started by `aw new` is bound to the lane it claims, also after `/clear`.
 - `aw setup <lane>` reinstalls when the install's stamp has changed, such as a lockfile a merge brought in.

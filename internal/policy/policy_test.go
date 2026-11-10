@@ -529,3 +529,17 @@ func TestLaneNewBranchRefusedBeforeGitRuns(t *testing.T) {
 	s := f.scope(Pair)
 	run(t, s, f.owner, []tcase{{"git switch -c other", Allow, ""}})
 }
+
+// A message is prose, so a slash in it is not a path, while a path argument is still checked.
+func TestMessagesAreNotPaths(t *testing.T) {
+	f := newFixture(t)
+	run(t, f.scope(Lane), f.lane, []tcase{
+		{`git commit -m "Record 2WD/4WD/AWD ../../x"`, Allow, ""},
+		{`git commit --message="fix ../../x"`, Allow, ""},
+		{`git commit -m "uses $HOME/x"`, Allow, ""},
+		{`glab mr note --message "see ../../x"`, Deny, "publication"}, // past the path check, to the policy
+		{`git commit -F ../../msg`, Deny, "boundary"},
+		{`git -C ../.. commit -m ok`, Deny, "boundary"},
+		{`cat -m ../../x`, Deny, "boundary"},
+	})
+}
