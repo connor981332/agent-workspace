@@ -35,6 +35,15 @@ func issuedIdentities() ([]issued, error) {
 		if !ok || h == "" || id == "" {
 			return nil, fmt.Errorf("AW_SESSION is %q, not <harness>:<session id> → unset it, or start the session with aw new", env)
 		}
+		// AW_SESSION holds the name aw new made up, until the harness says its own. A hook has replaced
+		// that name in the record by now, and /clear gives a new ID, so the harness's is the true one.
+		if neverIdentified(state.Session{HarnessSession: id}) {
+			for _, e := range harnessEnv {
+				if real := os.Getenv(e.env); e.harness == h && real != "" {
+					return []issued{{h, real, e.env}}, nil
+				}
+			}
+		}
 		return []issued{{h, id, "AW_SESSION"}}, nil
 	}
 	var found []issued

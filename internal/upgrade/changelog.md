@@ -10,6 +10,7 @@ Newest first. A line starting with **Breaking:** is called out by `aw upgrade`.
 ## 0.1.3
 
 - `build_template` commands get `AW_OWNER`.
+- `aw attach` uses the harness's own session ID, so a session started by `aw new` is bound to the lane it claims, also after `/clear`.
 - `aw setup <lane>` reinstalls when the install's stamp has changed, such as a lockfile a merge brought in.
 - `aw run` warns when a lane has no `node_modules` and would use the owner checkout's.
 - Making a new branch in a lane is refused before Git touches the files, instead of after.
