@@ -1,5 +1,5 @@
-# A workspace migrating from another system has hooks that can refuse everything in an aw lane.
-# aw reports them before it starts, and can leave them out of the onboarding lane only.
+# A workspace migrating from another system has hooks that can refuse everything in an aw lane. The
+# onboarding lane leaves them out by default, says which, and leaves the human's checkout alone.
 # req: R85
 # source: onboarding RideTracker, which had its own lane guard
 # milestone: M12
@@ -12,23 +12,37 @@ exec aw setup --harness claude
 exec aw inspect
 stdout 'not aw''s.*old-hook'
 
-# By default they stay, and the human and the agent are told.
+# Off by default, while aw's own hooks are uncommitted.
 exec aw onboard --harness claude
-stderr 'hooks that are not aw''s'
-grep 'old-hook' .worktrees/01/.claude/settings.json
-grep 'they run in this lane too' $STUB_LOG
-exec aw discard 01 --yes
-
-exec aw onboard --harness claude --without-other-hooks
+stderr 'turning off hooks that are not aw''s'
+stderr 'old-hook'
 ! grep 'old-hook' .worktrees/01/.claude/settings.json
 grep 'hook claude pre-tool-use' .worktrees/01/.claude/settings.json
-grep 'turned them off in this lane only' $STUB_LOG
+grep 'aw turned them off in this lane only' $STUB_LOG
 grep 'old-hook' .claude/settings.json
-
-# Leaving them out does not count as the lane's work.
 exec aw discard 01 --yes
 ! exists .worktrees/01
-grep 'old-hook' .claude/settings.json
+
+# Kept when asked.
+exec aw onboard --harness claude --keep-other-hooks
+grep 'old-hook' .worktrees/01/.claude/settings.json
+grep 'because the human kept them' $STUB_LOG
+exec aw discard 01 --yes
+
+# Off too when both sets of hooks are already committed, so nothing else is copied into the lane.
+exec git add -A
+exec git commit -qm 'aw and the old hooks'
+exec aw onboard --harness claude --review
+! grep 'old-hook' .worktrees/01/.claude/settings.json
+grep 'hook claude pre-tool-use' .worktrees/01/.claude/settings.json
+exec aw discard 01 --yes
+! exists .worktrees/01
+exec git status --porcelain
+! stdout .
+
+# An ordinary lane is not onboarding, and keeps them.
+exec aw attach 'plain work'
+grep 'old-hook' .worktrees/01/.claude/settings.json
 
 -- old.sh --
 mkdir -p .claude

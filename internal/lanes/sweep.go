@@ -384,6 +384,7 @@ func (m *Manager) recycle(ctx context.Context, d *Decision) error {
 	for i, r := range d.stored {
 		ev := d.Repos[i]
 		g := run.In(r.Path)
+		removeMaterialized(r.Path) // a copy that replaced a tracked file must not travel to the base
 		if _, err := g.Run(ctx, "switch", "--quiet", "--detach", ev.Base); err != nil {
 			return err
 		}

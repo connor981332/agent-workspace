@@ -33,7 +33,7 @@ type Manager struct {
 	Seats func(ctx context.Context, l state.Lane, needs []string) (func(), error)
 	// Progress is told what a claim is doing, for a person waiting at a terminal. It may be nil.
 	Progress func(string)
-	// AWHooksOnly leaves other systems' hooks out of the harness files copied into a new lane.
+	// AWHooksOnly leaves other systems' hooks out of a new lane's harness files.
 	AWHooksOnly bool
 
 	forges        map[string]*forge.Client // by host, for one sweep

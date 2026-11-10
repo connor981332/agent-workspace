@@ -57,6 +57,14 @@ func (m *Manager) materialize(ctx context.Context, root string, plans []repoPlan
 	if err != nil {
 		return err
 	}
+	if m.AWHooksOnly {
+		// A harness file the commit already has is not otherwise copied, and its hooks would still run.
+		for _, rel := range app.HarnessConfigs() {
+			if !slices.Contains(files, rel) && app.HasOtherHooks(filepath.Join(m.WS.Owner, filepath.FromSlash(rel))) {
+				files = append(files, rel)
+			}
+		}
+	}
 	var list strings.Builder
 	for _, rel := range files {
 		src, dst := filepath.Join(m.WS.Owner, filepath.FromSlash(rel)), filepath.Join(root, filepath.FromSlash(rel))
@@ -67,7 +75,7 @@ func (m *Manager) materialize(ctx context.Context, root string, plans []repoPlan
 		if err != nil {
 			return fmt.Errorf("copying %s into the lane: %w", rel, err)
 		}
-		if copied && m.AWHooksOnly && app.IsHarnessConfig(rel) {
+		if copied && m.AWHooksOnly && slices.Contains(app.HarnessConfigs(), rel) {
 			if err := app.DropOtherHooks(dst); err != nil {
 				return fmt.Errorf("turning off other hooks in %s: %w", rel, err)
 			}

@@ -46,49 +46,57 @@ func isAWHook(entry any) bool {
 	return false
 }
 
-// IsHarnessConfig reports whether a path in the workspace is a file aw merges hooks into.
-func IsHarnessConfig(rel string) bool {
-	for _, c := range harnessConfigs {
-		if c.path == rel {
-			return true
-		}
+// HarnessConfigs are the files aw merges hooks into, relative to the workspace.
+func HarnessConfigs() []string {
+	out := make([]string, len(harnessConfigs))
+	for i, c := range harnessConfigs {
+		out[i] = c.path
 	}
-	return false
+	return out
 }
 
-// OtherHooks lists the hooks in the workspace's harness files that are not aw's, as "<event>: <end
-// of the command>". They run alongside aw's, in every lane, and another system's guard can refuse
-// everything in a lane it does not recognize.
-func OtherHooks(root string) []string {
+// otherHooksIn lists the hooks in one harness file that are not aw's, as "<event>: <end of the command>".
+func otherHooksIn(path string) []string {
 	const shown = 60
-	seen := map[string]bool{}
+	data, err := os.ReadFile(path)
+	var settings map[string]any
+	if err != nil || json.Unmarshal(data, &settings) != nil {
+		return nil
+	}
+	var out []string
+	events, _ := settings["hooks"].(map[string]any)
+	for _, event := range slices.Sorted(maps.Keys(events)) {
+		groups, _ := events[event].([]any)
+		for _, g := range groups {
+			if isAWHook(g) {
+				continue
+			}
+			m, _ := g.(map[string]any)
+			hooks, _ := m["hooks"].([]any)
+			for _, h := range hooks {
+				hm, _ := h.(map[string]any)
+				cmd, _ := hm["command"].(string)
+				if len(cmd) > shown {
+					cmd = "…" + cmd[len(cmd)-shown:]
+				}
+				out = append(out, event+": "+cmd)
+			}
+		}
+	}
+	return out
+}
+
+// HasOtherHooks reports whether one harness file holds hooks that are not aw's.
+func HasOtherHooks(path string) bool { return len(otherHooksIn(path)) > 0 }
+
+// OtherHooks lists the hooks in the workspace's harness files that are not aw's. They run alongside
+// aw's, in every lane, and another system's guard can refuse everything in a lane it does not recognize.
+func OtherHooks(root string) []string {
 	var out []string
 	for _, c := range harnessConfigs {
-		data, err := os.ReadFile(filepath.Join(root, c.path))
-		var settings map[string]any
-		if err != nil || json.Unmarshal(data, &settings) != nil {
-			continue
-		}
-		events, _ := settings["hooks"].(map[string]any)
-		for _, event := range slices.Sorted(maps.Keys(events)) {
-			groups, _ := events[event].([]any)
-			for _, g := range groups {
-				if isAWHook(g) {
-					continue
-				}
-				m, _ := g.(map[string]any)
-				hooks, _ := m["hooks"].([]any)
-				for _, h := range hooks {
-					hm, _ := h.(map[string]any)
-					cmd, _ := hm["command"].(string)
-					if len(cmd) > shown {
-						cmd = "…" + cmd[len(cmd)-shown:]
-					}
-					if line := event + ": " + cmd; !seen[line] {
-						seen[line] = true
-						out = append(out, line)
-					}
-				}
+		for _, line := range otherHooksIn(filepath.Join(root, c.path)) {
+			if !slices.Contains(out, line) {
+				out = append(out, line)
 			}
 		}
 	}

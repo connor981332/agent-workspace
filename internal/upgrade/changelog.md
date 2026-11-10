@@ -10,6 +10,7 @@ Newest first. A line starting with **Breaking:** is called out by `aw upgrade`.
 ## 0.1.0
 
 - `aw onboard` is the one command to start with: it includes `aw setup`, needs nothing committed, shows progress, and hands any failure to the agent.
+- `aw onboard` turns off hooks that are not aw's in its own lane, and says which. `--keep-other-hooks` leaves them on.
 - A workspace can be plain files, with only its projects in Git.
 - A repository's post-checkout hook no longer stops a lane: it runs as a retryable setup step. A failed lane is rolled back, and `aw doctor` and `aw discard --orphans` deal with what older failures left.
 - `local_files` and `[projects.<name>.env]` declare a project's gitignored files and settings. `aw inspect` reports checkout hooks, missing files and missing tools.

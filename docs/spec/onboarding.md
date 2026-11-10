@@ -19,7 +19,8 @@ launches the default harness with the right skill. A failure in those determinis
 the command: the agent starts with the failure as context, in the owner checkout as a pair session if
 no lane can be created, and decides whether to fix it, skip it or ask. Nothing has to be committed: a
 lane's root receives what its commit lacks, as copies that do not count as the lane's work until
-they are changed.
+they are changed. Hooks that are not aw's are left out of the onboarding lane, and the agent decides
+whether the workspace keeps them, because another system's guard can refuse everything in a lane.
 
 ## Facts first: `aw inspect`
 
