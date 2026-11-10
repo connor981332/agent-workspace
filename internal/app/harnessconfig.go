@@ -4,11 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"maps"
 	"os"
 	"path/filepath"
-	"slices"
-	"strings"
+
+	"github.com/connor981332/agent-workspace/internal/sandbox"
 )
 
 // hookEvents are the events aw needs, as harnesses name them and as aw hook names them.
@@ -17,120 +16,11 @@ var hookEvents = []struct{ event, name string }{
 	{"PreToolUse", "pre-tool-use"}, {"SessionEnd", "session-end"},
 }
 
-// harnessConfigs are the files aw merges its hooks into. Grok also runs Claude Code's file, and
-// tells its payloads apart, so it needs none of its own.
-var harnessConfigs = []struct{ harness, path string }{
-	{"claude", ".claude/settings.json"}, {"codex", ".codex/hooks.json"},
-}
-
 // hookCommand finds bin/aw from the project directory with shell builtins only, and turns anything
 // but success into exit 2, which harnesses read as a refusal: a hook that cannot start must not
 // fail open.
 func hookCommand(harness, event string) string {
 	return fmt.Sprintf(`d="${CLAUDE_PROJECT_DIR:-$PWD}"; while [ -n "$d" ] && [ ! -x "$d/bin/aw" ]; do d="${d%%/*}"; done; "$d/bin/aw" hook %s %s || exit 2`, harness, event)
-}
-
-func isAWHook(entry any) bool {
-	group, ok := entry.(map[string]any)
-	if !ok {
-		return false
-	}
-	hooks, _ := group["hooks"].([]any)
-	for _, h := range hooks {
-		if m, ok := h.(map[string]any); ok {
-			if c, _ := m["command"].(string); strings.Contains(c, `/bin/aw" hook `) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-// HarnessConfigs are the files aw merges hooks into, relative to the workspace.
-func HarnessConfigs() []string {
-	out := make([]string, len(harnessConfigs))
-	for i, c := range harnessConfigs {
-		out[i] = c.path
-	}
-	return out
-}
-
-// otherHooksIn lists the hooks in one harness file that are not aw's, as "<event>: <end of the command>".
-func otherHooksIn(path string) []string {
-	const shown = 60
-	data, err := os.ReadFile(path)
-	var settings map[string]any
-	if err != nil || json.Unmarshal(data, &settings) != nil {
-		return nil
-	}
-	var out []string
-	events, _ := settings["hooks"].(map[string]any)
-	for _, event := range slices.Sorted(maps.Keys(events)) {
-		groups, _ := events[event].([]any)
-		for _, g := range groups {
-			if isAWHook(g) {
-				continue
-			}
-			m, _ := g.(map[string]any)
-			hooks, _ := m["hooks"].([]any)
-			for _, h := range hooks {
-				hm, _ := h.(map[string]any)
-				cmd, _ := hm["command"].(string)
-				if len(cmd) > shown {
-					cmd = "…" + cmd[len(cmd)-shown:]
-				}
-				out = append(out, event+": "+cmd)
-			}
-		}
-	}
-	return out
-}
-
-// HasOtherHooks reports whether one harness file holds hooks that are not aw's.
-func HasOtherHooks(path string) bool { return len(otherHooksIn(path)) > 0 }
-
-// OtherHooks lists the hooks in the workspace's harness files that are not aw's. They run alongside
-// aw's, in every lane, and another system's guard can refuse everything in a lane it does not recognize.
-func OtherHooks(root string) []string {
-	var out []string
-	for _, c := range harnessConfigs {
-		for _, line := range otherHooksIn(filepath.Join(root, c.path)) {
-			if !slices.Contains(out, line) {
-				out = append(out, line)
-			}
-		}
-	}
-	return out
-}
-
-// DropOtherHooks rewrites one harness file with only aw's hooks in it.
-func DropOtherHooks(path string) error {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return err
-	}
-	var settings map[string]any
-	if err := json.Unmarshal(data, &settings); err != nil {
-		return err
-	}
-	events, _ := settings["hooks"].(map[string]any)
-	for event, v := range events {
-		groups, _ := v.([]any)
-		kept := slices.DeleteFunc(slices.Clone(groups), func(g any) bool { return !isAWHook(g) })
-		if len(kept) == 0 {
-			delete(events, event)
-		} else {
-			events[event] = kept
-		}
-	}
-	var buf bytes.Buffer
-	enc := json.NewEncoder(&buf)
-	enc.SetEscapeHTML(false)
-	enc.SetIndent("", "  ")
-	if err := enc.Encode(settings); err != nil {
-		return err
-	}
-	return os.WriteFile(path, buf.Bytes(), 0o644)
 }
 
 // OpenCodePluginPath is where OpenCode loads aw's plugin from, in the workspace.
@@ -183,14 +73,14 @@ type ConfigResult struct {
 // and other tools' hooks are kept, and aw's own entries are replaced. It is safe to rerun.
 func InstallHarnessConfig(owner string) ([]ConfigResult, error) {
 	var out []ConfigResult
-	for _, c := range harnessConfigs {
-		path := filepath.Join(owner, filepath.FromSlash(c.path))
+	for _, c := range sandbox.HarnessFiles {
+		path := filepath.Join(owner, filepath.FromSlash(c.Path))
 		settings := map[string]any{}
 		old, err := os.ReadFile(path)
 		switch {
 		case err == nil:
 			if err := json.Unmarshal(old, &settings); err != nil {
-				return out, fmt.Errorf("%s is not valid JSON (%v), so aw left it alone → fix it, then run aw setup again", c.path, err)
+				return out, fmt.Errorf("%s is not valid JSON (%v), so aw left it alone → fix it, then run aw setup again", c.Path, err)
 			}
 		case !os.IsNotExist(err):
 			return out, err
@@ -203,12 +93,12 @@ func InstallHarnessConfig(owner string) ([]ConfigResult, error) {
 			var kept []any
 			existing, _ := hooks[e.event].([]any)
 			for _, entry := range existing {
-				if !isAWHook(entry) {
+				if !sandbox.IsAWHook(entry) {
 					kept = append(kept, entry)
 				}
 			}
-			group := map[string]any{"hooks": []any{map[string]any{"type": "command", "command": hookCommand(c.harness, e.name)}}}
-			if c.harness == "claude" && e.event == "PreToolUse" {
+			group := map[string]any{"hooks": []any{map[string]any{"type": "command", "command": hookCommand(c.Harness, e.name)}}}
+			if c.Harness == "claude" && e.event == "PreToolUse" {
 				group["matcher"] = "*"
 			}
 			hooks[e.event] = append(kept, group)
@@ -222,7 +112,7 @@ func InstallHarnessConfig(owner string) ([]ConfigResult, error) {
 			return out, err
 		}
 		data := buf.Bytes()
-		res := ConfigResult{Path: c.path, Changed: string(old) != string(data)}
+		res := ConfigResult{Path: c.Path, Changed: string(old) != string(data)}
 		if res.Changed {
 			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 				return out, err

@@ -27,6 +27,7 @@ import (
 	"github.com/connor981332/agent-workspace/internal/harness/launch"
 	"github.com/connor981332/agent-workspace/internal/inspect"
 	"github.com/connor981332/agent-workspace/internal/lanes"
+	"github.com/connor981332/agent-workspace/internal/sandbox"
 	"github.com/connor981332/agent-workspace/internal/state"
 	"github.com/connor981332/agent-workspace/internal/ui"
 	"github.com/connor981332/agent-workspace/internal/workspace"
@@ -65,9 +66,9 @@ func newInspectCmd() *cobra.Command {
 			}
 			inspect.Preflight(cmd.Context(), ws.Owner, c, projects)
 			if asJSON {
-				return writeJSON(cmd.OutOrStdout(), map[string]any{"projects": projects, "other_hooks": app.OtherHooks(ws.Owner)})
+				return writeJSON(cmd.OutOrStdout(), map[string]any{"projects": projects, "other_hooks": sandbox.OtherHooks(ws.Owner)})
 			}
-			for _, h := range app.OtherHooks(ws.Owner) {
+			for _, h := range sandbox.OtherHooks(ws.Owner) {
 				fmt.Fprintf(cmd.OutOrStdout(), "! a hook that is not aw's, which also runs in lanes: %s\n", ui.Clean(h))
 			}
 			for _, p := range projects {
@@ -176,7 +177,7 @@ for what is new or has drifted.`,
 				return err
 			}
 			laneNote, ownerNote := "", ""
-			if others := app.OtherHooks(ws.Owner); len(others) > 0 {
+			if others := sandbox.OtherHooks(ws.Owner); len(others) > 0 {
 				list := strings.Join(others, "\n")
 				ownerNote = "\n\nThese hooks are not aw's, and they run in this checkout. If one refuses your tool calls, say so and ask the human to remove it:\n" + list
 				if keepOtherHooks {

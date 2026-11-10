@@ -12,7 +12,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/connor981332/agent-workspace/internal/app"
 	"github.com/connor981332/agent-workspace/internal/gitx/run"
 	"github.com/connor981332/agent-workspace/internal/sandbox"
 	"github.com/connor981332/agent-workspace/internal/workspace"
@@ -71,8 +70,8 @@ func (m *Manager) materialize(ctx context.Context, root string, plans []repoPlan
 	}
 	if m.AWHooksOnly {
 		// A harness file the commit already has is not otherwise copied, and its hooks would still run.
-		for _, rel := range app.HarnessConfigs() {
-			if !slices.Contains(files, rel) && app.HasOtherHooks(filepath.Join(m.WS.Owner, filepath.FromSlash(rel))) {
+		for _, rel := range sandbox.HarnessConfigs() {
+			if !slices.Contains(files, rel) && sandbox.HasOtherHooks(filepath.Join(m.WS.Owner, filepath.FromSlash(rel))) {
 				files = append(files, rel)
 			}
 		}
@@ -87,8 +86,8 @@ func (m *Manager) materialize(ctx context.Context, root string, plans []repoPlan
 		if err != nil {
 			return fmt.Errorf("copying %s into the lane: %w", rel, err)
 		}
-		if copied && m.AWHooksOnly && slices.Contains(app.HarnessConfigs(), rel) {
-			if err := app.DropOtherHooks(dst); err != nil {
+		if copied && m.AWHooksOnly && slices.Contains(sandbox.HarnessConfigs(), rel) {
+			if err := sandbox.DropOtherHooks(dst); err != nil {
 				return fmt.Errorf("turning off other hooks in %s: %w", rel, err)
 			}
 		}
