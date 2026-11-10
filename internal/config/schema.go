@@ -155,7 +155,7 @@ var schema = table("",
 				"command", str("For provider = \"external\": the provider executable."),
 				"template", str("postgres: the template database lanes are cloned from. Nothing ever connects to it."),
 				"build_template", str("postgres: builds the template when it does not exist, once, however many lanes start together. It runs in "+
-					"the owner checkout with AW_TEMPLATE set, and may use aw run. Without it, a machine with empty volumes has no template."),
+					"the owner checkout with AW_TEMPLATE and AW_OWNER set, and may use aw run. Without it, a machine with empty volumes has no template."),
 				"databases", strList("postgres: the databases each lane gets, named <database>_<lane>."),
 				"url", str("postgres or redis: where the server is, e.g. postgres://postgres@localhost:5432. Keep a password out of "+
 					"the team layer: put this key in the individual layer, or use PGPASSWORD or REDISCLI_AUTH."),
@@ -385,6 +385,11 @@ func walk(d *doc, layer string, v any, n *node, path Path, errs *Errors) {
 		for _, k := range sortedKeys(m) {
 			if n.keyRE != nil && !n.keyRE.MatchString(k) {
 				fail(path.child(k), fmt.Sprintf("%q is not a valid name", k), n.keyFix)
+				continue
+			}
+			if _, isString := m[k].(string); n.elem.kind == kString && !isString {
+				fail(path.child(k), "must be a string, not "+typeName(m[k]),
+					fmt.Sprintf("if %s belongs to the table above, move it before [%s]: a TOML table takes every key after it", k, path))
 				continue
 			}
 			walk(d, layer, m[k], n.elem, path.child(k), errs)
