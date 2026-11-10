@@ -85,6 +85,23 @@ func installClaude(root string, writable []string) (Result, error) {
 	fs["allowWrite"] = have
 	sb["filesystem"] = fs
 	settings["sandbox"] = sb
+	// A lane root reaches each project through a link to a worktree outside it, and Claude Code asks
+	// about every path that resolves outside its working directory.
+	perms, _ := settings["permissions"].(map[string]any)
+	dirs, _ := perms["additionalDirectories"].([]any)
+	before := len(dirs)
+	for _, w := range writable {
+		if filepath.Base(w) != ".git" && !slices.Contains(dirs, any(w)) {
+			dirs = append(dirs, w)
+		}
+	}
+	if len(dirs) > before {
+		if perms == nil {
+			perms = map[string]any{}
+		}
+		perms["additionalDirectories"] = dirs
+		settings["permissions"] = perms
+	}
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
 	enc.SetEscapeHTML(false)
