@@ -512,3 +512,20 @@ func TestUnattachedClassification(t *testing.T) {
 		t.Errorf("no ask: got %s (%s)", d.Verdict, d.Message)
 	}
 }
+
+// A lane may not make branches, and the ref hook refuses only after Git has already moved the
+// files, so the guard refuses first.
+func TestLaneNewBranchRefusedBeforeGitRuns(t *testing.T) {
+	f := newFixture(t)
+	run(t, f.scope(Lane), f.lane, []tcase{
+		{"git switch -c other origin/main", Deny, "git"},
+		{"git switch --create other", Deny, "git"},
+		{"git checkout -b other", Deny, "git"},
+		{"git checkout -B other", Deny, "git"},
+		{"git switch --orphan other", Deny, "git"},
+		{"git switch aw/own", Allow, ""},
+		{"git checkout -- file", Allow, ""},
+	})
+	s := f.scope(Pair)
+	run(t, s, f.owner, []tcase{{"git switch -c other", Allow, ""}})
+}

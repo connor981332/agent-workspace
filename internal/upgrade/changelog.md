@@ -10,6 +10,7 @@ Newest first. A line starting with **Breaking:** is called out by `aw upgrade`.
 ## 0.1.3
 
 - `build_template` commands get `AW_OWNER`.
+- Making a new branch in a lane is refused before Git touches the files, instead of after.
 - A key placed after a string table gets an error that says to move it.
 
 ## 0.1.2
