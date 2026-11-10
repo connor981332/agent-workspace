@@ -7,6 +7,12 @@ Newest first. A line starting with **Breaking:** is called out by `aw upgrade`.
 - `aw upgrade`: moves a workspace to a release, shows this changelog, migrates configuration, and regenerates managed files. A managed file edited by hand is never overwritten.
 - Homebrew tap, and a Renovate preset.
 
+## 0.1.3
+
+- `build_template` commands get `AW_OWNER`.
+- Making a new branch in a lane is refused before Git touches the files, instead of after.
+- A key placed after a string table gets an error that says to move it.
+
 ## 0.1.2
 
 - `aw onboard` lets its lane's agent run `bin/aw rehearse` without a Claude Code permission prompt, through one allow rule in that lane's own gitignored settings.

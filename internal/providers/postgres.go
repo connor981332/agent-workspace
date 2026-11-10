@@ -163,7 +163,7 @@ func (p *postgres) ensureTemplate(ctx context.Context) error {
 	}
 	cmd := exec.CommandContext(ctx, "sh", "-c", p.data.BuildTemplate)
 	cmd.Dir = p.owner
-	cmd.Env = append(os.Environ(), "AW_TEMPLATE="+p.data.Template, "AW_PHASE=data")
+	cmd.Env = append(os.Environ(), "AW_TEMPLATE="+p.data.Template, "AW_PHASE=data", "AW_OWNER="+p.owner)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		text := strings.TrimSpace(string(output))

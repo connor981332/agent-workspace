@@ -56,7 +56,7 @@ Per-lane data, owned by a provider. The key names the data, e.g. db.
 | `provider` | one of `"postgres"`, `"redis"`, `"external"` | — | postgres, redis, or external (through the extension protocol). |
 | `command` | string | — | For provider = "external": the provider executable. |
 | `template` | string | — | postgres: the template database lanes are cloned from. Nothing ever connects to it. |
-| `build_template` | string | — | postgres: builds the template when it does not exist, once, however many lanes start together. It runs in the owner checkout with AW_TEMPLATE set, and may use aw run. Without it, a machine with empty volumes has no template. |
+| `build_template` | string | — | postgres: builds the template when it does not exist, once, however many lanes start together. It runs in the owner checkout with AW_TEMPLATE and AW_OWNER set, and may use aw run. Without it, a machine with empty volumes has no template. |
 | `databases` | array of strings | — | postgres: the databases each lane gets, named <database>_<lane>. |
 | `url` | string | — | postgres or redis: where the server is, e.g. postgres://postgres@localhost:5432. Keep a password out of the team layer: put this key in the individual layer, or use PGPASSWORD or REDISCLI_AUTH. |
 | `terminate` | boolean | `false` | postgres: end other connections to a database before dropping or restoring it. |

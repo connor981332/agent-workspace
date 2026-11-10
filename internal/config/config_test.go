@@ -308,3 +308,20 @@ func TestParseDuration(t *testing.T) {
 		}
 	}
 }
+
+// A key after a [table] belongs to that table in TOML, which reads as a strange error about a key
+// nobody meant to put there, so the error says how it happened.
+func TestKeyAfterAStringTableSaysToMoveIt(t *testing.T) {
+	_, err := LoadBytes("/ws/workspace.toml", []byte(`[workspace]
+name = "a"
+namespace = "a"
+schema = 1
+
+[projects.web.accepted_findings]
+"ci/**" = "reviewed"
+generated = ["node_modules"]
+`))
+	if err == nil || !strings.Contains(err.Error(), "move it before [projects.web.accepted_findings]") {
+		t.Fatalf("got: %v", err)
+	}
+}

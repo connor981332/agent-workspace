@@ -411,6 +411,11 @@ func gitRule(s Scope, c shell.Command) Decision {
 		if hasArg(args, "--force", "--discard-changes") || hasShortFlag(args, 'f') {
 			return destructive("discards uncommitted work")
 		}
+		// The ref hook refuses this too, but only after Git has moved the files, which leaves the
+		// worktree full of staged changes. Refusing here leaves it untouched.
+		if s.Role == Lane && hasArg(args, "-c", "-C", "--create", "--force-create", "--orphan", "-b", "-B") {
+			return deny("git", "git %s here would make a new branch, and a lane works only on its own branch → commit on this one, or run bin/aw attach from a new session for separate work", sub)
+		}
 	case "stash":
 		if st, _ := subcommand(args); st == "drop" || st == "clear" {
 			return destructive("deletes stashed work")
