@@ -7,6 +7,11 @@ Newest first. A line starting with **Breaking:** is called out by `aw upgrade`.
 - `aw upgrade`: moves a workspace to a release, shows this changelog, migrates configuration, and regenerates managed files. A managed file edited by hand is never overwritten.
 - Homebrew tap, and a Renovate preset.
 
+## 0.1.2
+
+- `aw onboard` lets its lane's agent run `bin/aw rehearse` without a Claude Code permission prompt, through one allow rule in that lane's own gitignored settings.
+- The onboarding skill runs the rehearsal exactly as that rule expects.
+
 ## 0.1.1
 
 - `aw rehearse <lane>`, or `aw rehearse` from inside a lane, tests a lane's proposal in a throwaway copy with its own containers, without touching your checkout. The agent onboarding a workspace can run it for its own lane.

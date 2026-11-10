@@ -129,6 +129,9 @@ Nothing needs to be committed first. The agent works in a lane when the workspac
 commit to start from, and its result stays on the lane's branch for review. In a workspace kept as
 plain files it works in the owner checkout as a pair session.
 
+The agent may run aw rehearse in its lane without a permission prompt: aw adds that one rule to the
+lane's own gitignored Claude Code settings, and it goes away with the lane.
+
 Hooks that are not aw's are turned off in the onboarding lane, because another system's guard can
 refuse everything in a lane, and the agent is told which ones. Your checkout keeps them.
 
@@ -190,10 +193,13 @@ for what is new or has drifted.`,
 			}
 			m := &lanes.Manager{WS: ws, Cfg: c}
 			var failed error
+			if m.CanReview(cmd.Context()) {
+				fmt.Fprintf(errOut, "aw onboard: letting this lane's agent run %s without asking, in this lane only, so that it can test its own proposal in a throwaway copy\n", sandbox.RehearseCommand)
+			}
 			if !m.CanReview(cmd.Context()) {
 				prompt += ownerNote + "\n\nThis workspace is not in a Git repository with a commit, so there is no lane branch to review: you are a pair session in the owner checkout. Leave your changes there, and report them."
 			} else {
-				failed = startLaneSession(cmd, purpose, harness, "", "", false, !keepOtherHooks, launch.PromptArgs(harness, prompt+laneNote))
+				failed = startLaneSession(cmd, purpose, harness, "", "", false, !keepOtherHooks, true, launch.PromptArgs(harness, prompt+laneNote))
 				if failed == nil {
 					return nil
 				}
