@@ -219,7 +219,11 @@ func NewDevcontainer(c *config.Config, owner, project, stateDir string) (*Devcon
 	}
 	slices.Sort(env)
 	files, _ := filepath.Glob(filepath.Join(dir, ".devcontainer", "*.y*ml"))
-	env = append(env, ComposeEnv(files, c.Ports.Offset, workspace.IsRehearsal(owner), c.Workspace.Namespace+"-dev-net")...)
+	rehearsal := ""
+	if workspace.IsRehearsal(owner) {
+		rehearsal = c.Workspace.Namespace
+	}
+	env = append(env, ComposeEnv(files, c.Ports.Offset, rehearsal)...)
 	compose := ComposeName(dir)
 	if workspace.IsRehearsal(owner) {
 		// The folder has the owner's name, so its container must not take the owner's Compose name.

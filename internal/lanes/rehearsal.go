@@ -108,7 +108,7 @@ func (m *Manager) BuildRehearsal(ctx context.Context, l state.Lane, id string, s
 		return r, fmt.Errorf("the lane's configuration is invalid: %w", err)
 	}
 	if problems := checkIsolated(r.Owner, r.Cfg); len(problems) > 0 {
-		return r, fmt.Errorf("this proposal is not isolated, so a rehearsal could reach your real containers and data, and nothing was started:\n  %s\n→ read host ports as ${AW_PORT_<n>:-<n>}, the shared network's name as ${AW_INFRA_NETWORK:-<name>}, and in scripts the infrastructure's Compose project as ${AW_INFRA_PROJECT:-<name>} (aw sets these in a rehearsal)", strings.Join(problems, "\n  "))
+		return r, fmt.Errorf("this proposal is not isolated, so a rehearsal could reach your real containers and data, and nothing was started:\n  %s\n→ remove a devcontainer's port when a seat publishes it, and otherwise read host ports as ${AW_PORT_<n>:-<n>}, the shared network's name as ${AW_INFRA_NETWORK:-<name>}, and in scripts the infrastructure's Compose project as ${AW_INFRA_PROJECT:-<name>} (aw sets these in a rehearsal)", strings.Join(problems, "\n  "))
 	}
 	for _, name := range sortedKeys(r.Cfg.Projects) {
 		p := r.Cfg.Projects[name]
@@ -284,7 +284,11 @@ func checkIsolated(owner string, c *config.Config) []string {
 			switch {
 			case strings.Contains(line, "$"):
 			case literalPort.MatchString(line), publishedPort.MatchString(line):
-				problems = append(problems, at+": a fixed host port: "+strings.TrimSpace(line))
+				what := "a fixed host port: "
+				if strings.Contains(filepath.ToSlash(f), "/.devcontainer/") {
+					what = "a fixed host port, which aw already publishes if it is a seat's, so remove it then: "
+				}
+				problems = append(problems, at+": "+what+strings.TrimSpace(line))
 			case containerName.MatchString(line):
 				problems = append(problems, at+": a fixed container name: "+strings.TrimSpace(line))
 			case externalTrue.MatchString(line) && !nearbyVariableName(lines, i):
