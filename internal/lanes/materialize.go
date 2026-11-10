@@ -2,6 +2,7 @@ package lanes
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -58,6 +59,9 @@ func (m *Manager) materialize(ctx context.Context, root string, plans []repoPlan
 	var list strings.Builder
 	for _, rel := range files {
 		src, dst := filepath.Join(m.WS.Owner, filepath.FromSlash(rel)), filepath.Join(root, filepath.FromSlash(rel))
+		if inGit >= 0 {
+			os.Remove(dst) // the commit's version of a file the owner checkout has changed
+		}
 		copied, err := copyOne(src, dst)
 		if err != nil {
 			return fmt.Errorf("copying %s into the lane: %w", rel, err)
@@ -89,22 +93,27 @@ func (m *Manager) materialize(ctx context.Context, root string, plans []repoPlan
 	return addExcludes(filepath.Join(common, "info", "exclude"), excludes)
 }
 
-// uncommitted lists the workspace files the owner checkout has and the lane's commit does not.
+// uncommitted lists the workspace files the owner checkout has and the lane's commit does not, or has
+// differently: aw setup edits files such as .claude/settings.json, and a lane needs its hooks.
 func uncommitted(ctx context.Context, p repoPlan) ([]string, error) {
 	g := run.In(p.owner)
 	type listing struct {
 		text string
 		err  error
 	}
-	tree := make(chan listing, 1)
+	tree, changed := make(chan listing, 1), make(chan listing, 1)
 	go func() { // at once, because every claim comes through here
 		text, err := g.Run(ctx, "ls-tree", "-r", "-z", "--name-only", p.baseSHA)
 		tree <- listing{text, err}
 	}()
+	go func() {
+		text, err := g.Run(ctx, append([]string{"diff", "-z", "--name-only", p.baseSHA, "--"}, workspaceRoots...)...)
+		changed <- listing{text, err}
+	}()
 	have, err := g.Run(ctx, append([]string{"ls-files", "-z", "--cached", "--others", "--exclude-standard", "--"}, workspaceRoots...)...)
-	done := <-tree
+	done, edits := <-tree, <-changed
 	if err == nil {
-		err = done.err
+		err = errors.Join(done.err, edits.err)
 	}
 	if err != nil {
 		return nil, err
@@ -114,9 +123,13 @@ func uncommitted(ctx context.Context, p repoPlan) ([]string, error) {
 	for _, f := range strings.Split(base, "\x00") {
 		committed[f] = true
 	}
+	edited := map[string]bool{}
+	for _, f := range strings.Split(edits.text, "\x00") {
+		edited[f] = true
+	}
 	var out []string
 	for _, f := range strings.Split(have, "\x00") {
-		if f != "" && !committed[f] && !neverCopied(f) {
+		if f != "" && (!committed[f] || edited[f]) && !neverCopied(f) {
 			if _, err := os.Lstat(filepath.Join(p.owner, filepath.FromSlash(f))); err == nil {
 				out = append(out, f)
 			}
@@ -180,10 +193,20 @@ func copyOne(src, dst string) (bool, error) {
 
 // removeMaterialized deletes the copies still as aw wrote them, and the list.
 func removeMaterialized(worktree string) {
-	for _, rel := range workspace.UnchangedMaterialized(worktree) {
+	unchanged := workspace.UnchangedMaterialized(worktree)
+	for _, rel := range unchanged {
 		os.Remove(filepath.Join(worktree, filepath.FromSlash(rel)))
 	}
 	os.Remove(filepath.Join(worktree, filepath.FromSlash(workspace.MaterializedPath)))
+	if len(unchanged) == 0 {
+		return
+	}
+	// A copy that replaced a tracked file goes back to the commit's version.
+	g, ctx := run.In(worktree), context.Background()
+	tracked, _ := g.Run(ctx, append([]string{"ls-files", "-z", "--"}, unchanged...)...)
+	if files := strings.FieldsFunc(tracked, func(r rune) bool { return r == 0 }); len(files) > 0 {
+		g.Run(ctx, append([]string{"checkout", "-q", "--"}, files...)...)
+	}
 }
 
 // copyLocalFiles copies a project's declared local files into its new worktree: a clone where the

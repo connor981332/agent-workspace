@@ -611,7 +611,7 @@ func (m *Manager) Resolve(ref string) (state.Lane, error) {
 	case 1:
 		return prefix[0], nil
 	case 0:
-		return state.Lane{}, fmt.Errorf("there is no lane named %q → run aw to list the lanes", ref)
+		return state.Lane{}, fmt.Errorf("there is no lane named %q → aw lanes lists them", ref)
 	}
 	var names []string
 	for _, l := range prefix {

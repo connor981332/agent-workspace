@@ -177,8 +177,8 @@ func UnchangedMaterialized(worktree string) []string {
 	return out
 }
 
-// WithoutMaterialized removes from `git status --porcelain=v1 -uall` output the untracked copies
-// aw itself put in this worktree, so they do not count as uncommitted work.
+// WithoutMaterialized removes from `git status --porcelain=v1 -uall` output the copies aw itself put
+// in this worktree, new files or changes to tracked ones, so they do not count as uncommitted work.
 func WithoutMaterialized(worktree, status string) string {
 	unchanged := UnchangedMaterialized(worktree)
 	if len(unchanged) == 0 || status == "" {
@@ -186,7 +186,7 @@ func WithoutMaterialized(worktree, status string) string {
 	}
 	var kept []string
 	for _, line := range strings.Split(strings.TrimRight(status, "\n"), "\n") {
-		if path, ok := strings.CutPrefix(line, "?? "); ok && slices.Contains(unchanged, path) {
+		if len(line) > 3 && (line[:3] == "?? " || line[:3] == " M ") && slices.Contains(unchanged, line[3:]) {
 			continue
 		}
 		kept = append(kept, line)
