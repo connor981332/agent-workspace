@@ -1,0 +1,37 @@
+# On a machine with empty volumes there is no template. build_template makes it once, and a command
+# that does not make it is an error that says so.
+# req: R33
+# source: rehearsing RideTracker on fresh infrastructure
+# milestone: M12
+
+stubs psql
+workspace solo --single --init
+exec aw attach 'one'
+exec aw attach 'two'
+cd .worktrees/01
+exec aw run solo true
+cd ../02
+exec aw run solo true
+cd ../..
+grep 'CREATE DATABASE "shop_01" TEMPLATE "shop_template"' $STUB_LOG
+exec sh -c 'wc -l < $WORK/builds'
+stdout '^ *1$'
+
+-- workspace.toml --
+[workspace]
+name = "Solo"
+namespace = "solo"
+schema = 1
+
+[lanes]
+pool = 0
+
+[lanes.data.db]
+provider = "postgres"
+url = "postgres://postgres@localhost:5432"
+template = "shop_template"
+build_template = 'echo x >> "$WORK/builds"; mkdir -p "$STUB_STATE/pg"; echo built > "$STUB_STATE/pg/$AW_TEMPLATE"'
+databases = ["shop"]
+
+[projects.solo]
+directory = "."

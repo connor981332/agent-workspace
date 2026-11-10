@@ -73,14 +73,15 @@ type Lanes struct {
 }
 
 type Data struct {
-	Provider  string            `json:"provider"`
-	Command   string            `json:"command"`
-	Template  string            `json:"template"`
-	Databases []string          `json:"databases"`
-	URL       string            `json:"url"`
-	Terminate bool              `json:"terminate"`
-	Service   string            `json:"service"`
-	Env       map[string]string `json:"env"`
+	Provider      string            `json:"provider"`
+	Command       string            `json:"command"`
+	Template      string            `json:"template"`
+	BuildTemplate string            `json:"build_template"`
+	Databases     []string          `json:"databases"`
+	URL           string            `json:"url"`
+	Terminate     bool              `json:"terminate"`
+	Service       string            `json:"service"`
+	Env           map[string]string `json:"env"`
 }
 
 // Role is a team role's permissions (R65).
@@ -677,6 +678,9 @@ func (c *Config) check(team *doc) Errors {
 				fail(p.child("provider"), "is external but there is no command", `add command = "<provider executable>"`)
 			}
 		case "postgres":
+			if d.BuildTemplate != "" && d.Template == "" {
+				fail(p.child("build_template"), "has no template to build", `add template = "<name>", or remove build_template`)
+			}
 			if len(d.Databases) == 0 {
 				fail(p, "is a postgres provider with no databases", `add databases = ["<name>"]`)
 			}

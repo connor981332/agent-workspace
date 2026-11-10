@@ -154,6 +154,8 @@ var schema = table("",
 				"provider", str("postgres, redis, or external (through the extension protocol).").oneOf("postgres", "redis", "external"),
 				"command", str("For provider = \"external\": the provider executable."),
 				"template", str("postgres: the template database lanes are cloned from. Nothing ever connects to it."),
+				"build_template", str("postgres: builds the template when it does not exist, once, however many lanes start together. It runs in "+
+					"the owner checkout with AW_TEMPLATE set, and may use aw run. Without it, a machine with empty volumes has no template."),
 				"databases", strList("postgres: the databases each lane gets, named <database>_<lane>."),
 				"url", str("postgres or redis: where the server is, e.g. postgres://postgres@localhost:5432. Keep a password out of "+
 					"the team layer: put this key in the individual layer, or use PGPASSWORD or REDISCLI_AUTH."),
