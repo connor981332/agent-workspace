@@ -9,6 +9,10 @@ Newest first. A line starting with **Breaking:** is called out by `aw upgrade`.
 
 ## 0.1.4
 
+- **Breaking:** aw now regulates only its own lanes, seats and state. Guards on destructive Git, publishing, secrets, processes and containers are off unless you turn them on with `[safeguards] enable = ["git-safety", "publication", "secrets", "processes", "containers"]` in `workspace.toml`, so add that to keep them.
+- `aw init` no longer pre-authorizes publishing, and generated instructions mention publishing only when that safeguard is on.
+- `aw onboard` keeps hooks that are not aw's in its lane. `--without-other-hooks` replaces `--keep-other-hooks`.
+- A command aw cannot read is refused only when a rule in force depends on it.
 - `aw rehearse` now checks every project's Compose files and custom data providers, not only `infra/` and devcontainers, and refuses a proposal that could reach real containers or data. A host project's Compose files get a project name of their own in a rehearsal.
 - Custom data providers are told a rehearsal's names, and the object-store module's provider uses them. Reinstall the module to get this: an older copy now stops the rehearsal.
 

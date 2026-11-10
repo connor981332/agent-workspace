@@ -5,6 +5,7 @@
 
 owner-may-change
 workspace solo --single --init
+safeguards
 exec aw add module mail-catcher
 exec aw attach 'one'
 cd .worktrees/01

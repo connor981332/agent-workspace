@@ -198,6 +198,7 @@ func resolveScope(p Payload, version string, t *timing.Recorder) (*policy.Scope,
 		scope.Guards = append(scope.Guards, tg)
 	}
 	scope.Publication = cfg.Publication.Allow
+	scope.Safeguards = cfg.Safeguards.Enable
 
 	s, err := state.Open(stateDir, state.ReadOnly)
 	switch {

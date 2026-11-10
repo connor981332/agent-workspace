@@ -117,10 +117,10 @@ func doctorProjects(cmd *cobra.Command, asJSON bool) error {
 }
 
 func newOnboardCmd() *cobra.Command {
-	var review, keepOtherHooks bool
+	var review, dropOtherHooks bool
 	var harness string
 	cmd := &cobra.Command{
-		Use:   "onboard [--review] [--harness h] [--keep-other-hooks]",
+		Use:   "onboard [--review] [--harness h] [--without-other-hooks]",
 		Short: "Set this workspace up, and have an agent design its configuration for you to review",
 		Long: `The one command to start with. It runs everything aw setup does, reports what aw inspect finds, and
 then starts a harness with the workspace-design skill. If setup or creating the lane fails, the agent
@@ -184,12 +184,12 @@ for what is new or has drifted.`,
 			if others := sandbox.OtherHooks(ws.Owner); len(others) > 0 {
 				list := strings.Join(others, "\n")
 				ownerNote = "\n\nThese hooks are not aw's, and they run in this checkout. If one refuses your tool calls, say so and ask the human to remove it:\n" + list
-				if keepOtherHooks {
-					fmt.Fprintf(errOut, "aw onboard: keeping hooks that are not aw's, as asked. They run in the lane too:\n  %s\n", strings.Join(others, "\n  "))
-					laneNote = "\n\nThese hooks are not aw's, and they run in this lane too, because the human kept them:\n" + list
-				} else {
-					fmt.Fprintf(errOut, "aw onboard: turning off hooks that are not aw's, in the onboarding lane only, because another system's guard can refuse everything in a lane. Your checkout keeps them, and --keep-other-hooks leaves them on:\n  %s\n", strings.Join(others, "\n  "))
+				if dropOtherHooks {
+					fmt.Fprintf(errOut, "aw onboard: turning off hooks that are not aw's, in the onboarding lane only, as asked. Your checkout keeps them:\n  %s\n", strings.Join(others, "\n  "))
 					laneNote = "\n\nThese hooks are not aw's, and aw turned them off in this lane only. Decide whether the workspace should keep each one, and change the harness files on your branch to match:\n" + list
+				} else {
+					fmt.Fprintf(errOut, "aw onboard: these hooks are not aw's and they run in the lane too. If one refuses everything there, run aw onboard --without-other-hooks:\n  %s\n", strings.Join(others, "\n  "))
+					laneNote = "\n\nThese hooks are not aw's, and they run in this lane too:\n" + list
 				}
 			}
 			m := &lanes.Manager{WS: ws, Cfg: c}
@@ -200,7 +200,7 @@ for what is new or has drifted.`,
 			if !m.CanReview(cmd.Context()) {
 				prompt += ownerNote + "\n\nThis workspace is not in a Git repository with a commit, so there is no lane branch to review: you are a pair session in the owner checkout. Leave your changes there, and report them."
 			} else {
-				failed = startLaneSession(cmd, purpose, harness, "", "", false, !keepOtherHooks, true, launch.PromptArgs(harness, prompt+laneNote))
+				failed = startLaneSession(cmd, purpose, harness, "", "", false, dropOtherHooks, true, launch.PromptArgs(harness, prompt+laneNote))
 				if failed == nil {
 					return nil
 				}
@@ -220,7 +220,7 @@ for what is new or has drifted.`,
 	}
 	cmd.Flags().BoolVar(&review, "review", false, "propose changes only for what is new or has drifted")
 	cmd.Flags().StringVar(&harness, "harness", "", "the harness to launch")
-	cmd.Flags().BoolVar(&keepOtherHooks, "keep-other-hooks", false, "leave hooks that are not aw's on in the onboarding lane")
+	cmd.Flags().BoolVar(&dropOtherHooks, "without-other-hooks", false, "turn off hooks that are not aw's in the onboarding lane")
 	return cmd
 }
 

@@ -55,8 +55,10 @@ func newFixture(t testing.TB) fixture {
 	return f
 }
 
+var allSafeguards = []string{"git-safety", "publication", "secrets", "processes", "containers"}
+
 func (f fixture) scope(role Role) Scope {
-	s := Scope{Role: role, Owner: f.owner, Home: f.home, LaneName: "checkout-tax",
+	s := Scope{Role: role, Owner: f.owner, Home: f.home, LaneName: "checkout-tax", Safeguards: allSafeguards,
 		Secrets: []string{filepath.Join(f.owner, "api", ".env"), filepath.Join(f.owner, "api", ".worktrees", "01", ".env")},
 		Servers: []ServerCommand{{Name: "web.dev", Words: []string{"npm", "run", "dev", "--", "--port", "{port}"}}},
 	}
@@ -405,7 +407,7 @@ func TestTeamGuards(t *testing.T) {
 		{Name: "schema", Paths: []string{"web/db/schema.rb", "**/*.lock"}, Message: "generated"},
 		{Name: "gone", Commands: [][]string{{"deploy"}}, Ask: true, Message: "ask", Requires: []string{"missing/file"}},
 	}
-	pair := Scope{Role: Pair, Owner: f.owner, Home: f.home, AskSupported: true, Guards: guards}
+	pair := Scope{Role: Pair, Owner: f.owner, Home: f.home, AskSupported: true, Guards: guards, Safeguards: allSafeguards}
 	for cmd, want := range map[string]Verdict{
 		"terraform plan":                 Allow,
 		"terraform apply":                Deny,
@@ -425,7 +427,7 @@ func TestTeamGuards(t *testing.T) {
 			t.Errorf("%s: got %v (%s), want %v", cmd, d.Verdict, d.Message, want)
 		}
 	}
-	lane := Scope{Role: Lane, Owner: f.owner, Home: f.home, LaneRoot: f.lane, LaneName: "x", Guards: guards,
+	lane := Scope{Role: Lane, Owner: f.owner, Home: f.home, LaneRoot: f.lane, LaneName: "x", Guards: guards, Safeguards: allSafeguards,
 		LaneDirs: []string{f.lane, f.state, filepath.Join(f.owner, "web", ".worktrees", "01"), filepath.Join(f.owner, "api", ".worktrees", "01")}}
 	if d := Decide(lane, Call{Tool: Write, Cwd: f.lane, Paths: []string{"web/db/schema.rb"}}); d.Rule != "team-guard" {
 		t.Errorf("a lane's copy through its link: %+v", d)
@@ -556,5 +558,23 @@ func TestMergeByNumberExplainsWhyItAsks(t *testing.T) {
 	}
 	if d := Decide(s, Call{Tool: Shell, Cwd: f.lane, Command: "glab mr merge --auto-merge --yes"}); d.Verdict != Allow {
 		t.Errorf("own merge request: got %s: %s", d.Verdict, d.Message)
+	}
+}
+
+func TestUnreadableCommandsOnlyMatterToARuleInForce(t *testing.T) {
+	f := newFixture(t)
+	pair := Scope{Role: Pair, Owner: f.owner, Home: f.home, AskSupported: true}
+	un := Scope{Role: Unattached, Owner: f.owner, Home: f.home, AskSupported: true}
+	const broken = "echo $("
+	call := Call{Tool: Shell, Cwd: f.owner, Command: broken}
+	if d := Decide(pair, call); d.Verdict != Allow {
+		t.Errorf("a pair session with no safeguards: %v %s", d.Verdict, d.Message)
+	}
+	if d := Decide(un, call); d.Verdict != Ask {
+		t.Errorf("an unattached session: %v %s", d.Verdict, d.Message)
+	}
+	pair.Safeguards = allSafeguards
+	if d := Decide(pair, call); d.Verdict != Deny {
+		t.Errorf("a pair session with safeguards on: %v %s", d.Verdict, d.Message)
 	}
 }

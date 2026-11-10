@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/connor981332/agent-workspace/internal/config"
@@ -47,8 +48,13 @@ This workspace runs several agents in parallel, each in its own lane.
 - If your working directory stays where it was, start each shell command with ` + "`cd <lane root> &&`" + ` and use absolute paths inside the lane for file tools.
 - ` + "`bin/aw lanes`" + ` lists the lanes, and ` + "`bin/aw whoami`" + ` shows where you are. ` + "`bin/aw run <project> <command>`" + ` runs a command with the lane's environment.
 - When you stop, run ` + "`bin/aw finish`" + ` so that the next session can pick up the work.
-- To publish a lane's work, run these from the project's worktree: ` + "`git push -u origin HEAD`" + `, then ` + "`gh pr create`" + ` or ` + "`glab mr create`" + `. To comment on or merge the lane's own merge request, name no number (` + "`gh pr merge`" + `, ` + "`glab mr merge`" + `), so that it means this lane's branch. Where the workspace pre-authorizes publishing, these need no approval.
-- When aw refuses something, its message says what to do instead. If the human asked for this work, ask them to approve it and carry on. Do not stop at the refusal, and do not reach the same result by another route.`
+- When aw refuses something, its message says what to do instead.`
+
+// publishing is added when the publication safeguard is on, and carefully is added with any safeguard:
+// without them aw has no opinion about either.
+const publishing = `- To publish a lane's work, run these from the project's worktree: ` + "`git push -u origin HEAD`" + `, then ` + "`gh pr create`" + ` or ` + "`glab mr create`" + `. To comment on or merge the lane's own merge request, name no number (` + "`gh pr merge`" + `, ` + "`glab mr merge`" + `), so that it means this lane's branch. Where the workspace pre-authorizes publishing, these need no approval.`
+
+const carefully = ` If the human asked for this work, ask them to approve it and carry on. Do not stop at the refusal, and do not reach the same result by another route.`
 
 // Result says what aw setup did to one file.
 type Result struct {
@@ -74,6 +80,12 @@ func body(owner string) (string, error) {
 		return "", err
 	}
 	text := framework
+	if c, err := config.Load(owner); err == nil && len(c.Safeguards.Enable) > 0 {
+		text += carefully
+		if slices.Contains(c.Safeguards.Enable, "publication") {
+			text += "\n" + publishing
+		}
+	}
 	if t := strings.TrimSpace(string(team)); t != "" {
 		text += "\n\n" + t
 	}

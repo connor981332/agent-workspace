@@ -70,8 +70,7 @@ session**.
   directly started session in the owner checkout a pair session. `aw new` still gives lanes.
 - **Writes** in the owner checkout are allowed. No lane is claimed.
 - **Resources.** A pair session acts for the owner: its `aw serve` uses seat 0 and preempts agents.
-- **Still refused:** destructive Git (force pushes, deleting branches, `reset --hard` over
-  uncommitted changes), outward-facing forge actions beyond the publication policy, and changes to the
+- **Still refused:** whatever the enabled safeguards refuse, and changes to the
   workspace's own instructions, hooks, guards and configuration, which still need review. Pairing
   grants the checkout, not ownership of the workspace. This covers file tools, shell redirects and
   the common file commands. Writing inside a Git directory is refused, not asked, because `aw`'s

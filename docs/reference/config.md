@@ -223,9 +223,17 @@ Team roles (R65). A lane takes one with aw new --role. No role can override path
 | `deny` | array of strings | — | Capabilities this role does not have: publish, merge, servers. |
 | `instructions` | string | — | A file, from the workspace root, whose text a session in this role receives when it starts. |
 
+## `[safeguards]`
+
+Optional rules. None is on by default: aw regulates only its own lanes, seats and state, and leaves the rest to the harness and the forge.
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `enable` | array of strings | — | Groups to turn on: git-safety (destructive Git), publication (ask before anything outward-facing), secrets, processes (kill and the like), containers. *Team only.* |
+
 ## `[publication]`
 
-What agents may publish without asking. The default asks before anything outward-facing (R72).
+With the publication safeguard on, what agents may publish without asking (R72).
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|

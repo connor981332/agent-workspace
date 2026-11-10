@@ -5,6 +5,7 @@
 # milestone: M9
 
 workspace shop --init --forge github
+safeguards
 exec aw attach 'one'
 lane-commit 01 web/a.txt 'consumer'
 lane-commit 01 api/b.txt 'producer'

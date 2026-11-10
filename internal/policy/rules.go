@@ -27,7 +27,7 @@ var shells = map[string]bool{"sh": true, "bash": true, "zsh": true, "dash": true
 // command that changes files named by a value only known when it runs, and commands fed to a shell
 // on its standard input.
 func computedRule(s Scope, c shell.Command) Decision {
-	if len(c.Args) == 0 {
+	if len(c.Args) == 0 || (s.Role == Pair && !s.mustRead()) {
 		return allow()
 	}
 	if !c.Args[0].Known {
@@ -378,21 +378,33 @@ func gitRule(s Scope, c shell.Command) Decision {
 		return allow()
 	}
 	config, sub, args, unknown := gitGlobal(c.Args[1:])
+	// What a lane shares with the owner checkout is aw's concern. The rest is the team's choice.
+	safety := s.safeguard("git-safety")
+	shared := s.Role == Lane || safety
 	if unknown {
+		if !shared {
+			return allow()
+		}
 		return deny("git", "this git command has an option aw cannot determine, so it is refused → write its options literally")
 	}
 	for _, kv := range config {
 		key, _, _ := strings.Cut(strings.ToLower(kv), "=")
-		if key == "core.hookspath" || key == "core.fsmonitor" || key == "core.sshcommand" || strings.HasPrefix(key, "alias.") {
+		if shared && (key == "core.hookspath" || key == "core.fsmonitor" || key == "core.sshcommand" || strings.HasPrefix(key, "alias.")) {
 			return deny("git", "git -c %s changes how Git runs hooks or commands, which bypasses the workspace's protections → run git without it", key)
 		}
 	}
 	refused := func(what string) Decision {
+		if !safety {
+			return allow()
+		}
 		return deny("git", "git %s %s, which agents do not do → ask the human to do it, or leave it for review", sub, what)
 	}
 	// In a lane the work is the agent's own, so the human can approve it there. The owner checkout is
 	// the human's, and force pushes and deleted branches cannot be taken back.
 	destructive := func(what string) Decision {
+		if !safety {
+			return allow()
+		}
 		if s.Role == Lane {
 			return ask("git", "git %s %s, in this lane → approve it if you asked for this", sub, what)
 		}
@@ -465,11 +477,11 @@ func gitRule(s Scope, c shell.Command) Decision {
 			return deny("git", "git worktree %s changes the workspace's worktrees, which aw manages → use aw attach for a lane", st)
 		}
 	case "config":
-		if gitConfigWrites(args) {
+		if shared && gitConfigWrites(args) {
 			return deny("git", "git config writes shared Git configuration, which the owner checkout and every lane use → ask the human")
 		}
 	case "remote":
-		if st, _ := subcommand(args); st != "" && st != "show" && st != "get-url" {
+		if st, _ := subcommand(args); shared && st != "" && st != "show" && st != "get-url" {
 			return deny("git", "git remote %s changes shared Git configuration → ask the human", st)
 		}
 	case "gc", "prune", "repack":
@@ -518,7 +530,7 @@ var containerChanging = map[string]bool{
 // containerRule refuses creating, restarting or stopping containers (F5, R49): they are shared,
 // and their ports and mounts are fixed when they are created.
 func containerRule(s Scope, c shell.Command) Decision {
-	if len(c.Args) == 0 || slices.Contains(s.RoleAllow, "containers") {
+	if len(c.Args) == 0 || !s.safeguard("containers") || slices.Contains(s.RoleAllow, "containers") {
 		return allow()
 	}
 	name := c.Name()
@@ -558,7 +570,7 @@ func containerRule(s Scope, c shell.Command) Decision {
 // killRule refuses stopping processes directly (R58): the owner's processes are on the same
 // machine, and servers belong to aw serve and aw stop.
 func killRule(s Scope, c shell.Command) Decision {
-	if len(c.Args) == 0 {
+	if len(c.Args) == 0 || !s.safeguard("processes") {
 		return allow()
 	}
 	name := c.Name()
@@ -621,11 +633,34 @@ func serverRule(s Scope, c shell.Command) Decision {
 	return allow()
 }
 
+// secretLinkWrite refuses writing through a lane's link to a secret, which would change the owner's
+// file from a lane. That is the lane boundary, so it holds whether or not secrets are guarded.
+func (s Scope) secretLinkWrite(c shell.Command) Decision {
+	if s.Role != Lane {
+		return allow()
+	}
+	targets := writeTargets(c)
+	for _, r := range c.Redirs {
+		if strings.Contains(r.Op, ">") && !isDup(r) {
+			targets = append(targets, r.Target)
+		}
+	}
+	for _, t := range targets {
+		if abs, ok := absolute(t.Text, c.Dir); t.Known && ok && s.isSecret(abs) {
+			return deny("secrets", "%s is a link to the owner's file, which is not changed from a lane → ask the human to change it in the owner checkout", quote(t.Text))
+		}
+	}
+	return allow()
+}
+
 var procEnviron = regexp.MustCompile(`^/proc/(self|thread-self|[0-9]+)(/task/[0-9]+)?/environ$`)
 
 // secretRule refuses reading or echoing secrets (R68, F21): the secret files, the environment,
 // and a process's environ.
 func secretRule(s Scope, c shell.Command) Decision {
+	if !s.safeguard("secrets") {
+		return s.secretLinkWrite(c)
+	}
 	name := c.Name()
 	args := c.Args
 	if len(args) > 0 {
@@ -1206,7 +1241,7 @@ func publicationRule(s Scope, c shell.Command) Decision {
 			return *d
 		}
 	}
-	if what == "" {
+	if what == "" || !s.safeguard("publication") {
 		return allow()
 	}
 	// A refusal reaches the agent and a question reaches the human, so what the agent can fix by

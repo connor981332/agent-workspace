@@ -5,6 +5,7 @@
 # milestone: M3
 
 workspace shop --init
+safeguards
 exec aw attach 'add feature flag'
 cd .worktrees/01
 ! exec awtest-hook bash 'pkill -f rails'
