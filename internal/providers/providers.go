@@ -16,6 +16,7 @@ import (
 
 	"github.com/connor981332/agent-workspace/internal/config"
 	"github.com/connor981332/agent-workspace/internal/state"
+	"github.com/connor981332/agent-workspace/internal/workspace"
 )
 
 // Lane is what a provider knows about the lane it acts on.
@@ -77,13 +78,29 @@ func (s *Set) New(name string) (Provider, error) {
 	}
 	switch d.Provider {
 	case "postgres":
-		return newPostgres(d, s.Cfg.Workspace.Namespace)
+		p, err := newPostgres(d, s.Cfg.Workspace.Namespace)
+		if err == nil {
+			p.onlyProject = s.rehearsalProject()
+		}
+		return p, err
 	case "redis":
-		return newRedis(d)
+		r, err := newRedis(d)
+		if err == nil {
+			r.onlyProject = s.rehearsalProject()
+		}
+		return r, err
 	case "external":
 		return &external{name: name, data: d, owner: s.Owner}, nil
 	}
 	return nil, fmt.Errorf("[lanes.data.%s] has an unknown provider %q → use postgres, redis or external", name, d.Provider)
+}
+
+// rehearsalProject is the Compose project a rehearsal's data must live in, or "" outside a rehearsal.
+func (s *Set) rehearsalProject() string {
+	if workspace.IsRehearsal(s.Owner) {
+		return s.Cfg.Workspace.Namespace + "-infra"
+	}
+	return ""
 }
 
 // Names returns the workspace's data names, sorted.

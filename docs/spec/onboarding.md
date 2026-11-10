@@ -92,7 +92,9 @@ Proposals are checked before anyone reviews them:
 With a lane, or from inside one, `aw rehearse` tests that lane's proposal without touching the owner:
 it builds a throwaway copy of the workspace under `.worktrees/rehearsal-*`, from the lane's heads and
 uncommitted changes, with its own namespace, a port offset and its own containers, and removes it
-afterwards. The agent onboarding a workspace may run it for its own lane, and so needs no human for
+afterwards. aw can only move what it names, so it refuses to start when a Compose file or script fixes a
+host port, a shared network or a real Compose project; those read `AW_PORT_<n>`, `AW_INFRA_NETWORK` and
+`AW_INFRA_PROJECT`, which a rehearsal sets, with the real value as the default. The agent onboarding a workspace may run it for its own lane, and so needs no human for
 the loop.
 
 The skill iterates until rehearsal passes, then stops and reports.

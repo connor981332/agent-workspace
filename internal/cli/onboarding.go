@@ -524,6 +524,7 @@ func rehearseLane(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	copied.Started = true
 	env := rehearsalEnv(exe, copied.Owner)
 	infra := infraOf(&workspace.Workspace{Owner: copied.Owner}, copied.Cfg)
 	if infra.Configured() {
@@ -557,7 +558,7 @@ func rehearsalEnv(exe, dir string) []string {
 func destroyRehearsal(ctx context.Context, r *lanes.Rehearsal, out io.Writer) error {
 	var errs []error
 	ws := &workspace.Workspace{Owner: r.Owner}
-	if r.Cfg != nil {
+	if r.Cfg != nil && r.Started {
 		for _, name := range slices.Sorted(mapsKeys(r.Cfg.Projects)) {
 			if r.Cfg.Projects[name].Runner != "devcontainer" {
 				continue

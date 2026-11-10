@@ -17,8 +17,9 @@ import (
 // redis is the built-in provider: a database number per lane, which is the lane's number. The owner
 // uses database 0. It keeps no snapshots: Redis has no cheap copy.
 type redis struct {
-	data *config.Data
-	u    *url.URL
+	onlyProject string // a rehearsal's own infrastructure, or ""
+	data        *config.Data
+	u           *url.URL
 }
 
 func newRedis(d *config.Data) (*redis, error) {
@@ -41,7 +42,7 @@ func (r *redis) flush(ctx context.Context, number int) error {
 	}
 	var cmd *exec.Cmd
 	if r.data.Service != "" {
-		container, err := findContainer(ctx, r.data.Service)
+		container, err := findContainer(ctx, r.data.Service, r.onlyProject)
 		if err != nil {
 			return err
 		}
@@ -114,11 +115,21 @@ func (r *redis) Describe(_ context.Context, l Lane, _ []string) (string, error) 
 	return "redis database " + strconv.Itoa(l.Number), nil
 }
 
+// containerQuery is the docker ps for a filter. onlyProject keeps a rehearsal inside its own
+// infrastructure: the owner's database is a Compose service of the same name.
+func containerQuery(filter, onlyProject string) []string {
+	args := []string{"ps", "-q", "--filter", filter}
+	if onlyProject != "" {
+		args = append(args, "--filter", "label=com.docker.compose.project="+onlyProject)
+	}
+	return args
+}
+
 // findContainer resolves a service: a Compose service with exactly one running container, or a
 // container of that name. Anything ambiguous is refused, so that aw never picks another project's.
-func findContainer(ctx context.Context, service string) (string, error) {
+func findContainer(ctx context.Context, service, onlyProject string) (string, error) {
 	list := func(filter string) ([]string, error) {
-		out, err := exec.CommandContext(ctx, "docker", "ps", "-q", "--filter", filter, "--filter", "status=running").Output()
+		out, err := exec.CommandContext(ctx, "docker", append(containerQuery(filter, onlyProject), "--filter", "status=running")...).Output()
 		if err != nil {
 			var ee *exec.ExitError
 			if errors.As(err, &ee) {
@@ -135,7 +146,7 @@ func findContainer(ctx context.Context, service string) (string, error) {
 	if len(ids) > 1 {
 		return "", fmt.Errorf("%d running containers are Compose service %s → set service to one exact container name", len(ids), service)
 	}
-	if len(ids) == 0 {
+	if len(ids) == 0 && onlyProject == "" {
 		if ids, err = list("name=^/" + service + "$"); err != nil {
 			return "", err
 		}

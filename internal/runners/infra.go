@@ -7,9 +7,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/connor981332/agent-workspace/internal/workspace"
 )
 
 // Infra is a workspace's shared infrastructure: infra/compose.yaml and infra/compose.d/*.yaml.
@@ -19,15 +22,43 @@ type Infra struct {
 	Network  string
 	Services []string
 	PortEnv  []string // AW_PORT_<n>=<n + offset>, which the Compose files read
+	Offset   int
+	// Rehearsal: this is the infrastructure of a throwaway copy of the workspace.
+	Rehearsal bool
 }
 
 // NewInfra describes the shared infrastructure.
 func NewInfra(owner, namespace string, services []string, ports []int, offset int) *Infra {
-	i := &Infra{Owner: owner, Project: namespace + "-infra", Network: namespace + "-dev-net", Services: services}
+	i := &Infra{Owner: owner, Project: namespace + "-infra", Network: namespace + "-dev-net", Services: services, Offset: offset, Rehearsal: workspace.IsRehearsal(owner)}
 	for _, p := range ports {
 		i.PortEnv = append(i.PortEnv, "AW_PORT_"+strconv.Itoa(p)+"="+strconv.Itoa(p+offset))
 	}
 	return i
+}
+
+var awPortRE = regexp.MustCompile(`AW_PORT_(\d+)`)
+
+// ComposeEnv is what Compose files can read: AW_PORT_<n> for each ${AW_PORT_n:-n} they use, and in a
+// rehearsal AW_INFRA_NETWORK, so that a hand-written file can leave the owner's network alone too.
+func ComposeEnv(files []string, offset int, rehearsal bool, network string) []string {
+	seen := map[string]bool{}
+	var env []string
+	for _, f := range files {
+		data, err := os.ReadFile(f)
+		if err != nil {
+			continue
+		}
+		for _, m := range awPortRE.FindAllStringSubmatch(string(data), -1) {
+			if n, err := strconv.Atoi(m[1]); err == nil && !seen[m[1]] {
+				seen[m[1]] = true
+				env = append(env, "AW_PORT_"+m[1]+"="+strconv.Itoa(n+offset))
+			}
+		}
+	}
+	if rehearsal {
+		env = append(env, "AW_INFRA_NETWORK="+network)
+	}
+	return env
 }
 
 // Configured reports whether the workspace has any shared infrastructure.
@@ -43,7 +74,7 @@ func (i *Infra) compose(ctx context.Context, out io.Writer, args ...string) erro
 	files = append(files, extra...)
 	c := exec.CommandContext(ctx, "docker", append([]string{"compose", "-p", i.Project}, args...)...)
 	c.Dir, c.Stdout, c.Stderr = i.Owner, out, out
-	c.Env = append(append(os.Environ(), i.PortEnv...), "COMPOSE_FILE="+strings.Join(files, ":"), "COMPOSE_PATH_SEPARATOR=:")
+	c.Env = append(append(append(os.Environ(), i.PortEnv...), ComposeEnv(files, i.Offset, i.Rehearsal, i.Network)...), "COMPOSE_FILE="+strings.Join(files, ":"), "COMPOSE_PATH_SEPARATOR=:")
 	if err := c.Run(); err != nil {
 		return fmt.Errorf("docker compose %s failed: %w → its output is above", args[0], err)
 	}

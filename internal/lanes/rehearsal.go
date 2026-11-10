@@ -35,6 +35,7 @@ type Rehearsal struct {
 	Owner      string
 	Namespace  string
 	Cfg        *config.Config
+	Started    bool // something may be running that belongs to the copy
 	individual string
 }
 
@@ -105,6 +106,9 @@ func (m *Manager) BuildRehearsal(ctx context.Context, l state.Lane, id string, s
 	}
 	if r.Cfg, err = config.Load(r.Owner); err != nil {
 		return r, fmt.Errorf("the lane's configuration is invalid: %w", err)
+	}
+	if problems := checkIsolated(r.Owner, r.Cfg); len(problems) > 0 {
+		return r, fmt.Errorf("this proposal is not isolated, so a rehearsal could reach your real containers and data, and nothing was started:\n  %s\n→ read host ports as ${AW_PORT_<n>:-<n>}, the shared network's name as ${AW_INFRA_NETWORK:-<name>}, and in scripts the infrastructure's Compose project as ${AW_INFRA_PROJECT:-<name>} (aw sets these in a rehearsal)", strings.Join(problems, "\n  "))
 	}
 	for _, name := range sortedKeys(r.Cfg.Projects) {
 		p := r.Cfg.Projects[name]
@@ -232,4 +236,118 @@ func (m *Manager) copyPlainRoot(l state.Lane, dst string) error {
 		_, err = copyOne(p, filepath.Join(dst, rel))
 		return err
 	})
+}
+
+var (
+	literalPort   = regexp.MustCompile(`^\s*-\s*["']?(?:[0-9.]+:)?[0-9]+:[0-9]+`)
+	publishedPort = regexp.MustCompile(`^\s*published:\s*["']?[0-9]`)
+	containerName = regexp.MustCompile(`^\s*container_name:\s*[^$\s]`)
+	externalTrue  = regexp.MustCompile(`^\s*external:\s*true`)
+	nameLine      = regexp.MustCompile(`^\s*name:\s*["']?([^"'\s#]+)`)
+	topName       = regexp.MustCompile(`(?m)^name:\s*["']?([^"'$\s#]+)`)
+)
+
+// isolationSkipped are directories that hold no commands a rehearsal would run.
+var isolationSkipped = []string{".git", ".worktrees", ".aw", ".claude", ".agents", ".codex", ".grok", ".opencode", "docs", "plans", "node_modules"}
+
+// checkIsolated finds what would connect a rehearsal to the real workspace: aw can move what it names,
+// but not a port, network or Compose project written into a file. Guards fail closed, so any of
+// these stops the rehearsal before it starts anything.
+func checkIsolated(owner string, c *config.Config) []string {
+	var problems []string
+	var files []string
+	infra, _ := filepath.Glob(filepath.Join(owner, "infra", "*.y*ml"))
+	more, _ := filepath.Glob(filepath.Join(owner, "infra", "compose.d", "*.y*ml"))
+	files = append(infra, more...)
+	roots := []string{owner}
+	for _, name := range sortedKeys(c.Projects) {
+		p := c.Projects[name]
+		if p.Runner == "devcontainer" {
+			f, _ := filepath.Glob(filepath.Join(owner, p.Directory, ".devcontainer", "*.y*ml"))
+			files = append(files, f...)
+			roots = append(roots, filepath.Join(owner, p.Directory, ".devcontainer"))
+		}
+	}
+	names := map[string]bool{}
+	rel := func(f string) string { r, _ := filepath.Rel(owner, f); return filepath.ToSlash(r) }
+	for _, f := range files {
+		data, err := os.ReadFile(f)
+		if err != nil {
+			continue
+		}
+		if m := topName.FindSubmatch(data); m != nil {
+			names[string(m[1])] = true
+		}
+		lines := strings.Split(string(data), "\n")
+		for i, line := range lines {
+			at := fmt.Sprintf("%s:%d", rel(f), i+1)
+			switch {
+			case strings.Contains(line, "$"):
+			case literalPort.MatchString(line), publishedPort.MatchString(line):
+				problems = append(problems, at+": a fixed host port: "+strings.TrimSpace(line))
+			case containerName.MatchString(line):
+				problems = append(problems, at+": a fixed container name: "+strings.TrimSpace(line))
+			case externalTrue.MatchString(line) && !nearbyVariableName(lines, i):
+				problems = append(problems, at+": a fixed shared network")
+			}
+		}
+	}
+	for name, d := range c.Lanes.Data {
+		if (d.Provider == "postgres" || d.Provider == "redis") && d.Service == "" {
+			problems = append(problems, "[lanes.data."+name+"]: connects by URL, which reaches whatever listens there → set service")
+		}
+	}
+	for _, root := range roots {
+		filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
+			if err != nil {
+				return nil
+			}
+			if d.IsDir() {
+				if p != root && (slices.Contains(isolationSkipped, d.Name()) || (root == owner && isProjectDir(owner, p, c))) {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			ext := filepath.Ext(p)
+			if info, err := d.Info(); err != nil || info.Size() > 1<<20 || !info.Mode().IsRegular() || ext == ".md" || ext == ".yaml" || ext == ".yml" || ext == ".toml" || ext == ".crt" {
+				return nil
+			}
+			data, err := os.ReadFile(p)
+			if err != nil {
+				return nil
+			}
+			for i, line := range strings.Split(string(data), "\n") {
+				if strings.Contains(line, "AW_") {
+					continue
+				}
+				for name := range names {
+					if strings.Contains(line, name) {
+						problems = append(problems, fmt.Sprintf("%s:%d: names %s, a real Compose project", rel(p), i+1, name))
+					}
+				}
+			}
+			return nil
+		})
+	}
+	slices.Sort(problems)
+	return slices.Compact(problems)
+}
+
+// nearbyVariableName reports whether an external network's name, just above it, is a variable.
+func nearbyVariableName(lines []string, i int) bool {
+	for j := i - 1; j >= 0 && j >= i-3; j-- {
+		if m := nameLine.FindStringSubmatch(lines[j]); m != nil {
+			return strings.Contains(lines[j], "$")
+		}
+	}
+	return false
+}
+
+func isProjectDir(owner, p string, c *config.Config) bool {
+	for _, pr := range c.Projects {
+		if pr.Directory != "." && filepath.Join(owner, pr.Directory) == p {
+			return true
+		}
+	}
+	return false
 }
