@@ -61,12 +61,11 @@ Prompt, in spirit: *what must change in each project so it works well in lanes?*
 Findings, each with its fix:
 
 - Ports that cannot be set from the environment.
-- Database names that do not vary per lane (candidate 2, finding 9).
+- Database names that do not vary per lane.
 - Fixed Redis databases, queue names, bucket names or file storage paths.
 - Browser cookies scoped to `localhost`, which collide across lanes on different ports. The fix is
   the lane hostname (`AW_HOSTNAME`).
-- Idempotency keys for external providers that can repeat across restored snapshots (candidate 2,
-  finding 17).
+- Idempotency keys for external providers that can repeat across restored snapshots.
 - Secrets read in ways that break through links, or printed in logs.
 - Absolute paths that differ between host and container.
 

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Ported from workspace-candidate-2/tests/stubs/docker.
+# Ported from the earlier shell implementation (see docs/spec/decisions.md).
 # Test double for docker. Logs every call to $STUB_LOG and answers from files
 # under $STUB_STATE:
 #   ps/<compose-project>__<service>   ids `docker ps` returns for those labels

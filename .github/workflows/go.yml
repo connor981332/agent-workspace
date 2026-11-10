@@ -1,17 +1,12 @@
-# CI for the Go release candidate (plans/release-candidate.md §7). It runs alongside candidates.yml,
-# which is left unchanged until the candidates are archived.
+# CI (plans/release-candidate.md §7).
 name: Go
 
 on:
   push:
     branches: [master]
-    paths-ignore:
-      - 'workspace-candidate-*/**'
   pull_request:
     # "edited" reruns the checks when the description changes, for the hot-path check.
     types: [opened, synchronize, reopened, edited]
-    paths-ignore:
-      - 'workspace-candidate-*/**'
 
 permissions:
   contents: read
@@ -36,7 +31,7 @@ jobs:
           go-version-file: go.mod
       - name: gofmt
         run: |
-          unformatted=$(gofmt -l $(git ls-files '*.go' ':!:workspace-candidate-*'))
+          unformatted=$(gofmt -l $(git ls-files '*.go'))
           if [ -n "$unformatted" ]; then
             echo "::error::Not gofmt-formatted:"; echo "$unformatted"; exit 1
           fi

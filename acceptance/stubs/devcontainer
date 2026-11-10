@@ -1,5 +1,5 @@
 #!/bin/sh
-# Ported from workspace-candidate-2/tests/stubs/devcontainer.
+# Ported from the earlier shell implementation (see docs/spec/decisions.md).
 # Test double for the devcontainer CLI. `up --workspace-folder <dir>` starts the project's container:
 # an existing one keeps the mounts and ports it was created with (F3); a new one takes them from aw's
 # Compose fragment and is labelled with the folder, as the real CLI does.

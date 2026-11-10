@@ -42,8 +42,7 @@ A lane belongs to work. Sessions attach to it and detach from it, crash or end, 
 6. The lane becomes `working`. A command that needs setup waits for exactly the step it depends on.
 
 Before creating worktrees, each project's lane guards run against the branch. A branch that fails
-them (for example, a database configuration that ignores `AW_LANE`) is refused with the fix
-(candidate 2, finding 9).
+them (for example, a database configuration that ignores `AW_LANE`) is refused with the fix.
 
 ## Lifecycle hooks
 
@@ -166,11 +165,11 @@ never picked up this way.
 may use them. Snapshot names are shared across the workspace, so one onboarded snapshot can seed other
 lanes, and a name in use is never overwritten. A Postgres snapshot copies the lane's configured
 databases, not the copies project code made of them. Both commands stop the lane's servers first and
-start them again afterwards, because Postgres cannot copy a database in use (candidate 2, finding 14);
+start them again afterwards, because Postgres cannot copy a database in use;
 `terminate = true` ends other connections before a restore or drop. Redis takes no snapshots.
 
 Restoring a snapshot taken on an older schema leaves the data behind the code. Teams run migrations in
-a `restore` hook (candidate 2, finding 13).
+a `restore` hook.
 
 ## External-service stand-ins
 

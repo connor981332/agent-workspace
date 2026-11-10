@@ -1,13 +1,11 @@
 # Agent Workspace specification
 
-This is the specification for the release candidate of Agent Workspace: the version we intend to
-publish as open source. It records what the tool must do and the design we chose for it. An
+This is the specification of Agent Workspace. It records what the tool must do and the design we chose for it. An
 implementation plan is written separately, from these documents alone, so anything a planner needs
 must be written here.
 
-The two candidates in this repository are research material. [decisions.md](decisions.md) says what
-the release candidate takes from each and why. The release candidate is a new Go codebase, not a
-refactor of either.
+Two earlier implementations were its research material. [decisions.md](decisions.md) says what this
+one takes from each and why. It is a new Go codebase, not a refactor of either.
 
 ## North star
 

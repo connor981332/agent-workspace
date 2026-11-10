@@ -95,8 +95,7 @@ work currently in it and changes when the lane is recycled. Stable paths keep de
 container mounts and published ports valid across reuse.
 
 Project worktrees live inside each project repository (`<project>/.worktrees/<lane>`) so that a
-project's devcontainer, which bind-mounts the project directory, sees every lane without extra mounts
-(candidate 2, finding 11). The lane root links to them so a harness launched in the lane root sees
+project's devcontainer, which bind-mounts the project directory, sees every lane without extra mounts. The lane root links to them so a harness launched in the lane root sees
 the whole lane. The policy engine resolves these links before any path decision.
 
 A single-repository workspace (project `directory = "."`) has no links: the lane root is the
@@ -258,9 +257,8 @@ Built-in providers implement the same interface in Go, so a team can replace one
 - **Devcontainer:** commands run with `docker exec` in the project's one devcontainer, in the lane's
   worktree path, which is identical inside and outside the container. The container is the one VS
   Code uses: the Compose project name is pinned to the name VS Code derives, the container is started
-  only through `devcontainer up`, and a claim step handles containers left over from a moved checkout
-  (candidate 2). The runner compares a running container's mounts and published ports with what the
-  configuration requires and refuses a mismatch with the fix (candidate 1).
+  only through `devcontainer up`, and a claim step handles containers left over from a moved checkout. The runner compares a running container's mounts and published ports with what the
+  configuration requires and refuses a mismatch with the fix.
 
 A project's devcontainer must be a Compose one, and its `devcontainer.json` must say:
 
@@ -328,14 +326,14 @@ lifecycle hooks, guards, skills, MCP server declarations and docs.
   which stops management.
 - Third-party modules, fetched by Git URL and commit, come after the first release.
 
-First-party modules planned from candidate 2: mail catcher, object store, DNS stand-in, pgAdmin,
+First-party modules: mail catcher, object store, DNS stand-in, pgAdmin,
 webhook forwarding, browser MCP, implementer role, plans.
 
 ## Testing architecture
 
 - Unit tests for each package.
 - A black-box acceptance suite that drives the `aw` binary with real Git and stubbed `docker` and
-  `devcontainer` executables. It is seeded from candidate 1's tests and candidate 2's findings, and
+  `devcontainer` executables. It is seeded from the earlier implementations' tests and findings, and
   it is the main definition of correct behavior.
 - The harness parity suite and recorded payload fixtures.
 - Latency benchmarks: regressions and the guard budgets enforced in CI, all budgets on a developer laptop before each release.

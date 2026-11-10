@@ -1,9 +1,0 @@
-#!/bin/sh
-# Test double for the devcontainer CLI: `up --workspace-folder <dir>` "starts"
-# the project's container by making the docker stub report it.
-set -eu
-echo "devcontainer $*" >> "$STUB_LOG"
-[ "$1" = up ] || exit 1
-dir="$(basename "$3")"
-mkdir -p "$STUB_STATE/ps"
-echo "c-$dir" > "$STUB_STATE/ps/${dir}_devcontainer__$dir"
