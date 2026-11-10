@@ -7,11 +7,14 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/connor981332/agent-workspace/internal/config"
+	"github.com/connor981332/agent-workspace/internal/workspace"
 )
 
 // maxIdentifier is the longest name Postgres keeps: a longer one is silently cut, and would then
@@ -23,6 +26,7 @@ const maxIdentifier = 63
 // Statements go to the maintenance database, so nothing connects to the template or a lane database.
 type postgres struct {
 	onlyProject string // a rehearsal's own infrastructure, or ""
+	owner       string // the owner checkout, where build_template runs
 	data        *config.Data
 	namespace   string
 	u           *url.URL
@@ -129,6 +133,53 @@ func (p *postgres) psqlOnce(ctx context.Context, statement string) (string, erro
 	return strings.TrimSpace(stdout.String()), nil
 }
 
+// ensureTemplate runs build_template if the template does not exist. Lanes start together, so a lock
+// across processes makes it one build: the others wait, and then find the template there.
+func (p *postgres) ensureTemplate(ctx context.Context) error {
+	if p.data.Template == "" || p.data.BuildTemplate == "" {
+		return nil
+	}
+	if ok, err := p.exists(ctx, p.data.Template); err != nil || ok {
+		return err
+	}
+	dir, err := (&workspace.Workspace{Owner: p.owner}).StateDir()
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	lock, err := os.OpenFile(filepath.Join(dir, "template-"+p.data.Template+".lock"), os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return err
+	}
+	defer lock.Close()
+	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
+		return err
+	}
+	defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
+	if ok, err := p.exists(ctx, p.data.Template); err != nil || ok {
+		return err // another lane built it while this one waited
+	}
+	cmd := exec.CommandContext(ctx, "sh", "-c", p.data.BuildTemplate)
+	cmd.Dir = p.owner
+	cmd.Env = append(os.Environ(), "AW_TEMPLATE="+p.data.Template, "AW_PHASE=data")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		text := strings.TrimSpace(string(output))
+		if len(text) > 2000 {
+			text = "…" + text[len(text)-2000:]
+		}
+		return fmt.Errorf("build_template failed for %s (%v): %s → fix the command in [lanes.data]", p.data.Template, err, text)
+	}
+	if ok, err := p.exists(ctx, p.data.Template); err != nil {
+		return err
+	} else if !ok {
+		return fmt.Errorf("build_template finished, but there is still no database %s → make the command create it (AW_TEMPLATE names it)", p.data.Template)
+	}
+	return nil
+}
+
 func (p *postgres) exists(ctx context.Context, name string) (bool, error) {
 	out, err := p.psql(ctx, fmt.Sprintf(`SELECT 1 FROM pg_database WHERE datname = '%s'`, name))
 	return out != "", err
@@ -174,6 +225,9 @@ func inUse(err error) error {
 // Create makes each lane database. One that is already recorded came from an earlier attempt, and is
 // kept. One that exists but is not recorded belongs to someone else, and is refused.
 func (p *postgres) Create(ctx context.Context, l Lane, owned []string, record func(string) error) error {
+	if err := p.ensureTemplate(ctx); err != nil {
+		return err
+	}
 	for _, base := range p.data.Databases {
 		name := p.laneDB(base, l)
 		if err := checkLength(name); err != nil {

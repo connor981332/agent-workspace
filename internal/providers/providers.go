@@ -80,7 +80,7 @@ func (s *Set) New(name string) (Provider, error) {
 	case "postgres":
 		p, err := newPostgres(d, s.Cfg.Workspace.Namespace)
 		if err == nil {
-			p.onlyProject = s.rehearsalProject()
+			p.onlyProject, p.owner = s.rehearsalProject(), s.Owner
 		}
 		return p, err
 	case "redis":
