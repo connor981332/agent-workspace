@@ -63,6 +63,9 @@ func (m *Manager) LocateIn(n int, project string) (*Where, error) {
 	}
 	if workspace.IsRehearsal(m.WS.Owner) {
 		env = append(env, "AW_REHEARSAL=1", "AW_INFRA_PROJECT="+m.Cfg.Workspace.Namespace+"-infra")
+		if p != nil && p.Runner != "devcontainer" {
+			env = append(env, hostComposeEnv(ownerDir, m.Cfg.Workspace.Namespace, project, n, m.Cfg.Ports.Offset)...)
+		}
 	}
 	if project != "" {
 		env = append(env, "AW_PROJECT="+project)

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/connor981332/agent-workspace/internal/config"
@@ -107,8 +108,8 @@ func (m *Manager) BuildRehearsal(ctx context.Context, l state.Lane, id string, s
 	if r.Cfg, err = config.Load(r.Owner); err != nil {
 		return r, fmt.Errorf("the lane's configuration is invalid: %w", err)
 	}
-	if problems := checkIsolated(r.Owner, r.Cfg); len(problems) > 0 {
-		return r, fmt.Errorf("this proposal is not isolated, so a rehearsal could reach your real containers and data, and nothing was started:\n  %s\n→ remove a devcontainer's port when a seat publishes it, and otherwise read host ports as ${AW_PORT_<n>:-<n>}, the shared network's name as ${AW_INFRA_NETWORK:-<name>}, and in scripts the infrastructure's Compose project as ${AW_INFRA_PROJECT:-<name>} (aw sets these in a rehearsal)", strings.Join(problems, "\n  "))
+	if problems := checkIsolated(r.Owner, m.Cfg.Workspace.Namespace, r.Cfg); len(problems) > 0 {
+		return r, fmt.Errorf("this proposal is not isolated, so a rehearsal could reach your real containers and data, and nothing was started:\n  %s\n→ remove a devcontainer's port when a seat publishes it, and otherwise read host ports as ${AW_PORT_<n>:-<n>}, the shared network's name as ${AW_INFRA_NETWORK:-<name>}, and in scripts the infrastructure's Compose project as ${AW_INFRA_PROJECT:-<name>} (aw sets these in a rehearsal, and gives them to data providers too)", strings.Join(problems, "\n  "))
 	}
 	for _, name := range sortedKeys(r.Cfg.Projects) {
 		p := r.Cfg.Projects[name]
@@ -245,30 +246,154 @@ var (
 	externalTrue  = regexp.MustCompile(`^\s*external:\s*true`)
 	nameLine      = regexp.MustCompile(`^\s*name:\s*["']?([^"'\s#]+)`)
 	topName       = regexp.MustCompile(`(?m)^name:\s*["']?([^"'$\s#]+)`)
+	variableName  = regexp.MustCompile(`(?m)^name:.*\$`)
+	composeFile   = regexp.MustCompile(`^(docker-)?compose([.-][^/]*)?\.ya?ml$`)
+	composeTool   = regexp.MustCompile(`docker|podman|compose`)
+	fixedLocal    = regexp.MustCompile(`(localhost|127\.0\.0\.1|0\.0\.0\.0|host\.docker\.internal):[0-9]+`)
+	portVariable  = regexp.MustCompile(`AW_PORT_(\d+)`)
+	unsafeCompose = regexp.MustCompile(`[^a-z0-9_-]+`)
 )
 
 // isolationSkipped are directories that hold no commands a rehearsal would run.
-var isolationSkipped = []string{".git", ".worktrees", ".aw", ".claude", ".agents", ".codex", ".grok", ".opencode", "docs", "plans", "node_modules"}
+var isolationSkipped = []string{".git", ".worktrees", ".aw", ".claude", ".agents", ".codex", ".grok", ".opencode", "docs", "plans", "node_modules", "vendor", ".venv", "target", "dist", "testdata"}
+
+// composeFilesIn finds the Compose files under a project. skip leaves out directories that are
+// someone else's, such as another project's. A devcontainer's files are its runner's business.
+func composeFilesIn(dir string, skip func(string) bool) []string {
+	var out []string
+	filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
+		switch {
+		case err != nil:
+			return nil
+		case d.IsDir():
+			if p != dir && (slices.Contains(isolationSkipped, d.Name()) || d.Name() == ".devcontainer" || (skip != nil && skip(p))) {
+				return filepath.SkipDir
+			}
+		case composeFile.MatchString(d.Name()):
+			out = append(out, p)
+		}
+		return nil
+	})
+	return out
+}
+
+// hostComposeEnv is what a host project's commands need so that the Compose files they start stay
+// out of the real stack's way. Compose names a project after its folder, and the copy's folder has
+// the real one's name, so without a name of its own it would replace the real containers.
+func hostComposeEnv(dir, namespace, project string, lane, offset int) []string {
+	files := composeFilesIn(dir, nil)
+	if len(files) == 0 {
+		return nil
+	}
+	var env []string
+	seen, named := map[string]bool{}, false
+	for _, f := range files {
+		data, err := os.ReadFile(f)
+		if err != nil {
+			continue
+		}
+		named = named || variableName.Match(data)
+		for _, m := range portVariable.FindAllStringSubmatch(string(data), -1) {
+			if n, err := strconv.Atoi(m[1]); err == nil && !seen[m[1]] {
+				seen[m[1]] = true
+				env = append(env, "AW_PORT_"+m[1]+"="+strconv.Itoa(n+offset))
+			}
+		}
+	}
+	if !named {
+		name := unsafeCompose.ReplaceAllString(strings.ToLower(fmt.Sprintf("%s-%s-%d", namespace, project, lane)), "-")
+		env = append(env, "COMPOSE_PROJECT_NAME="+name)
+	}
+	return env
+}
+
+// providerProblems finds what connects a custom data provider to the real workspace. It runs a
+// program, so what it reaches is written in that program.
+func providerProblems(owner, name string, d *config.Data, names map[string]bool) []string {
+	at := "[lanes.data." + name + "]"
+	var out []string
+	for _, k := range sortedKeys(d.Env) {
+		if v := d.Env[k]; fixedLocal.MatchString(v) && !strings.Contains(v, "$") {
+			out = append(out, at+": env "+k+" names a fixed address, "+v)
+		}
+	}
+	script := ""
+	for _, w := range strings.Fields(d.Command) {
+		p := w
+		if !filepath.IsAbs(p) {
+			p = filepath.Join(owner, p)
+		}
+		if info, err := os.Stat(p); err == nil && info.Mode().IsRegular() && strings.HasPrefix(p, owner+string(filepath.Separator)) {
+			script = p
+			break
+		}
+	}
+	if script == "" {
+		return append(out, at+": runs "+d.Command+", which is not a file in the workspace, so aw cannot see what it connects to → keep the provider as a script in the workspace")
+	}
+	data, err := os.ReadFile(script)
+	if err != nil {
+		return append(out, at+": cannot read "+d.Command)
+	}
+	rel, _ := filepath.Rel(owner, script)
+	for i, line := range strings.Split(string(data), "\n") {
+		if strings.Contains(line, "AW_") || strings.HasPrefix(strings.TrimSpace(line), "#") {
+			continue
+		}
+		place := fmt.Sprintf("%s:%d", filepath.ToSlash(rel), i+1)
+		if fixedLocal.MatchString(line) && !strings.Contains(line, "$") {
+			out = append(out, place+": a fixed address in a data provider: "+strings.TrimSpace(line))
+		}
+		for n := range names {
+			if strings.Contains(line, n) {
+				out = append(out, fmt.Sprintf("%s: names %s, a real Compose project", place, n))
+			}
+		}
+	}
+	return out
+}
 
 // checkIsolated finds what would connect a rehearsal to the real workspace: aw can move what it names,
 // but not a port, network or Compose project written into a file. Guards fail closed, so any of
 // these stops the rehearsal before it starts anything.
-func checkIsolated(owner string, c *config.Config) []string {
+func checkIsolated(owner, realNamespace string, c *config.Config) []string {
 	var problems []string
 	var files []string
 	infra, _ := filepath.Glob(filepath.Join(owner, "infra", "*.y*ml"))
 	more, _ := filepath.Glob(filepath.Join(owner, "infra", "compose.d", "*.y*ml"))
 	files = append(infra, more...)
 	roots := []string{owner}
+	// A host project's Compose files are its own: their name is only a problem beside a container
+	// command, because the word is often just the product's name throughout its code.
+	ownFile := map[string]string{}
+	notOwn := func(p string) bool { return isProjectDir(owner, p, c) }
+	for _, f := range composeFilesIn(owner, notOwn) {
+		if !slices.Contains(files, f) {
+			files = append(files, f)
+			ownFile[f] = owner
+		}
+	}
 	for _, name := range sortedKeys(c.Projects) {
 		p := c.Projects[name]
+		dir := filepath.Join(owner, p.Directory)
 		if p.Runner == "devcontainer" {
-			f, _ := filepath.Glob(filepath.Join(owner, p.Directory, ".devcontainer", "*.y*ml"))
+			f, _ := filepath.Glob(filepath.Join(dir, ".devcontainer", "*.y*ml"))
 			files = append(files, f...)
-			roots = append(roots, filepath.Join(owner, p.Directory, ".devcontainer"))
+			roots = append(roots, filepath.Join(dir, ".devcontainer"))
+			continue
+		}
+		if p.Directory != "." {
+			for _, f := range composeFilesIn(dir, nil) {
+				files = append(files, f)
+				ownFile[f] = dir
+			}
 		}
 	}
 	names := map[string]bool{}
+	ownNames := map[string][]string{}
+	if realNamespace != "" {
+		names[realNamespace+"-infra"], names[realNamespace+"-dev-net"] = true, true
+	}
 	rel := func(f string) string { r, _ := filepath.Rel(owner, f); return filepath.ToSlash(r) }
 	for _, f := range files {
 		data, err := os.ReadFile(f)
@@ -276,7 +401,14 @@ func checkIsolated(owner string, c *config.Config) []string {
 			continue
 		}
 		if m := topName.FindSubmatch(data); m != nil {
-			names[string(m[1])] = true
+			if dir, own := ownFile[f]; own {
+				ownNames[dir] = append(ownNames[dir], string(m[1]))
+				if dir != owner && !slices.Contains(roots, dir) {
+					roots = append(roots, dir)
+				}
+			} else {
+				names[string(m[1])] = true
+			}
 		}
 		lines := strings.Split(string(data), "\n")
 		for i, line := range lines {
@@ -299,6 +431,12 @@ func checkIsolated(owner string, c *config.Config) []string {
 	for name, d := range c.Lanes.Data {
 		if (d.Provider == "postgres" || d.Provider == "redis") && d.Service == "" {
 			problems = append(problems, "[lanes.data."+name+"]: connects by URL, which reaches whatever listens there → set service")
+		}
+		if d.Provider == "external" {
+			if d.URL != "" {
+				problems = append(problems, "[lanes.data."+name+"]: connects by URL, which reaches whatever listens there → have the provider read AW_INFRA_PROJECT")
+			}
+			problems = append(problems, providerProblems(owner, name, d, names)...)
 		}
 	}
 	for _, root := range roots {
@@ -326,6 +464,11 @@ func checkIsolated(owner string, c *config.Config) []string {
 				}
 				for name := range names {
 					if strings.Contains(line, name) {
+						problems = append(problems, fmt.Sprintf("%s:%d: names %s, a real Compose project", rel(p), i+1, name))
+					}
+				}
+				for _, name := range ownNames[root] {
+					if strings.Contains(line, name) && composeTool.MatchString(line) {
 						problems = append(problems, fmt.Sprintf("%s:%d: names %s, a real Compose project", rel(p), i+1, name))
 					}
 				}

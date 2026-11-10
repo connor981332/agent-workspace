@@ -90,7 +90,7 @@ func (s *Set) New(name string) (Provider, error) {
 		}
 		return r, err
 	case "external":
-		return &external{name: name, data: d, owner: s.Owner}, nil
+		return &external{name: name, data: d, owner: s.Owner, rehearsal: s.rehearsalExports()}, nil
 	}
 	return nil, fmt.Errorf("[lanes.data.%s] has an unknown provider %q → use postgres, redis or external", name, d.Provider)
 }
@@ -101,6 +101,15 @@ func (s *Set) rehearsalProject() string {
 		return s.Cfg.Workspace.Namespace + "-infra"
 	}
 	return ""
+}
+
+// rehearsalExports is the shell prefix that gives a provider a rehearsal's names, or "" outside one.
+func (s *Set) rehearsalExports() string {
+	if !workspace.IsRehearsal(s.Owner) {
+		return ""
+	}
+	ns := s.Cfg.Workspace.Namespace
+	return "export AW_REHEARSAL=1 AW_NAMESPACE=" + ns + " AW_INFRA_PROJECT=" + ns + "-infra AW_INFRA_NETWORK=" + ns + "-dev-net; "
 }
 
 // Names returns the workspace's data names, sorted.

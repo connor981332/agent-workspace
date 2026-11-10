@@ -17,6 +17,8 @@ type external struct {
 	name  string
 	data  *config.Data
 	owner string
+	// rehearsal is what a throwaway copy tells its provider, so that it finds the copy's containers.
+	rehearsal string
 }
 
 func (e *external) call(ctx context.Context, verb string, l Lane, extra map[string]any) (map[string]any, error) {
@@ -24,7 +26,7 @@ func (e *external) call(ctx context.Context, verb string, l Lane, extra map[stri
 	for k, v := range extra {
 		req[k] = v
 	}
-	return extproto.CallWithin(ctx, externalTimeout, e.owner, e.data.Command, verb, req)
+	return extproto.CallWithin(ctx, externalTimeout, e.owner, e.rehearsal+e.data.Command, verb, req)
 }
 
 func strings_(reply map[string]any, key string) ([]string, error) {
