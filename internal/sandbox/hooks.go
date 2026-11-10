@@ -73,6 +73,17 @@ func otherHooksIn(path string) []string {
 	return out
 }
 
+// HasAWHooks reports whether aw's own hooks are installed in a workspace's harness files.
+func HasAWHooks(root string) bool {
+	for _, c := range HarnessFiles {
+		data, err := os.ReadFile(filepath.Join(root, c.Path))
+		if err == nil && strings.Contains(string(data), `/bin/aw\" hook `) {
+			return true
+		}
+	}
+	return false
+}
+
 // HasOtherHooks reports whether one harness file holds hooks that are not aw's.
 func HasOtherHooks(path string) bool { return len(otherHooksIn(path)) > 0 }
 

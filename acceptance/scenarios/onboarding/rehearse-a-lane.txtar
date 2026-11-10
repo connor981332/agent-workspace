@@ -25,7 +25,7 @@ exec aw rehearse onboard-workspace
 stdout 'The rehearsal passed'
 
 # An agent: its own onboarding lane only, and never the owner's checkout.
-! exec awtest-hook bash 'aw rehearse'
+! exec awtest-hook -harness codex bash 'aw rehearse'
 stderr 'only the human'
 cd .worktrees/01
 exec awtest-hook bash 'aw rehearse'

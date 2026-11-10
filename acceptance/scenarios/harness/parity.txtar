@@ -8,7 +8,7 @@ exec aw attach 'add feature flag'
 cd .worktrees/01
 exec sh $WORK/table.sh
 ! stdout DIFFERS
-stdout 'all harnesses agree on 18 calls'
+stdout 'all harnesses agree on 16 calls'
 
 -- table.sh --
 n=0
@@ -26,8 +26,6 @@ check 0 bash 'cat web/README.md'
 check 2 bash 'cat ../../README.md'
 check 2 bash 'cd ../.. && ls'
 check 2 bash 'cat "$(git rev-parse --show-toplevel)/x"'
-check 2 bash 'bin/aw discard x'
-check 2 bash 'echo $(bin/aw pair)'
 check 2 bash 'git push --force origin x'
 check 2 bash 'git branch -D main'
 check 2 bash 'docker compose down'

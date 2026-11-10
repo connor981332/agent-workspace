@@ -14,10 +14,12 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/connor981332/agent-workspace/internal/harness"
+	"github.com/connor981332/agent-workspace/internal/harness/launch"
 	"github.com/connor981332/agent-workspace/internal/lanes"
 	"github.com/connor981332/agent-workspace/internal/mux"
 	"github.com/connor981332/agent-workspace/internal/platform"
 	"github.com/connor981332/agent-workspace/internal/policy"
+	"github.com/connor981332/agent-workspace/internal/sandbox"
 	"github.com/connor981332/agent-workspace/internal/state"
 	"github.com/connor981332/agent-workspace/internal/workspace"
 )
@@ -43,6 +45,22 @@ func agentContext() string {
 		}
 	}
 	return ""
+}
+
+// unguardedAgent is agentContext, for a command the hook has already had its say on: where aw's hook
+// is installed, an agent reaches a human-only command only if the human approved it at the prompt.
+// A harness without aw's hook, or a workspace not set up yet, has had no such check.
+func unguardedAgent() string {
+	why := agentContext()
+	if why == "" {
+		return ""
+	}
+	if cwd, err := os.Getwd(); err == nil {
+		if ws, err := workspace.Find(cwd); err == nil && sandbox.HasAWHooks(ws.Owner) {
+			return ""
+		}
+	}
+	return why
 }
 
 func inRehearsal() bool {
@@ -84,7 +102,7 @@ func refuseAgent(cmd *cobra.Command, args []string) error {
 			return nil
 		}
 	}
-	if why := agentContext(); why != "" {
+	if why := unguardedAgent(); why != "" {
 		if delegatedHere(name, args) {
 			return nil
 		}
@@ -166,6 +184,7 @@ func startPairSession(cmd *cobra.Command, w *writeContext, harnessName string, u
 	if err := savePair(cmd.Context(), w.store, state.Session{Harness: harnessName, HarnessSession: id, PID: pid, PIDStart: start}); err != nil {
 		return err
 	}
+	args = append(launch.SandboxArgs(harnessName, manager(w).SandboxRoots("")), args...)
 	owner, mx := w.ws.Owner, w.cfg.User.Multiplexer
 	w.Close()
 	if useMux {

@@ -47,7 +47,7 @@ This workspace runs several agents in parallel, each in its own lane.
 - If your working directory stays where it was, start each shell command with ` + "`cd <lane root> &&`" + ` and use absolute paths inside the lane for file tools.
 - ` + "`bin/aw lanes`" + ` lists the lanes, and ` + "`bin/aw whoami`" + ` shows where you are. ` + "`bin/aw run <project> <command>`" + ` runs a command with the lane's environment.
 - When you stop, run ` + "`bin/aw finish`" + ` so that the next session can pick up the work.
-- When aw refuses something, its message says what to do instead. Follow it, and do not look for a way around it.`
+- When aw refuses something, its message says what to do instead. If the human asked for this work, ask them to approve it and carry on. Do not stop at the refusal, and do not reach the same result by another route.`
 
 // Result says what aw setup did to one file.
 type Result struct {

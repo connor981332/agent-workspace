@@ -277,10 +277,10 @@ func ownerOnlyRule(s Scope, c shell.Command) Decision {
 		}
 	}
 	if why, ok := ownerOnly[sub]; ok {
-		return deny("owner-only", "aw %s %s, which only the human does%s → ask the human to run it", sub, why, where)
+		return ask("owner-only", "aw %s %s, which only the human does%s → approve it if you asked for this", sub, why, where)
 	}
 	if sub == "sweep" && !s.Delegated && (hasArg(rest, "--apply") || hasArg(rest, "--retry")) {
-		return deny("owner-only", "aw sweep --apply removes lanes, which only the human does%s → aw sweep, without --apply, shows what it would do", where)
+		return ask("owner-only", "aw sweep --apply removes lanes, which only the human does%s → approve it if you asked for this; aw sweep, without --apply, shows what it would do", where)
 	}
 	return allow()
 }
@@ -368,8 +368,16 @@ func gitRule(s Scope, c shell.Command) Decision {
 			return deny("git", "git -c %s changes how Git runs hooks or commands, which bypasses the workspace's protections → run git without it", key)
 		}
 	}
+	refused := func(what string) Decision {
+		return deny("git", "git %s %s, which agents do not do → ask the human to do it, or leave it for review", sub, what)
+	}
+	// In a lane the work is the agent's own, so the human can approve it there. The owner checkout is
+	// the human's, and force pushes and deleted branches cannot be taken back.
 	destructive := func(what string) Decision {
-		return deny("git", "git %s %s, which agents do not do → ask the human, or leave it for review", sub, what)
+		if s.Role == Lane {
+			return ask("git", "git %s %s, in this lane → approve it if you asked for this", sub, what)
+		}
+		return refused(what)
 	}
 	switch sub {
 	case "push":
@@ -377,19 +385,22 @@ func gitRule(s Scope, c shell.Command) Decision {
 			t := a.Text
 			switch {
 			case t == "-f" || t == "--force" || strings.HasPrefix(t, "--force-with-lease") || t == "--force-if-includes" || t == "--mirror":
-				return destructive("rewrites the remote's history")
+				return refused("rewrites the remote's history")
 			case t == "-d" || t == "--delete" || t == "--prune":
-				return destructive("deletes remote branches")
+				return refused("deletes remote branches")
 			case strings.HasPrefix(t, "+"):
-				return destructive("force-pushes a refspec")
+				return refused("force-pushes a refspec")
 			case strings.HasPrefix(t, ":") && len(t) > 1:
-				return destructive("deletes a remote branch")
+				return refused("deletes a remote branch")
 			}
 		}
 		if hasShortFlag(args, 'f') || hasShortFlag(args, 'd') {
-			return destructive("forces or deletes")
+			return refused("forces or deletes")
 		}
 	case "branch":
+		if hasArg(args, "--delete") || hasShortFlag(args, 'd') || hasShortFlag(args, 'D') {
+			return refused("deletes a branch")
+		}
 		if hasArg(args, "--delete", "--move", "--copy", "--force", "--set-upstream-to", "--unset-upstream", "--edit-description") ||
 			hasShortFlag(args, 'd') || hasShortFlag(args, 'D') || hasShortFlag(args, 'm') || hasShortFlag(args, 'M') ||
 			hasShortFlag(args, 'c') || hasShortFlag(args, 'C') || hasShortFlag(args, 'f') {
@@ -988,6 +999,8 @@ func publishAction(name, sub, sub2 string, c shell.Command, args []shell.Word) s
 		}
 	case name == "gh" && sub == "pr" && sub2 == "create", name == "glab" && sub == "mr" && sub2 == "create":
 		return "open-merge-request"
+	case name == "gh" && sub == "pr" && sub2 == "comment", name == "glab" && sub == "mr" && sub2 == "note":
+		return "open-merge-request"
 	case name == "gh" && sub == "pr" && sub2 == "merge", name == "glab" && sub == "mr" && sub2 == "merge":
 		return "merge"
 	case isAW(c) && sub == "changeset":
@@ -1016,11 +1029,51 @@ func (s Scope) publishDecision(action string, c shell.Command, args []shell.Word
 			allowed = true
 		}
 	}
-	if !allowed || (action == "push" && !s.pushesOwnBranch(args)) {
+	if !allowed || (action == "push" && !s.pushesOwnBranch(args)) || (actsOnAnMR(args) && !s.ownMergeRequest(args)) {
 		return nil
 	}
 	d := allow()
 	return &d
+}
+
+// actsOnAnMR is a forge command on one existing merge request: merging or commenting on it. Creating
+// one names no existing merge request.
+func actsOnAnMR(args []shell.Word) bool {
+	_, rest := subcommandAfter(args, forgeValueOptions)
+	verb, _ := subcommandAfter(rest, forgeValueOptions)
+	return verb == "merge" || verb == "comment" || verb == "note"
+}
+
+// forgeMRValueOptions take a value, so that the value is not mistaken for which merge request is meant.
+var forgeMRValueOptions = map[string]bool{"-m": true, "--message": true, "-b": true, "--body": true, "-F": true, "--body-file": true,
+	"-t": true, "--subject": true, "--match-head-commit": true, "--sha": true, "--squash-message": true}
+
+// ownMergeRequest reports whether a forge command can only mean this lane's own merge request: with
+// nothing named it uses the current branch, and a lane's own branch may be named. A number could be
+// anyone's, and aw cannot look it up on this path. Another repository is never the lane's own.
+func (s Scope) ownMergeRequest(args []shell.Word) bool {
+	seen := 0
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if !a.Known {
+			return false
+		}
+		if a.Text == "-R" || a.Text == "--repo" || strings.HasPrefix(a.Text, "--repo=") {
+			return false
+		}
+		if forgeMRValueOptions[a.Text] {
+			i++
+			continue
+		}
+		if strings.HasPrefix(a.Text, "-") {
+			continue
+		}
+		seen++
+		if seen > 2 && !slices.Contains(s.LaneBranches, a.Text) { // past "pr merge" or "mr note"
+			return false
+		}
+	}
+	return true
 }
 
 // pushesOwnBranch reports whether a git push can only touch this lane's own branches. Anything it
@@ -1123,5 +1176,5 @@ func publicationRule(s Scope, c shell.Command) Decision {
 	if what == "" {
 		return allow()
 	}
-	return ask("publication", "%s, which needs the human's approval (the publication policy) → ask the human to approve it", what)
+	return ask("publication", "%s, which needs the human's approval → approve it, or stop being asked by adding it to [publication] allow in workspace.toml or your own aw settings (push, open-merge-request, merge)", what)
 }

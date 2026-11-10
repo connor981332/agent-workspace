@@ -117,3 +117,23 @@ func TestHelpExits0(t *testing.T) {
 		}
 	}
 }
+
+// aw new's made-up ID stops matching once a hook has recorded the harness's own, or after /clear, and
+// a lane claimed under it would belong to nobody the hook can recognize.
+func TestAttachPrefersTheHarnessID(t *testing.T) {
+	t.Setenv("CLAUDE_CODE_SESSION_ID", "real-id")
+	t.Setenv("AW_SESSION", "claude:new-abc")
+	got, err := issuedIdentities()
+	if err != nil || len(got) != 1 || got[0].id != "real-id" || got[0].harness != "claude" {
+		t.Fatalf("got %+v, %v", got, err)
+	}
+	t.Setenv("AW_SESSION", "claude:chosen-by-the-harness")
+	if got, _ = issuedIdentities(); got[0].id != "chosen-by-the-harness" {
+		t.Errorf("a real AW_SESSION was replaced: %+v", got)
+	}
+	t.Setenv("CLAUDE_CODE_SESSION_ID", "")
+	t.Setenv("AW_SESSION", "claude:new-abc")
+	if got, _ = issuedIdentities(); got[0].id != "new-abc" {
+		t.Errorf("no harness ID yet: %+v", got)
+	}
+}

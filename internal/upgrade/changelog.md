@@ -9,7 +9,14 @@ Newest first. A line starting with **Breaking:** is called out by `aw upgrade`.
 
 ## 0.1.3
 
+- Where a person can answer, human-only commands and destructive Git in a lane now ask instead of refusing. Force pushes, deleting branches and secrets stay refused.
+- `aw init` pre-authorizes pushing a lane's own branch, opening a merge request, and commenting on or merging the lane's own. Add `[publication] allow` to an existing workspace to get the same.
+- The generated instructions tell agents to ask the human to approve work they were asked for, rather than stop.
+- `aw new`, `aw pair` and `aw onboard` give Codex the writable paths directly, because it ignores an untrusted project's configuration.
 - `build_template` commands get `AW_OWNER`.
+- `aw attach` uses the harness's own session ID, so a session started by `aw new` is bound to the lane it claims, also after `/clear`.
+- `aw setup <lane>` reinstalls when the install's stamp has changed, such as a lockfile a merge brought in.
+- `aw run` warns when a lane has no `node_modules` and would use the owner checkout's.
 - Making a new branch in a lane is refused before Git touches the files, instead of after.
 - A key placed after a string table gets an error that says to move it.
 

@@ -7,11 +7,11 @@
 workspace shop --init
 exec aw attach 'one'
 cd .worktrees/01
-! exec awtest-hook bash 'aw containers recreate web'
+! exec awtest-hook -harness codex bash 'aw containers recreate web'
 stderr 'aw containers starts, recreates or stops shared containers, which only the human does'
-! exec awtest-hook bash 'aw containers down'
+! exec awtest-hook -harness codex bash 'aw containers down'
 stderr 'only the human'
-! exec awtest-hook bash 'aw containers up web'
+! exec awtest-hook -harness codex bash 'aw containers up web'
 stderr 'only the human'
 exec awtest-hook bash 'aw containers claim web'
 env CLAUDE_CODE_SESSION_ID=s-1

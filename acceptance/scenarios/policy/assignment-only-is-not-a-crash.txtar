@@ -18,4 +18,4 @@ exec awtest-hook bash 'for n in a b; do d=$n; done'
 exec awtest-hook bash 'FOO=1 echo hi'
 ! stdout .
 ! exec awtest-hook bash 'd=$(git branch -D main)'
-stderr 'deletes, moves or forces a branch'
+stderr 'deletes a branch'

@@ -6,7 +6,7 @@
 
 workspace solo --single --init
 owner-may-change
-! exec awtest-hook bash 'aw setup'
+! exec awtest-hook -harness codex bash 'aw setup'
 stderr 'only the human'
 exec aw delegate --scope maintenance --ttl 1h
 stdout 'Delegated maintenance'
@@ -18,12 +18,12 @@ exec awtest-hook bash 'scripts/reindex now'
 exec awtest-hook bash 'scripts/other'
 stdout '"permissionDecision":"ask"'
 stdout 'not attached to a lane'
-! exec awtest-hook bash 'aw discard one --yes'
+! exec awtest-hook -harness codex bash 'aw discard one --yes'
 stderr 'only the human'
-! exec awtest-hook bash 'aw new x'
-! exec awtest-hook bash 'aw pair'
-! exec awtest-hook bash 'aw upgrade'
-! exec awtest-hook bash 'aw containers recreate'
+! exec awtest-hook -harness codex bash 'aw new x'
+! exec awtest-hook -harness codex bash 'aw pair'
+! exec awtest-hook -harness codex bash 'aw upgrade'
+! exec awtest-hook -harness codex bash 'aw containers recreate'
 stderr 'only the human'
 
 env CLAUDE_CODE_SESSION_ID=s-1
@@ -32,8 +32,9 @@ env CLAUDE_CODE_SESSION_ID=
 
 exec aw attach 'one'
 cd .worktrees/01
-! exec awtest-hook bash 'aw sweep --apply'
+! exec awtest-hook -harness codex bash 'aw sweep --apply'
 stderr 'only the human'
+rm -f $OWNER/.claude/settings.json $OWNER/.codex/hooks.json
 env CLAUDE_CODE_SESSION_ID=s-2
 ! exec aw setup
 stderr 'only for the human'

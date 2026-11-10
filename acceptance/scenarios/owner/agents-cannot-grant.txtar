@@ -6,11 +6,11 @@
 
 workspace solo --single --init
 exec aw delegate --scope maintenance --ttl 1h
-! exec awtest-hook bash 'aw delegate --scope maintenance --ttl 8h'
+! exec awtest-hook -harness codex bash 'aw delegate --scope maintenance --ttl 8h'
 stderr 'only the human'
 exec awtest-hook bash 'aw delegate --status'
 exec awtest-hook bash 'aw delegate --revoke'
-! exec awtest-hook bash 'echo x > .git/aw/state.db'
+! exec awtest-hook -harness codex bash 'echo x > .git/aw/state.db'
 env CLAUDE_CODE_SESSION_ID=s-1
 ! exec aw delegate --scope maintenance --ttl 8h
 stderr 'only for the human'

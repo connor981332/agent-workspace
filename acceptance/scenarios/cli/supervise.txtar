@@ -18,5 +18,5 @@ exec aw supervise --uninstall
 ! exists $XDG_CONFIG_HOME/systemd/user/aw-solo.service
 exec aw attach 'one'
 cd .worktrees/01
-! exec awtest-hook bash 'aw supervise --install'
+! exec awtest-hook -harness codex bash 'aw supervise --install'
 stderr 'only the human'

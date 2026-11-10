@@ -440,9 +440,23 @@ func (r *Runner) begin(ctx context.Context) (*begun, error) {
 	return b, err
 }
 
+// installStale reports whether a finished install's stamp has changed, such as a lockfile that a merge
+// brought in, so that rerunning the lane's setup installs again.
+func (r *Runner) installStale(s Step) bool {
+	if s.Phase != PhaseInstall {
+		return false
+	}
+	dir, _, err := r.Where(s.Project)
+	if err != nil {
+		return false
+	}
+	have, err := os.ReadFile(filepath.Join(r.StateDir, s.Project+".install-stamp"))
+	return err != nil || string(have) != InstallStamp(s.Hook.Run, s.Stamp, dir)
+}
+
 // step runs one step, and reports whether the steps after it may run.
 func (r *Runner) step(ctx context.Context, s Step, b *begun) bool {
-	if b.finished[s.Name] {
+	if b.finished[s.Name] && !r.installStale(s) {
 		return true
 	}
 	log := filepath.Join(r.StateDir, "logs", "setup", s.Name+".log")
