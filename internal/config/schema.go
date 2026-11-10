@@ -187,6 +187,12 @@ var schema = table("",
 			"generated_contracts", strList("Files generated from a contract, from the project root (** matches directories). Agents may not edit them (R70)."),
 			"secrets", strList("Files that are not in Git, such as .env, linked read-only into every lane from the owner "+
 				"checkout, relative to the project."),
+			"local_files", strList("Gitignored files that are not secrets, such as a local properties file or a large generated "+
+				"schema, copied into every new lane from the owner checkout, relative to the project. Only the files named here are "+
+				"copied, as a clone where the file system can. Use secrets for anything an agent should not read."),
+			"post_checkout", str("run: the repository's own post-checkout hook runs as a setup step of each lane, which can be retried. skip: it does not run in lanes.").
+				oneOf("run", "skip").withDefault("run"),
+			"env", mapOf("Variables for this project's hooks and aw run commands, such as a switch one of its hooks reads.", envRE, envFix, str("")),
 			"generated", strList("Ignored paths (Git pathspecs) that builds create and that do not block recycling a lane, "+
 				"such as node_modules or tmp. Other ignored files may be someone's work, so they keep the lane."),
 			"lane_guards", mapOf("Checks a branch must pass before a lane is created on it (R28). The key names the guard.",

@@ -162,6 +162,19 @@ lane guards against old branches, secret links that are relative and excluded fr
 infrastructure project and warm start check, modules, the implementer role, the isolated browser per
 session, every finding in `findings.md`.
 
+## From dogfooding 0.1.0-rc.2
+
+- A workspace may be plain files. Only its projects must be Git repositories. Its state is then in
+  `.aw/state`, a lane root is a plain directory, and onboarding runs as a pair session, because there
+  is no branch to review.
+- `aw onboard` includes `aw setup`. `aw setup` stays for a fresh clone of a configured workspace, which
+  needs no agent, and for retrying a lane.
+- aw creates no `CLAUDE.md`. Claude Code stops reading `AGENTS.md` by itself when a `CLAUDE.md` or
+  `CLAUDE.local.md` exists, so aw still adds the import to an existing `CLAUDE.md` and to the
+  `CLAUDE.local.md` it writes.
+- An agent launched after a failed setup can rerun `aw setup` only if the human says yes at the prompt,
+  because that is a delegation.
+
 ## Left out
 
 - C1's migration and cutover machinery for its original system.

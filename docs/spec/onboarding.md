@@ -12,8 +12,14 @@ command format the same way `AGENTS.md` is. They are mechanism, so the framework
 not conflict with shipping no product content (requirement R82). What they produce belongs to the
 team.
 
-They can be invoked from any supported harness, or through `aw onboard`, which launches the default
-harness with the right skill.
+They can be invoked from any supported harness, or through `aw onboard`.
+
+`aw onboard` is the single entry point. It runs `aw setup`, reports what `aw inspect` finds, and
+launches the default harness with the right skill. A failure in those deterministic steps does not end
+the command: the agent starts with the failure as context, in the owner checkout as a pair session if
+no lane can be created, and decides whether to fix it, skip it or ask. Nothing has to be committed: a
+lane's root receives what its commit lacks, as copies that do not count as the lane's work until
+they are changed.
 
 ## Facts first: `aw inspect`
 

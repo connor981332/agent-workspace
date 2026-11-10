@@ -165,6 +165,9 @@ type Project struct {
 	Publication  []string              `json:"publication"`
 	Contracts    []string              `json:"generated_contracts"`
 	Secrets      []string              `json:"secrets"`
+	LocalFiles   []string              `json:"local_files"`
+	PostCheckout string                `json:"post_checkout"`
+	Env          map[string]string     `json:"env"`
 	Generated    []string              `json:"generated"`
 	LaneGuards   map[string]*LaneGuard `json:"lane_guards"`
 	Lifecycle    ProjectLifecycle      `json:"lifecycle"`
@@ -751,6 +754,11 @@ func (c *Config) check(team *doc) Errors {
 		for i, sec := range pr.Secrets {
 			if clean := filepath.ToSlash(filepath.Clean(sec)); filepath.IsAbs(sec) || clean != sec || clean == "." || strings.HasPrefix(clean, "../") || clean == ".." {
 				fail(p.child("secrets").index(i), fmt.Sprintf("%q is not a clean path inside the project", sec), "name the file relative to the project, e.g. \".env\"")
+			}
+		}
+		for i, f := range pr.LocalFiles {
+			if clean := filepath.ToSlash(filepath.Clean(f)); filepath.IsAbs(f) || clean != f || clean == "." || strings.HasPrefix(clean, "../") || clean == ".." {
+				fail(p.child("local_files").index(i), fmt.Sprintf("%q is not a clean path inside the project", f), "name the file relative to the project, e.g. \"properties.json\"")
 			}
 		}
 		for _, gname := range sortedMap(pr.LaneGuards) {

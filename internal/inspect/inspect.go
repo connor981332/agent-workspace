@@ -1,17 +1,23 @@
 // Package inspect gathers facts about a workspace's projects, deterministically and without running
-// anything (onboarding.md, "Facts first"), and the findings of the readiness audit that a program can
-// check (R89). It only reads files.
+// anything but read-only Git (onboarding.md, "Facts first"), and the findings of the readiness audit
+// that a program can check (R89). It changes nothing.
 package inspect
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"io/fs"
 	"os"
+	"os/exec"
+	"path"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
+
+	"github.com/connor981332/agent-workspace/internal/config"
+	"github.com/connor981332/agent-workspace/internal/gitx/run"
 )
 
 // Project is what could be found out about one project.
@@ -28,6 +34,11 @@ type Project struct {
 	EnvVars      []string          `json:"env_vars,omitempty"`
 	Ports        []int             `json:"ports,omitempty"`
 	Findings     []Finding         `json:"findings"`
+	// What creating a lane will run into, from Preflight.
+	CheckoutHook string   `json:"checkout_hook,omitempty"` // the repository's own post-checkout hook
+	LocalFiles   []string `json:"undeclared_local_files,omitempty"`
+	MissingTools []string `json:"missing_tools,omitempty"`
+	Missing      []string `json:"missing_declared_files,omitempty"`
 }
 
 // Finding is one thing a project must change to work well in lanes, with its fix.
@@ -123,6 +134,103 @@ func Scan(name, dir, rel string) (*Project, error) {
 	}
 	slices.Sort(p.Ports)
 	return p, err
+}
+
+// stackTools are the programs a project of each stack is likely to need.
+var stackTools = map[string][]string{"node": {"node"}, "ruby": {"ruby", "bundle"}, "go": {"go"}, "python": {"python3"}, "rust": {"cargo"}, "php": {"php", "composer"}, "java": {"java"}}
+
+// notLocalConfig are ignored directories that hold build output or caches, not a person's settings.
+var notLocalConfig = []string{".next", ".cache", ".gradle", ".idea", ".vscode", ".bundle", ".turbo", ".nuxt", ".pytest_cache", ".mypy_cache", ".terraform", ".aw", ".DS_Store", "Pods", "DerivedData"}
+
+const maxLocalFiles = 50
+
+// Preflight adds what lanes will run into, before anything is created: checkout hooks, gitignored
+// files a fresh worktree would lack, and tools that are not installed.
+func Preflight(ctx context.Context, owner string, c *config.Config, projects []*Project) {
+	for _, p := range projects {
+		pr := c.Projects[p.Name]
+		dir := filepath.Join(owner, pr.Directory)
+		if pr.PostCheckout != "skip" && pr.Lanes != "shared" {
+			p.CheckoutHook = run.HookPath(ctx, dir, "post-checkout")
+		}
+		declared := slices.Concat(pr.Secrets, pr.LocalFiles)
+		for _, f := range declared {
+			if _, err := os.Stat(filepath.Join(dir, f)); err != nil {
+				p.Missing = append(p.Missing, f)
+			}
+		}
+		p.LocalFiles = ignoredLocal(ctx, dir, declared, pr.Generated)
+		tools := slices.Clone(stackToolsOf(p.Stacks))
+		hooks := []string{pr.Install}
+		for _, h := range []*config.Hook{pr.Lifecycle.Prepare, pr.Lifecycle.Setup, pr.Lifecycle.Reset} {
+			if h != nil {
+				hooks = append(hooks, h.Run)
+			}
+		}
+		for _, h := range hooks {
+			if f := strings.Fields(h); len(f) > 0 && !strings.ContainsAny(f[0], "/=$") {
+				tools = append(tools, f[0])
+			}
+		}
+		slices.Sort(tools)
+		for _, t := range slices.Compact(tools) {
+			if _, err := exec.LookPath(t); err != nil {
+				p.MissingTools = append(p.MissingTools, t)
+			}
+		}
+	}
+}
+
+func stackToolsOf(stacks []string) []string {
+	var out []string
+	for _, s := range stacks {
+		out = append(out, stackTools[s]...)
+	}
+	return out
+}
+
+// ignoredLocal lists the gitignored files in the owner checkout that a new worktree would not have
+// and that nothing declares. Build output and dependency directories are left out.
+func ignoredLocal(ctx context.Context, dir string, declared, generated []string) []string {
+	listed, err := run.In(dir).Run(ctx, "ls-files", "--others", "--ignored", "--exclude-standard", "--directory", "--no-empty-directory")
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, e := range strings.Split(strings.TrimRight(listed, "\n"), "\n") {
+		name := path.Base(strings.TrimSuffix(e, "/"))
+		isDir := strings.HasSuffix(e, "/")
+		switch {
+		case e == "", slices.Contains(skipDirs, name), slices.Contains(notLocalConfig, name), slices.Contains(generated, strings.TrimSuffix(e, "/")):
+			continue
+		case isDir && !strings.HasPrefix(name, "."): // a directory of output, or a project's own tree
+			continue
+		case slices.ContainsFunc(declared, func(d string) bool { return d == e || strings.HasPrefix(d, e) }):
+			continue
+		}
+		if out = append(out, e); len(out) == maxLocalFiles {
+			break
+		}
+	}
+	return out
+}
+
+// PreflightLines says what Preflight found, one thing per line.
+func (p *Project) PreflightLines() []string {
+	var out []string
+	if p.CheckoutHook != "" {
+		out = append(out, "has a post-checkout hook, which will run as a retryable setup step of each lane (post_checkout = \"skip\" turns it off): "+p.CheckoutHook)
+	}
+	if len(p.LocalFiles) > 0 {
+		out = append(out, "gitignored files a new lane would not have: "+strings.Join(p.LocalFiles, ", ")+" → declare the ones it needs in local_files, or in secrets if an agent must not read them")
+	}
+	if len(p.Missing) > 0 {
+		out = append(out, "declared but not in the owner checkout: "+strings.Join(p.Missing, ", ")+" → get them from your team")
+	}
+	if len(p.MissingTools) > 0 {
+		out = append(out, "tools it needs that are not installed: "+strings.Join(p.MissingTools, ", "))
+	}
+	return out
 }
 
 func keysOf(m map[string]bool) func(func(string) bool) {

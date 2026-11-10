@@ -45,14 +45,17 @@ type InitResult struct {
 // edits (R18).
 const ManagedPath = ".aw/managed"
 
-// Init creates a workspace in an existing Git repository.
+// Init creates a workspace in a directory, which may be a Git repository or plain files.
 func Init(opts InitOptions) (*InitResult, error) {
 	dir, err := filepath.Abs(opts.Dir)
 	if err != nil {
 		return nil, err
 	}
-	if _, err := workspace.GitCommonDir(dir); err != nil {
-		return nil, fmt.Errorf("%s is not a Git repository → run git init there first: the workspace's state lives in its Git directory", dir)
+	inGit := workspace.IsGitRepo(dir)
+	if inGit {
+		if _, err := workspace.GitCommonDir(dir); err != nil {
+			return nil, err
+		}
 	}
 	for _, f := range []string{config.TeamFile, launcher.VersionPath, launcher.LockPath, launcher.ScriptPath, ManagedPath} {
 		if _, err := os.Lstat(filepath.Join(dir, f)); err == nil {
@@ -66,6 +69,11 @@ func Init(opts InitOptions) (*InitResult, error) {
 	}
 	if !launcher.Exact(opts.Version) {
 		return nil, fmt.Errorf("this aw is version %q, a development build that cannot be pinned → run aw init with a released aw (see install.sh), or set AW_TOOL_PATH in the workspace to use a local build", opts.Version)
+	}
+
+	projects, err := detectProjects(dir, filepath.Base(dir))
+	if err != nil {
+		return nil, err
 	}
 
 	lock, platforms, err := launcher.Lock(opts.Mirror, opts.Version)
@@ -92,11 +100,6 @@ func Init(opts InitOptions) (*InitResult, error) {
 	if namespace == "" {
 		namespace = deriveNamespace(base)
 	}
-	projects, err := detectProjects(dir, base)
-	if err != nil {
-		return nil, err
-	}
-
 	var team bytes.Buffer
 	if err := teamTemplate.Execute(&team, map[string]any{"Name": name, "Namespace": namespace, "Schema": config.SchemaVersion, "Projects": projects}); err != nil {
 		return nil, err
@@ -143,18 +146,21 @@ func Init(opts InitOptions) (*InitResult, error) {
 			ignore = append(ignore, "/"+p.Directory)
 		}
 	}
-	added, err := ensureIgnored(filepath.Join(dir, ".gitignore"), ignore)
-	if err != nil {
-		return nil, err
-	}
-	if added {
-		res.Files = append(res.Files, ".gitignore")
+	if inGit {
+		added, err := ensureIgnored(filepath.Join(dir, ".gitignore"), ignore)
+		if err != nil {
+			return nil, err
+		}
+		if added {
+			res.Files = append(res.Files, ".gitignore")
+		}
 	}
 
 	// Compile the configuration cache, which hooks read instead of the TOML files.
 	if c, err := config.Load(dir); err == nil {
-		if common, err := workspace.GitCommonDir(dir); err == nil {
-			if err := config.WriteCache(filepath.Join(common, "aw", "config.cache"), opts.Version, c); err != nil {
+		ws := workspace.Workspace{Owner: dir}
+		if state, err := ws.StateDir(); err == nil {
+			if err := config.WriteCache(filepath.Join(state, "config.cache"), opts.Version, c); err != nil {
 				return nil, fmt.Errorf("writing the configuration cache: %w", err)
 			}
 		}
@@ -237,6 +243,9 @@ func detectProjects(dir, base string) ([]initProject, error) {
 		}
 		seen[name] = e.Name()
 		out = append(out, initProject{Name: name, Directory: e.Name()})
+	}
+	if len(out) == 0 && !workspace.IsGitRepo(dir) {
+		return nil, fmt.Errorf("%s has no Git repositories in it, and is not one → clone your projects into it, or run git init there", dir)
 	}
 	if len(out) == 0 {
 		name := projectName(base)

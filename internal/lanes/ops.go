@@ -12,6 +12,7 @@ import (
 
 	"github.com/connor981332/agent-workspace/internal/gitx/run"
 	"github.com/connor981332/agent-workspace/internal/state"
+	"github.com/connor981332/agent-workspace/internal/workspace"
 )
 
 // Park shelves a lane on purpose: it is protected from cleanup until it is unparked (R79). (M4
@@ -75,6 +76,7 @@ func (m *Manager) Discard(ctx context.Context, l state.Lane, now time.Time) ([]s
 		if err != nil {
 			return nil, err
 		}
+		status = workspace.WithoutMaterialized(r.Path, status)
 		if status != "" {
 			dirty = append(dirty, fmt.Sprintf("%s (%d)", repoLabel(r), strings.Count(status, "\n")))
 		}
@@ -160,7 +162,7 @@ func (m *Manager) Finish(ctx context.Context, l state.Lane, o FinishOptions) (*F
 			}
 			if status, err := g.Run(ctx, "status", "--porcelain=v1", "-uall"); err != nil {
 				probs = append(probs, repoLabel(r)+": "+err.Error())
-			} else if status != "" {
+			} else if status = workspace.WithoutMaterialized(r.Path, status); status != "" {
 				probs = append(probs, fmt.Sprintf("%s has %d uncommitted changes → commit or remove them", repoLabel(r), strings.Count(status, "\n")))
 			}
 			head, err := g.Line(ctx, "rev-parse", "--verify", "HEAD^{commit}")

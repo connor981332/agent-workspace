@@ -3,10 +3,13 @@
 package workspace
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -111,13 +114,87 @@ func GitCommonDir(dir string) (string, error) {
 	return filepath.Clean(c), nil
 }
 
-// StateDir is <workspace git dir>/aw, shared by every worktree of the workspace repository.
+// LocalStateDir is where a workspace that is not a Git repository keeps its state, relative to the
+// owner checkout.
+const LocalStateDir = ".aw/state"
+
+// IsGitRepo reports whether dir has a .git of its own.
+func IsGitRepo(dir string) bool {
+	_, err := os.Lstat(filepath.Join(dir, ".git"))
+	return err == nil
+}
+
+// StateDir is <workspace git dir>/aw, shared by every worktree of the workspace repository. A
+// workspace kept as plain files has .aw/state instead.
 func (w *Workspace) StateDir() (string, error) {
+	if !IsGitRepo(w.Owner) {
+		return filepath.Join(w.Owner, filepath.FromSlash(LocalStateDir)), nil
+	}
 	common, err := GitCommonDir(w.Owner)
 	if err != nil {
 		return "", err
 	}
 	return filepath.Join(common, "aw"), nil
+}
+
+// MaterializedPath, in a lane root, lists the workspace files aw copied there because the lane's
+// starting commit does not have them, each with its hash.
+const MaterializedPath = ".aw/materialized"
+
+// Materialized reads a worktree's list: file hash by path. A worktree without one has none.
+func Materialized(worktree string) map[string]string {
+	data, err := os.ReadFile(filepath.Join(worktree, filepath.FromSlash(MaterializedPath)))
+	if err != nil {
+		return nil
+	}
+	out := map[string]string{}
+	for _, line := range strings.Split(string(data), "\n") {
+		if hash, path, ok := strings.Cut(line, "  "); ok {
+			out[path] = hash
+		}
+	}
+	return out
+}
+
+// HashFile is the hash Materialized records, or "" for a file it cannot read.
+func HashFile(path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
+}
+
+// UnchangedMaterialized lists the copies still as aw wrote them. A changed copy is someone's work.
+func UnchangedMaterialized(worktree string) []string {
+	var out []string
+	for path, hash := range Materialized(worktree) {
+		if HashFile(filepath.Join(worktree, filepath.FromSlash(path))) == hash {
+			out = append(out, path)
+		}
+	}
+	return out
+}
+
+// WithoutMaterialized removes from `git status --porcelain=v1 -uall` output the untracked copies
+// aw itself put in this worktree, so they do not count as uncommitted work.
+func WithoutMaterialized(worktree, status string) string {
+	unchanged := UnchangedMaterialized(worktree)
+	if len(unchanged) == 0 || status == "" {
+		return status
+	}
+	var kept []string
+	for _, line := range strings.Split(strings.TrimRight(status, "\n"), "\n") {
+		if path, ok := strings.CutPrefix(line, "?? "); ok && slices.Contains(unchanged, path) {
+			continue
+		}
+		kept = append(kept, line)
+	}
+	if len(kept) == 0 {
+		return ""
+	}
+	return strings.Join(kept, "\n") + "\n"
 }
 
 // Dir is a lane's directory name: 03, or 103 when lanes.max is over 99 (plan §9).

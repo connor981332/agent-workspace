@@ -434,3 +434,81 @@ func TestTeamGuards(t *testing.T) {
 		t.Errorf("reading a guarded file: %+v", d)
 	}
 }
+
+// TestAssignmentOnly is the table from the 0.1.0-rc.2 dogfood: a statement that is only an assignment
+// has no command word, which two rules once sliced past, so the guard refused every such call.
+func TestAssignmentOnly(t *testing.T) {
+	f := newFixture(t)
+	for _, role := range []Role{Unattached, Lane, Pair} {
+		s, cwd := f.scope(role), f.owner
+		if role == Lane {
+			cwd = f.lane
+		}
+		run(t, s, cwd, []tcase{
+			{`d=x; echo "$d"`, Allow, ""},
+			{`foo=1; echo "$foo"`, Allow, ""},
+			{`n=a; d=x/$n; echo "$d"`, Allow, ""},
+			{`for n in a b; do d=1; done`, Allow, ""},
+			{`for n in a b; do d=$n; done`, Allow, ""},
+			{`FOO=1 echo hi`, Allow, ""},
+			{`echo @{u}`, Allow, ""},
+			{`echo a | awk '{print $1}'`, Allow, ""},
+			{`for n in a b; do echo "=== $n"; done`, Allow, ""},
+			{`for d in a b; do n=$(basename "$d"); echo "$n"; done`, Allow, ""},
+		})
+	}
+	// An assignment is still judged by what it runs.
+	run(t, f.scope(Unattached), f.owner, []tcase{{`d=$(git branch -D main)`, Deny, "git"}})
+}
+
+func TestUnattachedClassification(t *testing.T) {
+	f := newFixture(t)
+	s := f.scope(Unattached)
+	s.AskSupported = true
+	notes := quote(filepath.Join(f.home, "notes.md"))
+	run(t, s, f.owner, []tcase{
+		{"git -C api worktree list", Allow, ""},
+		{"git -C api branch --list 'aw/*'", Allow, ""},
+		{"git -C api log --oneline -3", Allow, ""},
+		{"git -C api status", Allow, ""},
+		{"git branch --list -D x", Deny, "git"},
+		{"curl -sI https://example.com/graphql", Allow, ""},
+		{"curl -fsSL -H 'Accept: application/json' https://example.com", Allow, ""},
+		{"curl -sI -m 5 https://example.com", Allow, ""},
+		// Writes a file, sends a body, or reads one: the human decides.
+		{"curl -o out https://example.com", Ask, "attach"},
+		{"curl -d x=1 https://example.com", Ask, "attach"},
+		{"curl -H @headers https://example.com", Ask, "attach"},
+		{"curl -sw '%output{x}' https://example.com", Ask, "attach"},
+		{"curl file:///etc/hostname", Ask, "attach"},
+		{"git log --output=x", Ask, "attach"},
+		{"python3 -I -c 'print(1)'", Ask, "attach"},
+		{"npm test", Ask, "attach"},
+		{"perl -i -pe s/a/b/ " + notes, Ask, "attach"},
+		// A visible change to the owner checkout is refused, with the way forward.
+		{"rm AGENTS.md", Deny, "attach"},
+		{"echo hi > notes.txt", Deny, "attach"},
+		{"cp " + notes + " x.md", Deny, "attach"},
+		{"sed -i s/a/b/ AGENTS.md", Deny, "attach"},
+		// Outside the workspace is not the owner checkout.
+		{"echo hi > " + notes, Allow, ""},
+		{"echo hi >> ~/other.md", Allow, ""},
+		{"rm " + notes, Allow, ""},
+		{"cp AGENTS.md " + notes, Allow, ""},
+		{"mkdir -p /tmp/aw-x", Allow, ""},
+		{"rm $x", Ask, "attach"},
+	})
+	for _, c := range []struct {
+		path string
+		want Verdict
+	}{{filepath.Join(f.home, "vault", "note.md"), Allow}, {filepath.Join(f.owner, "note.md"), Deny}} {
+		if d := Decide(s, Call{Tool: Write, Cwd: f.owner, Paths: []string{c.path}}); d.Verdict != c.want {
+			t.Errorf("write %s: got %s (%s)", c.path, d.Verdict, d.Message)
+		}
+	}
+	// A harness that cannot ask gets the refusal, which names the fix.
+	s.AskSupported = false
+	if d := Decide(s, Call{Tool: Shell, Cwd: f.owner, Command: "npm test"}); d.Verdict != Deny || !strings.Contains(d.Message, "bin/aw attach") {
+		t.Errorf("no ask: got %s (%s)", d.Verdict, d.Message)
+	}
+}

@@ -96,7 +96,8 @@ func newAttachCmd() *cobra.Command {
 a new one. The lane is named from the purpose (aw attach "fix checkout tax rounding" gives
 checkout-tax), and has a worktree of every project on the lane's branch.
 
-The same session attaching again gets the same lane. Work in the lane root aw prints.`,
+The same session attaching again gets the same lane. Work in the lane root aw prints. aw lanes
+lists the lanes that exist.`,
 		Args: cobra.ExactArgs(1),
 		RunE: run(func(cmd *cobra.Command, args []string) error {
 			who, err := sessionIdentity(harness, session)

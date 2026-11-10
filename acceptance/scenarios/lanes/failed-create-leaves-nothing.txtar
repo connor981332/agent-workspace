@@ -1,0 +1,41 @@
+# A lane that cannot be built is undone in every repository, and a leftover from before is visible to
+# aw doctor, named correctly when it gets in the way, and removable with aw.
+# req: R26
+# source: dogfood of 0.1.0-rc.2
+# milestone: M12
+
+workspace shop --init
+git-fail 'worktree add.*api/.worktrees/01'
+! exec aw attach 'broken work'
+stderr 'injected failure'
+exec git -C web branch --list 'aw/*'
+! stdout .
+! exists web/.worktrees/01
+! exists .worktrees/01
+exec aw lanes
+stdout 'No lanes'
+
+# Something left behind by an older aw, or a killed process.
+exec git -C api branch aw/broken-work
+exec git -C api worktree add -q .worktrees/07 aw/broken-work
+exec git -C api branch aw/other-left
+exec aw doctor
+stdout 'lane leftovers: no lane records'
+stdout 'aw/broken-work in project api'
+stdout 'aw discard --orphans'
+
+! exec aw attach 'broken work'
+stderr 'that no lane uses'
+! stderr 'finish or discard'
+
+! exec aw discard --orphans
+stderr 'confirm with --yes'
+exec aw discard --orphans --yes
+stdout 'Removed aw/broken-work from project api'
+! exists api/.worktrees/07
+exec git -C api for-each-ref refs/aw/archive
+stdout orphan-aw-broken-work
+exec git -C api branch --list 'aw/*'
+! stdout .
+exec aw doctor
+stdout 'lane leftovers: every lane'

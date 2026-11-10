@@ -1,0 +1,23 @@
+# aw lanes lists the lanes, the help says how they are made and named, and aw delegate needs no
+# arguments, because maintenance is the only scope.
+# req: R64
+# source: dogfood of 0.1.0-rc.2
+# milestone: M12
+
+workspace solo --single --init
+owner-may-change
+exec aw lanes
+stdout 'No lanes'
+exec aw attach 'fix checkout tax rounding'
+exec aw lanes
+stdout '^01 checkout-tax'
+stdout 'fix checkout tax rounding'
+exec aw lanes --json
+json stdout .lanes[0].name checkout-tax
+exec aw --help
+stdout 'aw lanes lists them'
+exec aw delegate
+stdout 'Delegated maintenance'
+exec aw delegate --revoke
+! exec aw delegate --scope everything
+stderr 'must be maintenance'

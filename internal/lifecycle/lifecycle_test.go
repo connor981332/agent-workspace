@@ -14,11 +14,11 @@ func TestPlan(t *testing.T) {
 	}}
 	c.Lifecycle.Prepare = &config.Hook{Run: "p"}
 	want := []string{"prepare", "web.prepare", "shared.setup", "web.install", "web.setup"}
-	if got := Names(Plan(c, false)); !slices.Equal(got, want) {
+	if got := Names(Plan(c, false, nil)); !slices.Equal(got, want) {
 		t.Fatalf("new lane: got %v, want %v", got, want)
 	}
 	want = []string{"prepare", "web.prepare", "web.install", "web.reset"}
-	if got := Names(Plan(c, true)); !slices.Equal(got, want) {
+	if got := Names(Plan(c, true, nil)); !slices.Equal(got, want) {
 		t.Fatalf("recycled lane: got %v, want %v", got, want)
 	}
 }

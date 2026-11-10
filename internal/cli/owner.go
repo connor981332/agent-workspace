@@ -70,13 +70,14 @@ func newDelegateCmd() *cobra.Command {
 	var scope, ttl string
 	var status, revoke, asJSON bool
 	cmd := &cobra.Command{
-		Use:   "delegate --scope maintenance --ttl 1h | --status | --revoke",
+		Use:   "delegate [--ttl 1h] | --status | --revoke",
 		Short: "Let sessions in the owner checkout do routine maintenance, for a limited time",
 		Long: `Grant sessions in the owner checkout routine maintenance for up to 8 hours: aw setup, park, unpark,
 sweep --apply, containers up, and the commands in [delegation] maintenance. Lanes never use it.
 
 It never covers starting agents, discarding work, pairing, delegating, upgrading, or recreating or
-removing containers. Only the human can grant it.`,
+removing containers. Only the human can grant it. Maintenance is the only scope there is, and the
+grant lasts an hour unless --ttl says otherwise.`,
 		Args: cobra.NoArgs,
 		RunE: run2(func(cmd *cobra.Command) error {
 			w, err := openForWrite()
@@ -115,8 +116,8 @@ removing containers. Only the human can grant it.`,
 			return nil
 		}),
 	}
-	cmd.Flags().StringVar(&scope, "scope", "", "what to delegate: maintenance")
-	cmd.Flags().StringVar(&ttl, "ttl", "", "how long, from 5m to 8h")
+	cmd.Flags().StringVar(&scope, "scope", state.ScopeMaintenance, "what to delegate; maintenance is the only scope")
+	cmd.Flags().StringVar(&ttl, "ttl", "1h", "how long, from 5m to 8h")
 	cmd.Flags().BoolVar(&status, "status", false, "say what is delegated")
 	cmd.Flags().BoolVar(&revoke, "revoke", false, "end the delegation")
 	cmd.Flags().BoolVar(&asJSON, "json", false, "print the result as JSON")

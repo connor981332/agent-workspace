@@ -112,48 +112,55 @@ session that is refused a write prints the exact command. Only you can grant pai
 				}
 				return grantPair(cmd.Context(), w.store, session, cmd)
 			}
-			if harnessName == "" {
-				harnessName = w.cfg.User.Harness
-			}
-			if err := lanes.CheckName(harnessName); err != nil {
-				return fmt.Errorf("%q is not a harness name", harnessName)
-			}
-			path, err := exec.LookPath(harnessName)
-			if err != nil {
-				return fmt.Errorf("the harness %s is not installed (not on PATH) → install it, or choose another with --harness or [user] harness", harnessName)
-			}
-			if useMux {
-				if err := mux.Check(w.cfg.User.Multiplexer); err != nil {
-					return err
-				}
-			}
-			id := "pair-" + randomHex(8)
-			pid, start := os.Getpid(), ""
-			if useMux {
-				pid = 0 // the harness's own process is recorded by its first hook call
-			} else if start, err = platform.ProcessIdentity(pid); err != nil {
-				return err
-			}
-			if err := savePair(cmd.Context(), w.store, state.Session{Harness: harnessName, HarnessSession: id, PID: pid, PIDStart: start}); err != nil {
-				return err
-			}
-			owner, mx := w.ws.Owner, w.cfg.User.Multiplexer
-			w.Close()
-			if useMux {
-				return openInMux(cmd, mx, "pair", owner, harnessName, id, append([]string{harnessName}, args...))
-			}
-			if err := os.Chdir(owner); err != nil {
-				return err
-			}
-			env := append(os.Environ(), "AW_SESSION="+harnessName+":"+id, fmt.Sprintf("AW_SESSION_PID=%d", pid), "PWD="+owner)
-			// The harness replaces this process, so it keeps the PID just recorded.
-			return syscall.Exec(path, append([]string{harnessName}, args...), env)
+			return startPairSession(cmd, w, harnessName, useMux, args)
 		}),
 	}
 	cmd.Flags().StringVar(&harnessName, "harness", "", "the harness to launch (default: [user] harness)")
 	cmd.Flags().StringVar(&session, "session", "", "grant this running session, as harness:id")
 	cmd.Flags().BoolVar(&useMux, "mux", false, "open it in your terminal multiplexer")
 	return cmd
+}
+
+// startPairSession replaces this process with the harness, in the owner checkout. It returns only
+// when something stopped that.
+func startPairSession(cmd *cobra.Command, w *writeContext, harnessName string, useMux bool, args []string) error {
+	var err error
+	if harnessName == "" {
+		harnessName = w.cfg.User.Harness
+	}
+	if err := lanes.CheckName(harnessName); err != nil {
+		return fmt.Errorf("%q is not a harness name", harnessName)
+	}
+	path, err := exec.LookPath(harnessName)
+	if err != nil {
+		return fmt.Errorf("the harness %s is not installed (not on PATH) → install it, or choose another with --harness or [user] harness", harnessName)
+	}
+	if useMux {
+		if err := mux.Check(w.cfg.User.Multiplexer); err != nil {
+			return err
+		}
+	}
+	id := "pair-" + randomHex(8)
+	pid, start := os.Getpid(), ""
+	if useMux {
+		pid = 0 // the harness's own process is recorded by its first hook call
+	} else if start, err = platform.ProcessIdentity(pid); err != nil {
+		return err
+	}
+	if err := savePair(cmd.Context(), w.store, state.Session{Harness: harnessName, HarnessSession: id, PID: pid, PIDStart: start}); err != nil {
+		return err
+	}
+	owner, mx := w.ws.Owner, w.cfg.User.Multiplexer
+	w.Close()
+	if useMux {
+		return openInMux(cmd, mx, "pair", owner, harnessName, id, append([]string{harnessName}, args...))
+	}
+	if err := os.Chdir(owner); err != nil {
+		return err
+	}
+	env := append(os.Environ(), "AW_SESSION="+harnessName+":"+id, fmt.Sprintf("AW_SESSION_PID=%d", pid), "PWD="+owner)
+	// The harness replaces this process, so it keeps the PID just recorded.
+	return syscall.Exec(path, append([]string{harnessName}, args...), env)
 }
 
 func savePair(ctx context.Context, store *state.Store, s state.Session) error {

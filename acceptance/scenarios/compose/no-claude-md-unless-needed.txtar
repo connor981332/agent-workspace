@@ -1,0 +1,21 @@
+# Claude Code reads AGENTS.md itself, so aw creates no CLAUDE.md. Claude Code ignores AGENTS.md once
+# a CLAUDE.local.md exists, so the personal file aw writes imports it.
+# req: R52 R53
+# source: dogfood of 0.1.0-rc.2
+# milestone: M12
+
+workspace solo --single --init
+owner-may-change
+exec aw setup
+exists AGENTS.md
+! exists CLAUDE.md
+
+mkdir $XDG_CONFIG_HOME/agent-workspace
+cp $WORK/personal $XDG_CONFIG_HOME/agent-workspace/solo.md
+exec aw setup
+grep '^@AGENTS.md$' CLAUDE.local.md
+grep 'Call me Sam' CLAUDE.local.md
+! exists CLAUDE.md
+
+-- personal --
+Call me Sam.

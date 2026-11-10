@@ -1,0 +1,48 @@
+# Only the gitignored files a project declares reach a lane, copied, and they are kept out of Git and
+# do not keep the lane from being cleaned up.
+# req: R67
+# source: dogfood of 0.1.0-rc.2
+# milestone: M12
+
+workspace shop --init
+owner-may-change
+exec sh $WORK/files.sh
+exec aw inspect
+stdout 'gitignored files a new lane would not have: .*undeclared.json'
+exec aw attach 'local files' --json
+exists web/.worktrees/01/properties.json
+! exists web/.worktrees/01/undeclared.json
+exec git -C web/.worktrees/01 status --porcelain
+! stdout .
+exec test ! -L web/.worktrees/01/properties.json
+exec sh $WORK/wait.sh
+grep 'NO' $WORK/hook-env
+
+-- files.sh --
+printf '/properties.json\n/undeclared.json\n' >> web/.gitignore
+git -C web add .gitignore
+git -C web commit -qm ignore
+echo '{}' > web/properties.json
+echo '{}' > web/undeclared.json
+git add -A
+git commit -qm config
+git push -q origin main
+-- workspace.toml --
+[workspace]
+name = "shop"
+namespace = "shop"
+schema = 1
+
+[projects.api]
+
+[projects.web]
+local_files = ["properties.json"]
+
+[projects.web.env]
+GENERATE_API = "NO"
+
+[projects.web.lifecycle]
+setup = 'echo "$GENERATE_API" > "$WORK/hook-env"'
+-- wait.sh --
+i=0
+until [ -s "$WORK/hook-env" ]; do i=$((i + 1)); [ $i -lt 200 ] || exit 1; sleep 0.05; done

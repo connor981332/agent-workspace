@@ -5,7 +5,7 @@ a guard that cannot run refuses the call rather than allowing it.
 
 | Harness | Guarded through | Personal instructions | Notes |
 |---|---|---|---|
-| Claude Code | `.claude/settings.json` hooks | `CLAUDE.local.md` | |
+| Claude Code | `.claude/settings.json` hooks | `CLAUDE.local.md` | Reads `AGENTS.md` itself from v2.1.277. On an older version, add a `CLAUDE.md` containing `@AGENTS.md`. |
 | Codex | `.codex/hooks.json` | session-start context | Asks once to trust a project's hooks. |
 | Grok | Claude Code's hook file | session-start context | Asks once to trust the folder (`/hooks-trust`). Notifications from the queue are not shown yet. |
 | OpenCode | A plugin, `.opencode/plugins/aw.js` | not yet | `aw new` and `aw pair` are not tied to the session they launch. Notifications from the queue are not shown yet. |

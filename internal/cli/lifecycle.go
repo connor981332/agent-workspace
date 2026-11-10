@@ -106,6 +106,7 @@ func runSetup(ctx context.Context, w *writeContext, m *lanes.Manager, l state.La
 	b := newBroker(w)
 	r := &lifecycle.Runner{Store: w.store, Cfg: w.cfg, Lane: l, StateDir: dir, Out: out,
 		Fresh: len(w.cfg.Lanes.Data) > 0,
+		Hooks: lifecycle.CheckoutHooks(context.Background(), w.ws.Owner, w.cfg),
 		InContainer: func(ctx context.Context, project, dir string, env []string, run, log string) ([]string, error) {
 			return hookInContainer(ctx, w, project, dir, env, run, log)
 		},

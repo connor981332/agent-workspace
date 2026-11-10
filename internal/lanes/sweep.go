@@ -19,6 +19,7 @@ import (
 	"github.com/connor981332/agent-workspace/internal/providers"
 	"github.com/connor981332/agent-workspace/internal/sandbox"
 	"github.com/connor981332/agent-workspace/internal/state"
+	"github.com/connor981332/agent-workspace/internal/workspace"
 )
 
 // Sweep actions.
@@ -271,7 +272,7 @@ func repoLabel(r state.LaneRepo) string {
 func (m *Manager) evidenceOptions(r state.LaneRepo) evidence.Options {
 	o := evidence.Options{ExpectBranch: r.Branch}
 	if r.Project == "" {
-		o.Ours = append(o.Ours, append([]string{".aw/owner"}, sandbox.Ours(r.Path)...)...)
+		o.Ours = append(o.Ours, append([]string{".aw/owner", workspace.MaterializedPath}, sandbox.Ours(r.Path)...)...)
 		for _, name := range sortedKeys(m.Cfg.Projects) {
 			if p := m.Cfg.Projects[name]; p.Directory != "." && p.Lanes != "shared" {
 				o.Ours = append(o.Ours, p.Directory)
@@ -282,8 +283,9 @@ func (m *Manager) evidenceOptions(r state.LaneRepo) evidence.Options {
 	if p, ok := m.Cfg.Projects[r.Project]; ok {
 		o.Generated = append(o.Generated, p.Generated...)
 		o.Ours = append(o.Ours, p.Secrets...)
+		o.Ours = append(o.Ours, p.LocalFiles...)
 		if p.Directory == "." {
-			o.Ours = append(o.Ours, append([]string{".aw/owner"}, sandbox.Ours(r.Path)...)...)
+			o.Ours = append(o.Ours, append([]string{".aw/owner", workspace.MaterializedPath}, sandbox.Ours(r.Path)...)...)
 		}
 	}
 	return o
@@ -449,6 +451,7 @@ func (m *Manager) destroy(ctx context.Context, l state.Lane, stored []state.Lane
 			if r.Project == "" {
 				m.removeRootLinks(r.Path)
 			}
+			removeMaterialized(r.Path)
 			if _, err := g.Run(ctx, "worktree", "remove", r.Path); err != nil {
 				return err
 			}
@@ -469,7 +472,11 @@ func (m *Manager) destroy(ctx context.Context, l state.Lane, stored []state.Lane
 			}
 		}
 	}
-	os.Remove(m.Root(l.Number))
+	if root := m.Root(l.Number); workspace.IsGitRepo(root) {
+		os.Remove(root)
+	} else {
+		os.RemoveAll(root) // a lane root that is not a worktree: links and copies
+	}
 	if err := m.Store.Write(ctx, func(tx *sql.Tx) error {
 		if _, err := tx.Exec(`UPDATE sessions SET lane = NULL, lane_generation = NULL WHERE lane = ?`, l.Number); err != nil {
 			return err

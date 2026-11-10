@@ -5,6 +5,7 @@ package doctor
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -21,6 +22,7 @@ import (
 
 	"github.com/connor981332/agent-workspace/internal/compose"
 	"github.com/connor981332/agent-workspace/internal/config"
+	"github.com/connor981332/agent-workspace/internal/lanes"
 	"github.com/connor981332/agent-workspace/internal/launcher"
 	"github.com/connor981332/agent-workspace/internal/platform"
 	"github.com/connor981332/agent-workspace/internal/runners"
@@ -87,9 +89,12 @@ func Run(dir, version string, withTimings bool) *Report {
 	add(Check{Name: "workspace", Status: OK, Message: fmt.Sprintf("%s (running in %s)", ws.Owner, where)})
 
 	stateDir, err := ws.StateDir()
-	if err != nil {
+	switch {
+	case !workspace.IsGitRepo(ws.Owner):
+		add(Check{Name: "git repository", Status: Info, Message: "this workspace is kept as plain files; its state is in " + stateDir})
+	case err != nil:
 		add(Check{Name: "git repository", Status: Fail, Message: firstPart(err), Fix: fixPart(err, "clone the workspace repository again")})
-	} else {
+	default:
 		add(Check{Name: "git repository", Status: OK, Message: filepath.Dir(stateDir)})
 	}
 
@@ -135,17 +140,77 @@ func Run(dir, version string, withTimings bool) *Report {
 		checkState(stateDir, add)
 		t.Mark("open state")
 	}
-	checkIgnored(ws.Owner, c, add)
+	if workspace.IsGitRepo(ws.Owner) {
+		checkIgnored(ws.Owner, c, add)
+	}
 	checkHooksPath(ws.Owner, c, add)
 	checkInstructions(ws.Owner, add)
 	checkMachine(ws.Owner, c, add)
 	checkDevcontainers(ws.Owner, c, add)
 	checkSandboxes(ws.Owner, c, add)
+	checkLanes(ws, c, stateDir, add)
 	addMachine(add)
 	if withTimings {
 		r.Timings = t.Phases()
 	}
 	return r
+}
+
+// checkLanes dry-runs lane creation in each repository, and finds what failed lanes left. A workspace
+// whose own configuration is fine can still be one where no lane can be created.
+func checkLanes(ws *workspace.Workspace, c *config.Config, stateDir string, add func(Check)) {
+	if c == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	m := &lanes.Manager{WS: ws, Cfg: c}
+	for _, r := range m.CheckReadiness(ctx) {
+		name := "lane creation: " + r.Project
+		if r.Project == "" {
+			name = "lane creation: workspace repository"
+		}
+		switch {
+		case r.Blocked != "":
+			msg, fix, _ := strings.Cut(r.Blocked, " → ")
+			add(Check{Name: name, Status: Fail, Message: msg, Fix: fix})
+		case r.Warning != "":
+			msg, fix, _ := strings.Cut(r.Warning, " → ")
+			add(Check{Name: name, Status: Warn, Message: msg, Fix: fix})
+		case r.Note != "":
+			add(Check{Name: name, Status: Info, Message: r.Note})
+		default:
+			add(Check{Name: name, Status: OK, Message: "a lane can be created here"})
+		}
+	}
+	var recorded []state.LaneRepo
+	if stateDir != "" {
+		if s, err := state.Open(stateDir, state.ReadOnly); err == nil {
+			defer s.Close()
+			all, _ := state.Lanes(s.DB())
+			for _, l := range all {
+				if l.State == state.LaneClaiming {
+					return // a lane being built looks like a leftover until it is recorded
+				}
+				repos, _ := state.LaneRepos(s.DB(), l.Number)
+				recorded = append(recorded, repos...)
+			}
+		}
+	}
+	orphans := m.FindOrphans(ctx, recorded)
+	if len(orphans) == 0 {
+		add(Check{Name: "lane leftovers", Status: OK, Message: "every lane branch and worktree belongs to a lane"})
+		return
+	}
+	var what []string
+	for _, o := range orphans {
+		item := o.Branch
+		if item == "" {
+			item = o.Worktree
+		}
+		what = append(what, item+" in "+o.Label)
+	}
+	add(Check{Name: "lane leftovers", Status: Warn, Message: "no lane records " + strings.Join(what, ", "), Fix: "run aw discard --orphans, which archives each branch first"})
 }
 
 func keyed(e *config.Error) string {

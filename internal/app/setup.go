@@ -36,7 +36,9 @@ func InstallGitHooks(ctx context.Context, owner string, cfg *config.Config) ([]H
 	for _, rel := range names {
 		dir := filepath.Join(owner, rel)
 		if _, err := os.Stat(filepath.Join(dir, ".git")); err != nil {
-			out = append(out, HooksResult{Repo: rel, Missing: true})
+			if rel != "." { // a workspace kept as plain files has no hooks of its own to install
+				out = append(out, HooksResult{Repo: rel, Missing: true})
+			}
 			continue
 		}
 		r, err := installHooks(ctx, owner, dir)

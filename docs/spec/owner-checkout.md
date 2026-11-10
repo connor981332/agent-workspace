@@ -48,6 +48,15 @@ the team's hook of the same name. In the owner checkout the dispatcher runs the 
 starting `aw`, so plain Git there keeps working even if `aw` cannot run. `aw doctor` reports a
 repository whose hooks path has been changed.
 
+## Sessions with no lane
+
+A session in the owner checkout with no lane can diagnose without claiming one. Commands classified
+as read-only by their subcommand and flags run, including read-only Git and a `curl` that only asks
+for a URL. A command that visibly changes the owner checkout is refused with the attach and pair
+instructions. A command aw cannot classify, such as an interpreter, goes to the human, and a harness
+that cannot ask refuses it with the same instructions. The rule is about the owner's workspace, so
+writes elsewhere on the machine are not its concern.
+
 ## Pair sessions
 
 Sometimes the human wants an agent in their own checkout, working alongside them. That is a **pair

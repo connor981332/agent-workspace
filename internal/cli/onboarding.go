@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,7 +14,6 @@ import (
 	"regexp"
 	"slices"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -24,6 +24,7 @@ import (
 	gitrun "github.com/connor981332/agent-workspace/internal/gitx/run"
 	"github.com/connor981332/agent-workspace/internal/harness/launch"
 	"github.com/connor981332/agent-workspace/internal/inspect"
+	"github.com/connor981332/agent-workspace/internal/lanes"
 	"github.com/connor981332/agent-workspace/internal/state"
 	"github.com/connor981332/agent-workspace/internal/ui"
 	"github.com/connor981332/agent-workspace/internal/workspace"
@@ -49,7 +50,7 @@ func newInspectCmd() *cobra.Command {
 	var asJSON bool
 	cmd := &cobra.Command{
 		Use:   "inspect",
-		Short: "Report what can be found out about the projects, for onboarding. It only reads files",
+		Short: "Report what lanes will need before anything is created: checkout hooks, local files, tools. It only reads",
 		Args:  cobra.NoArgs,
 		RunE: run(func(cmd *cobra.Command, _ []string) error {
 			ws, c, err := loadConfig()
@@ -60,11 +61,15 @@ func newInspectCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			inspect.Preflight(cmd.Context(), ws.Owner, c, projects)
 			if asJSON {
 				return writeJSON(cmd.OutOrStdout(), map[string]any{"projects": projects})
 			}
 			for _, p := range projects {
 				fmt.Fprintf(cmd.OutOrStdout(), "%s (%s): %s; %d environment variables, %d findings\n", p.Name, p.Directory, strings.Join(p.Stacks, ", "), len(p.EnvVars), len(p.Findings))
+				for _, line := range p.PreflightLines() {
+					fmt.Fprintf(cmd.OutOrStdout(), "  ! %s\n", ui.Clean(line))
+				}
 			}
 			return nil
 		}),
@@ -109,40 +114,132 @@ func newOnboardCmd() *cobra.Command {
 	var harness string
 	cmd := &cobra.Command{
 		Use:   "onboard [--review] [--harness h]",
-		Short: "Have an agent design this workspace's configuration, in a lane, for you to review",
-		Long: `Claim a lane and launch a harness there with the workspace-design skill. Its result stays on the
-lane's branch until a person reviews it. With --review it compares the current configuration with the
-repositories, and proposes changes only for what is new or has drifted.`,
+		Short: "Set this workspace up, and have an agent design its configuration for you to review",
+		Long: `The one command to start with. It runs everything aw setup does, reports what aw inspect finds, and
+then starts a harness with the workspace-design skill. If setup or creating the lane fails, the agent
+still starts, in the owner checkout with the failure in front of it, to fix it, skip it or ask you.
+
+Nothing needs to be committed first. The agent works in a lane when the workspace repository has a
+commit to start from, and its result stays on the lane's branch for review. In a workspace kept as
+plain files it works in the owner checkout as a pair session.
+
+Hooks see your environment, so VARIABLE=value aw onboard reaches them. To keep a setting, put it in
+workspace.toml under [projects.<name>.env].
+
+With --review it compares the current configuration with the repositories, and proposes changes only
+for what is new or has drifted.`,
 		Args: cobra.NoArgs,
 		RunE: run(func(cmd *cobra.Command, _ []string) error {
+			errOut := cmd.ErrOrStderr()
+			fmt.Fprintln(errOut, "aw onboard: setting up this workspace, then starting an agent. On a large project this can take a few minutes, and progress is shown here.")
 			ws, c, err := loadConfig()
 			if err != nil {
 				return err
 			}
+			var output bytes.Buffer
+			cmd.SetErr(io.MultiWriter(errOut, &output))
+			setupErr := setupWorkspace(cmd, ws, c, harness, false, false)
+			cmd.SetErr(errOut)
+			if setupErr != nil {
+				fmt.Fprintf(errOut, "aw onboard: setup did not finish (%v). The agent will start with this in front of it.\n", setupErr)
+			}
+			if fresh, err := config.Load(ws.Owner); err == nil {
+				c = fresh
+			}
 			if harness == "" {
 				harness = c.User.Harness
 			}
+			fmt.Fprintln(errOut, "aw onboard: checking the projects for what lanes will need")
+			preflight := reportPreflight(cmd, ws, c, errOut)
+
 			prompt := "Use the aw-workspace-design skill to design this workspace, then stop and report."
 			purpose := "onboard this workspace"
 			if review {
 				prompt = "Use the aw-workspace-design skill, but only for what is new or has drifted: compare workspace.toml with aw inspect --json, and propose changes for a new project, a new server or a new dependency on data. Leave the rest. Then stop and report."
 				purpose = "review onboarding"
 			}
-			self, err := os.Executable()
-			if err != nil {
-				return err
+			if preflight != "" {
+				prompt += "\n\nWhat aw inspect found before anything was created:\n" + preflight
 			}
-			args := append([]string{self, "new", purpose, "--harness", harness, "--"}, launch.PromptArgs(harness, prompt)...)
+			if setupErr != nil {
+				prompt += failureContext(setupErr, output.String())
+			}
 			if err := os.Chdir(ws.Owner); err != nil {
 				return err
 			}
-			os.Setenv("AW_LAUNCHED", "1")
-			return syscall.Exec(self, args, os.Environ())
+			m := &lanes.Manager{WS: ws, Cfg: c}
+			var failed error
+			if !m.CanReview(cmd.Context()) {
+				prompt += "\n\nThis workspace is not in a Git repository with a commit, so there is no lane branch to review: you are a pair session in the owner checkout. Leave your changes there, and report them."
+			} else {
+				failed = startLaneSession(cmd, purpose, harness, "", "", false, launch.PromptArgs(harness, prompt))
+				if failed == nil {
+					return nil
+				}
+				fmt.Fprintf(errOut, "aw onboard: no lane could be created (%v). Starting the agent in the owner checkout to work on that.\n", failed)
+				prompt += failureContext(failed, "") + "\n\nNo lane could be created, so you are a pair session in the owner checkout. Fix what stops lanes first, then carry on."
+			}
+			w, err := openForWrite()
+			if err != nil {
+				return err
+			}
+			defer w.Close()
+			if failed != nil || setupErr != nil {
+				offerDelegation(cmd, w)
+			}
+			return startPairSession(cmd, w, harness, false, launch.PromptArgs(harness, prompt))
 		}),
 	}
 	cmd.Flags().BoolVar(&review, "review", false, "propose changes only for what is new or has drifted")
 	cmd.Flags().StringVar(&harness, "harness", "", "the harness to launch")
 	return cmd
+}
+
+const maxFailureOutput = 4 << 10
+
+// failureContext hands the agent a failure, so nobody has to copy it across by hand.
+func failureContext(err error, output string) string {
+	text := "\n\nSomething failed before you started, in aw's deterministic setup:\n" + ui.Clean(err.Error())
+	if output = strings.TrimSpace(output); output != "" {
+		if len(output) > maxFailureOutput {
+			output = "…" + output[len(output)-maxFailureOutput:]
+		}
+		text += "\n\nWhat aw printed:\n" + output
+	}
+	return text + "\n\nLook into this yourself first: read the logs it names, and use bin/aw doctor and bin/aw inspect --json. Decide for each problem whether to fix it, skip it or ask the human, and do not ask the human to copy output or commands for you."
+}
+
+// offerDelegation lets the agent rerun aw setup while it works on a failure, if the human says so.
+func offerDelegation(cmd *cobra.Command, w *writeContext) {
+	if !confirm(cmd.InOrStdin(), cmd.ErrOrStderr(), "Let the agent rerun aw setup for the next hour while it works on this?") {
+		return
+	}
+	if err := w.store.Write(cmd.Context(), func(tx *sql.Tx) error { _, err := state.Grant(tx, time.Hour); return err }); err != nil {
+		fmt.Fprintf(cmd.ErrOrStderr(), "aw: warning: the delegation was not granted: %v\n", err)
+		return
+	}
+	fmt.Fprintln(cmd.ErrOrStderr(), "aw: delegated maintenance for one hour. aw delegate --revoke ends it.")
+}
+
+// reportPreflight prints what lanes will need and do not have, and returns it for the agent.
+func reportPreflight(cmd *cobra.Command, ws *workspace.Workspace, c *config.Config, out io.Writer) string {
+	projects, err := scanProjects(ws, c)
+	if err != nil {
+		fmt.Fprintf(out, "aw: warning: the projects could not be inspected: %v\n", err)
+		return ""
+	}
+	inspect.Preflight(cmd.Context(), ws.Owner, c, projects)
+	var b strings.Builder
+	for _, p := range projects {
+		for _, line := range p.PreflightLines() {
+			fmt.Fprintf(&b, "%s: %s\n", p.Name, line)
+		}
+	}
+	text := strings.TrimRight(b.String(), "\n")
+	if text != "" {
+		fmt.Fprintln(out, text)
+	}
+	return text
 }
 
 func newAddProjectCmd() *cobra.Command {

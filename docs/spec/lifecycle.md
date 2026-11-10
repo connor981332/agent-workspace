@@ -47,6 +47,11 @@ them (for example, a database configuration that ignores `AW_LANE`) is refused w
 
 ## Lifecycle hooks
 
+A worktree is created with the repository's own Git hooks turned off, so a failing hook cannot stop a
+lane from existing. A project's `post-checkout` hook then runs as a setup step, `<project>.post-checkout`,
+after its install and on the host. Like any step it is journaled, and `aw setup <lane>` retries it.
+`post_checkout = "skip"` turns it off. The workspace repository's own hook does not run in lanes.
+
 Hooks are team (or module) commands run at fixed points. `prepare` can be set at both levels, and
 the workspace's runs first. `setup`, `reset` and `restore` are per project. `teardown` is at the
 workspace level. `install` is not a hook but a per-project key with a stamp, journaled like one: a
@@ -106,7 +111,7 @@ Every hook, team command and server receives:
 | `AW_NAMESPACE` | Workspace namespace |
 | `AW_HOSTNAME` | The lane's hostname, e.g. `lane-03.localhost` |
 | `AW_FRESH` | Hooks only: `1` when the lane's data was just created or reset |
-| `AW_PHASE` | Hooks only: `prepare`, `install`, `setup`, `reset`, `restore` or `teardown` |
+| `AW_PHASE` | Hooks only: `prepare`, `install`, `post-checkout`, `setup`, `reset`, `restore` or `teardown` |
 | `AW_<DATA>_*` | Variables from each provider, e.g. `AW_DB_URL`, `AW_CACHE_URL` |
 | `AW_SEAT_<RESOURCE>`, `AW_PORT_<SERVER>`, `AW_TOKEN_<RESOURCE>` | Set while the lane holds a seat |
 | `AW_TOOL` | Path to `bin/aw`, so hooks can call `"$AW_TOOL" run <project> …` |
