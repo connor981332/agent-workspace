@@ -1,0 +1,53 @@
+# A lockfile that a merge brings in makes the install stale, so rerunning a lane's setup installs
+# again, and not otherwise. A lane without its own node_modules is told it is using the owner's.
+# req: R34
+# source: RideTracker: tests failed against the owner's stale node_modules
+# milestone: M12
+
+workspace solo --single --init
+owner-may-change
+exec aw attach 'lock change'
+cd .worktrees/01
+exec sh $WORK/wait.sh
+exec sh -c 'wc -l < "$WORK/installs"'
+stdout '^ *1$'
+
+exec aw setup 01
+exec sh -c 'wc -l < "$WORK/installs"'
+stdout '^ *1$'
+
+cp $WORK/newlock lock
+exec aw setup 01
+exec sh -c 'wc -l < "$WORK/installs"'
+stdout '^ *2$'
+
+cd ../..
+mkdir node_modules
+cd .worktrees/01
+cp $WORK/pkg package.json
+exec aw run solo true
+stderr 'has no node_modules'
+mkdir node_modules
+exec aw run solo true
+! stderr 'has no node_modules'
+
+-- newlock --
+new
+-- pkg --
+{}
+-- wait.sh --
+i=0
+until [ -s "$WORK/installs" ]; do i=$((i + 1)); [ $i -lt 200 ] || exit 1; sleep 0.05; done
+sleep 0.3
+-- lock --
+old
+-- workspace.toml --
+[workspace]
+name = "Solo"
+namespace = "solo"
+schema = 1
+
+[projects.solo]
+directory = "."
+install = 'echo x >> "$WORK/installs"'
+install_stamp = ["lock"]

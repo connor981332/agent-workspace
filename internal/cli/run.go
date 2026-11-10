@@ -4,8 +4,10 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"syscall"
 
@@ -53,6 +55,9 @@ runs the project's [projects.<p>] run.`,
 				w.Close()
 				return err
 			}
+			if p := w.cfg.Projects[args[0]]; p != nil && where.Lane != nil {
+				warnBorrowedDeps(cmd.ErrOrStderr(), filepath.Join(w.ws.Owner, p.Directory), where.Dir)
+			}
 			argv := args[1:]
 			if len(argv) == 0 {
 				p := w.cfg.Projects[args[0]]
@@ -85,6 +90,15 @@ runs the project's [projects.<p>] run.`,
 	}
 	cmd.Flags().SetInterspersed(false)
 	return cmd
+}
+
+// warnBorrowedDeps says when a lane has no node_modules of its own and the owner checkout does. Lane
+// worktrees sit inside the owner's project, so Node walks up and finds the owner's without a word.
+func warnBorrowedDeps(out io.Writer, ownerDir, laneDir string) {
+	exists := func(parts ...string) bool { _, err := os.Stat(filepath.Join(parts...)); return err == nil }
+	if ownerDir != laneDir && exists(laneDir, "package.json") && !exists(laneDir, "node_modules") && exists(ownerDir, "node_modules") {
+		fmt.Fprintf(out, "aw: warning: this lane has no node_modules, so Node will use the owner checkout's, which may not match this branch → install here (aw setup <lane> runs the project's install)\n")
+	}
 }
 
 // startLaneSession claims a lane and replaces this process with the harness in it. It returns only

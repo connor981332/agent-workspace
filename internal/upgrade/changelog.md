@@ -10,6 +10,8 @@ Newest first. A line starting with **Breaking:** is called out by `aw upgrade`.
 ## 0.1.3
 
 - `build_template` commands get `AW_OWNER`.
+- `aw setup <lane>` reinstalls when the install's stamp has changed, such as a lockfile a merge brought in.
+- `aw run` warns when a lane has no `node_modules` and would use the owner checkout's.
 - Making a new branch in a lane is refused before Git touches the files, instead of after.
 - A key placed after a string table gets an error that says to move it.
 
