@@ -33,6 +33,8 @@ type Manager struct {
 	Seats func(ctx context.Context, l state.Lane, needs []string) (func(), error)
 	// Progress is told what a claim is doing, for a person waiting at a terminal. It may be nil.
 	Progress func(string)
+	// AWHooksOnly leaves other systems' hooks out of a new lane's harness files.
+	AWHooksOnly bool
 
 	forges        map[string]*forge.Client // by host, for one sweep
 	forgeDeadline time.Time
@@ -502,6 +504,15 @@ func (m *Manager) build(ctx context.Context, lane state.Lane, plans []repoPlan, 
 		}
 		if err := copyLocalFiles(ctx, *p); err != nil {
 			return made, err
+		}
+		if p.rel != "." { // a project need not ignore the lanes aw keeps inside it
+			common, err := workspace.GitCommonDir(p.owner)
+			if err != nil {
+				return made, err
+			}
+			if err := addExcludes(filepath.Join(common, "info", "exclude"), []string{"/.worktrees/"}); err != nil {
+				return made, err
+			}
 		}
 	}
 	if err := os.MkdirAll(root, 0o755); err != nil {

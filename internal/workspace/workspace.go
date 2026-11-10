@@ -137,6 +137,22 @@ func (w *Workspace) StateDir() (string, error) {
 	return filepath.Join(common, "aw"), nil
 }
 
+// RehearsalMarker, in a throwaway copy of a workspace that aw rehearse made, says so.
+const RehearsalMarker = ".aw/rehearsal"
+
+// RehearsalPrefix starts the name of a rehearsal copy's directory, under the real owner's .worktrees.
+const RehearsalPrefix = "rehearsal-"
+
+// IsRehearsal reports whether an owner checkout is a throwaway copy made by aw rehearse. It takes
+// both the marker and the place: a marker alone could be written into a real checkout.
+func IsRehearsal(owner string) bool {
+	if filepath.Base(filepath.Dir(owner)) != ".worktrees" || !strings.HasPrefix(filepath.Base(owner), RehearsalPrefix) {
+		return false
+	}
+	_, err := os.Stat(filepath.Join(owner, filepath.FromSlash(RehearsalMarker)))
+	return err == nil
+}
+
 // MaterializedPath, in a lane root, lists the workspace files aw copied there because the lane's
 // starting commit does not have them, each with its hash.
 const MaterializedPath = ".aw/materialized"
@@ -177,8 +193,8 @@ func UnchangedMaterialized(worktree string) []string {
 	return out
 }
 
-// WithoutMaterialized removes from `git status --porcelain=v1 -uall` output the untracked copies
-// aw itself put in this worktree, so they do not count as uncommitted work.
+// WithoutMaterialized removes from `git status --porcelain=v1 -uall` output the copies aw itself put
+// in this worktree, new files or changes to tracked ones, so they do not count as uncommitted work.
 func WithoutMaterialized(worktree, status string) string {
 	unchanged := UnchangedMaterialized(worktree)
 	if len(unchanged) == 0 || status == "" {
@@ -186,7 +202,7 @@ func WithoutMaterialized(worktree, status string) string {
 	}
 	var kept []string
 	for _, line := range strings.Split(strings.TrimRight(status, "\n"), "\n") {
-		if path, ok := strings.CutPrefix(line, "?? "); ok && slices.Contains(unchanged, path) {
+		if len(line) > 3 && (line[:3] == "?? " || line[:3] == " M ") && slices.Contains(unchanged, line[3:]) {
 			continue
 		}
 		kept = append(kept, line)

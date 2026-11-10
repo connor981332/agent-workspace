@@ -1,0 +1,43 @@
+# aw try works before the workspace's files are committed. aw's own setup output is set aside and put
+# back, lanes do not make a project look dirty, and someone's real uncommitted work still stops it.
+# req: R62
+# source: onboarding RideTracker: bin/aw try refused its own setup output
+# milestone: M12
+
+stubs claude
+workspace shop
+owner-may-change
+exec aw init
+exec aw setup --harness claude
+cp workspace.toml $WORK/owner.toml
+exec aw attach 'checkout tax'
+
+# The agent's proposal: a changed workspace.toml, committed on the lane's branch. It has not committed bin/aw.
+exec sh -c 'echo "# the proposal" >> .worktrees/01/workspace.toml'
+exec git -C .worktrees/01 add workspace.toml
+exec git -C .worktrees/01 commit -qm proposal
+exec git -C web status --porcelain
+! stdout worktrees
+
+# Real work refuses, and names itself. Nothing moved.
+exec sh -c 'echo mine > web/notes.txt'
+! exec aw try checkout-tax
+stderr 'notes.txt'
+! stderr stash
+cmp workspace.toml $WORK/owner.toml
+rm web/notes.txt
+
+exec aw try checkout-tax
+stdout 'Kept .* setup files safe'
+grep 'the proposal' workspace.toml
+exists bin/aw
+exec git rev-parse --abbrev-ref HEAD
+stdout HEAD
+
+exec aw try --back
+stdout 'Back on your branches'
+exec git rev-parse --abbrev-ref HEAD
+stdout main
+cmp workspace.toml $WORK/owner.toml
+exists bin/aw
+exists .aw/version

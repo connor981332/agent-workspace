@@ -1,0 +1,29 @@
+# aw setup edits files a repository already tracks, such as .claude/settings.json. A lane made before
+# those edits are committed still gets them, or it would have no guards, and they are not its work.
+# req: R85
+# source: migrating a workspace that had its own Claude Code hooks
+# milestone: M12
+
+stubs claude
+workspace solo --single --init
+owner-may-change
+exec sh $WORK/old.sh
+exec aw setup --harness claude
+grep 'hook claude' .claude/settings.json
+exec aw attach 'try it'
+grep 'hook claude' .worktrees/01/.claude/settings.json
+grep 'old-hook' .worktrees/01/.claude/settings.json
+grep 'aw:begin' .worktrees/01/AGENTS.md
+exec aw discard 01 --yes
+! exists .worktrees/01
+exec git status --porcelain
+stdout '.claude/settings.json'
+
+-- old.sh --
+mkdir -p .claude
+cat > .claude/settings.json <<EOS
+{"hooks":{"SessionEnd":[{"hooks":[{"type":"command","command":"old-hook"}]}]}}
+EOS
+echo '# Solo' > AGENTS.md
+git add -A
+git commit -qm 'old framework'

@@ -21,9 +21,10 @@ const maxIdentifier = 63
 // TEMPLATE. It shells out to psql, on the host or in a configured service, so no driver is linked.
 // Statements go to the maintenance database, so nothing connects to the template or a lane database.
 type postgres struct {
-	data      *config.Data
-	namespace string
-	u         *url.URL
+	onlyProject string // a rehearsal's own infrastructure, or ""
+	data        *config.Data
+	namespace   string
+	u           *url.URL
 }
 
 func newPostgres(d *config.Data, namespace string) (*postgres, error) {
@@ -74,7 +75,7 @@ func (p *postgres) psql(ctx context.Context, statement string) (string, error) {
 		env = append(env, "PGPASSWORD="+password)
 	}
 	if p.data.Service != "" {
-		container, err := findContainer(ctx, p.data.Service)
+		container, err := findContainer(ctx, p.data.Service, p.onlyProject)
 		if err != nil {
 			return "", err
 		}

@@ -132,7 +132,9 @@ func (m *Manager) FindOrphans(ctx context.Context, recorded []state.LaneRepo) []
 		for _, line := range strings.Split(trees, "\n") {
 			if p, ok := strings.CutPrefix(line, "worktree "); ok {
 				path = p
-				if !strings.HasPrefix(canonical(p), prefix) || paths[canonical(p)] {
+				// Only a numbered directory is a lane's: anything else under .worktrees is someone's own.
+				rel := strings.TrimPrefix(canonical(p), prefix)
+				if !strings.HasPrefix(canonical(p), prefix) || paths[canonical(p)] || strings.Trim(rel, "0123456789") != "" {
 					path = ""
 				}
 			}

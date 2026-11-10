@@ -98,6 +98,9 @@ func (m *Manager) Discard(ctx context.Context, l state.Lane, now time.Time) ([]s
 			continue
 		}
 		ref := fmt.Sprintf("refs/aw/archive/%s/%s", l.Name, stamp)
+		for n := 2; ok(g.OK(ctx, "rev-parse", "--verify", "--quiet", ref)); n++ {
+			ref = fmt.Sprintf("refs/aw/archive/%s/%s-%d", l.Name, stamp, n) // the same name, discarded within a second
+		}
 		if _, err := g.Run(ctx, "update-ref", ref, head, ""); err != nil {
 			return archived, fmt.Errorf("archiving %s: %w; nothing was removed", repoLabel(r), err)
 		}

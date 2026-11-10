@@ -19,7 +19,8 @@ launches the default harness with the right skill. A failure in those determinis
 the command: the agent starts with the failure as context, in the owner checkout as a pair session if
 no lane can be created, and decides whether to fix it, skip it or ask. Nothing has to be committed: a
 lane's root receives what its commit lacks, as copies that do not count as the lane's work until
-they are changed.
+they are changed. Hooks that are not aw's are left out of the onboarding lane, and the agent decides
+whether the workspace keeps them, because another system's guard can refuse everything in a lane.
 
 ## Facts first: `aw inspect`
 
@@ -87,6 +88,14 @@ Proposals are checked before anyone reviews them:
    files. It runs each project's smoke command if one is declared.
 3. It tears both lanes down and confirms nothing is left: no worktrees, branches, databases,
    processes or containers.
+
+With a lane, or from inside one, `aw rehearse` tests that lane's proposal without touching the owner:
+it builds a throwaway copy of the workspace under `.worktrees/rehearsal-*`, from the lane's heads and
+uncommitted changes, with its own namespace, a port offset and its own containers, and removes it
+afterwards. aw can only move what it names, so it refuses to start when a Compose file or script fixes a
+host port, a shared network or a real Compose project; those read `AW_PORT_<n>`, `AW_INFRA_NETWORK` and
+`AW_INFRA_PROJECT`, which a rehearsal sets, with the real value as the default. The agent onboarding a workspace may run it for its own lane, and so needs no human for
+the loop.
 
 The skill iterates until rehearsal passes, then stops and reports.
 

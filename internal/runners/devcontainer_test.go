@@ -2,9 +2,13 @@ package runners
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/connor981332/agent-workspace/internal/config"
+	"github.com/connor981332/agent-workspace/internal/workspace"
 )
 
 func TestStripJSONC(t *testing.T) {
@@ -73,5 +77,60 @@ func TestSeatPortsCoverEverySeatWithOffset(t *testing.T) {
 	got := SeatPorts(c, "web")
 	if len(got) != 2 || got[0] != 3010 || got[1] != 3110 {
 		t.Fatalf("SeatPorts = %v", got)
+	}
+}
+
+// A devcontainer's initializeCommand runs on the host, so in a rehearsal it needs the same names lane
+// commands get, or a script branching on them acts on the owner's containers.
+func TestComposeEnvInARehearsal(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "compose.yaml")
+	if err := os.WriteFile(file, []byte("ports:\n  - \"${AW_PORT_5432:-5432}:5432\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := ComposeEnv([]string{file}, 20000, "rhab")
+	for _, want := range []string{"AW_PORT_5432=25432", "AW_REHEARSAL=1", "AW_NAMESPACE=rhab", "AW_INFRA_PROJECT=rhab-infra", "AW_INFRA_NETWORK=rhab-dev-net"} {
+		if !slices.Contains(got, want) {
+			t.Errorf("missing %s in %v", want, got)
+		}
+	}
+	if got := ComposeEnv([]string{file}, 0, ""); slices.Contains(got, "AW_REHEARSAL=1") {
+		t.Errorf("an ordinary run looks like a rehearsal: %v", got)
+	}
+}
+
+// A hand-written infra file's own name is the stack's identity: under another project name its
+// containers would start a second time, on empty volumes. A rehearsal never takes that name.
+func TestInfraKeepsTheFilesName(t *testing.T) {
+	owner := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(owner, "infra"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write := func(text string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(owner, "infra", "compose.yaml"), []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("# the stack\nname: rt-infra\nservices: {}\n")
+	if got := NewInfra(owner, "ridetracker", nil, nil, 0).Project; got != "rt-infra" {
+		t.Errorf("a named file: got project %s", got)
+	}
+	write("name: ${STACK:-rt}\nservices: {}\n")
+	if got := NewInfra(owner, "ridetracker", nil, nil, 0).Project; got != "ridetracker-infra" {
+		t.Errorf("a computed name: got project %s", got)
+	}
+	copied := filepath.Join(owner, ".worktrees", workspace.RehearsalPrefix+"ab")
+	for _, d := range []string{"infra", ".aw"} {
+		if err := os.MkdirAll(filepath.Join(copied, d), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for f, text := range map[string]string{"infra/compose.yaml": "name: rt-infra\n", workspace.RehearsalMarker: ""} {
+		if err := os.WriteFile(filepath.Join(copied, filepath.FromSlash(f)), []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := NewInfra(copied, "rhab", nil, nil, 0).Project; got != "rhab-infra" {
+		t.Errorf("a rehearsal: got project %s", got)
 	}
 }

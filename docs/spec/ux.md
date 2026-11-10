@@ -35,7 +35,7 @@ The CLI is part of the design, not an afterthought. Most of the tool's value is 
 | `aw park` / `aw unpark` / `aw discard` | human | Shelve, restore or abandon work |
 | `aw sweep [--apply]` | human | Recycle lanes proven merged |
 | `aw pair` / `aw move-to-lane` / `aw try` | human | Work in the owner checkout ([owner-checkout.md](owner-checkout.md)) |
-| `aw setup` / `aw doctor` / `aw inspect` / `aw rehearse` | human | Onboarding and diagnosis |
+| `aw setup` / `aw doctor` / `aw inspect` / `aw rehearse` | human; an agent may rehearse its own onboarding lane | Onboarding and diagnosis |
 | `aw snapshot <name>` / `aw restore <name>` / `aw snapshots` | both | Named copies of a lane's data, shared across the workspace |
 | `aw setup <lane>` | both | Rerun a lane's setup from its first incomplete step; an agent may do this for its own lane |
 | `aw config explain <key>` | both | Effective value and where it came from |

@@ -19,12 +19,16 @@ import (
 	"github.com/connor981332/agent-workspace/internal/platform"
 	"github.com/connor981332/agent-workspace/internal/policy"
 	"github.com/connor981332/agent-workspace/internal/state"
+	"github.com/connor981332/agent-workspace/internal/workspace"
 )
 
 // agentContext says why this process is an agent's, or "" (S10): a harness's environment marker,
 // AW_SESSION, or a known harness among its ancestors. Reading the ancestry costs a few milliseconds,
 // so only owner-only commands do it.
 func agentContext() string {
+	if inRehearsal() {
+		return "" // a throwaway copy, where aw rehearse runs the human's commands against nothing real
+	}
 	if os.Getenv("AW_SESSION") != "" {
 		return "AW_SESSION is set"
 	}
@@ -39,6 +43,15 @@ func agentContext() string {
 		}
 	}
 	return ""
+}
+
+func inRehearsal() bool {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return false
+	}
+	ws, err := workspace.Find(cwd)
+	return err == nil && workspace.IsRehearsal(ws.Owner)
 }
 
 // refuseAgent refuses an owner-only command in agent context, for a harness without hooks or a
@@ -56,6 +69,9 @@ func refuseAgent(cmd *cobra.Command, args []string) error {
 	}
 	if !policy.OwnerOnly(name) && !sweeping {
 		return nil
+	}
+	if name == "rehearse" {
+		return nil // the command itself checks: an agent may rehearse its own onboarding lane
 	}
 	if name == "setup" && len(args) == 1 {
 		return nil // retrying a lane's setup: the command itself checks that it is the agent's own lane

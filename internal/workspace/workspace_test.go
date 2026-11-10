@@ -71,3 +71,25 @@ func TestGitCommonDir(t *testing.T) {
 		t.Errorf("no repository: no error")
 	}
 }
+
+// A rehearsal needs both the marker and the place, so that a marker written into a real checkout
+// does not make it one.
+func TestIsRehearsal(t *testing.T) {
+	base := t.TempDir()
+	real := filepath.Join(base, "shop")
+	copied := filepath.Join(real, ".worktrees", RehearsalPrefix+"ab")
+	for _, d := range []string{real, copied} {
+		if err := os.MkdirAll(filepath.Join(d, ".aw"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(d, filepath.FromSlash(RehearsalMarker)), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if IsRehearsal(real) {
+		t.Error("a real checkout with the marker counts as a rehearsal")
+	}
+	if !IsRehearsal(copied) {
+		t.Error("a rehearsal copy does not count as one")
+	}
+}

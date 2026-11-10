@@ -19,7 +19,10 @@ stdout 'No lanes'
 exec git -C api branch aw/broken-work
 exec git -C api worktree add -q .worktrees/07 aw/broken-work
 exec git -C api branch aw/other-left
+exec git -C api branch docs/mine
+exec git -C api worktree add -q .worktrees/my-notes docs/mine
 exec aw doctor
+! stdout 'my-notes'
 stdout 'lane leftovers: no lane records'
 stdout 'aw/broken-work in project api'
 stdout 'aw discard --orphans'
@@ -33,6 +36,7 @@ stderr 'confirm with --yes'
 exec aw discard --orphans --yes
 stdout 'Removed aw/broken-work from project api'
 ! exists api/.worktrees/07
+exists api/.worktrees/my-notes
 exec git -C api for-each-ref refs/aw/archive
 stdout orphan-aw-broken-work
 exec git -C api branch --list 'aw/*'

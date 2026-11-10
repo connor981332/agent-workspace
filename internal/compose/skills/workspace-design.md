@@ -19,5 +19,5 @@ Agents propose, the tool verifies, a human approves. You are writing a proposal.
    - which settings the project's hooks read, in `[projects.<name>.env]`.
 3. Write `workspace.toml`, the hook scripts, and `docs/workspace-design.md`, which records each decision and the reason for it.
 4. Check it with `bin/aw config validate` and `bin/aw doctor`.
-5. Ask the human to run `bin/aw rehearse`, which only the human may run, and work from what it reports. Iterate until it passes.
+5. Run `bin/aw rehearse` from this lane, and work from what it reports. It tests the lane as it is now, in a throwaway copy with its own containers, so the human's checkout is not touched. Iterate until it passes.
 6. Stop, and report what you decided and why. The result goes on this lane's branch and through a merge request, because hooks run with the user's privileges and a person must review them. In a pair session in the owner checkout there is no branch: leave the changes there for the person to review.

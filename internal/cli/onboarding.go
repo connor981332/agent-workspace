@@ -10,10 +10,12 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -25,6 +27,7 @@ import (
 	"github.com/connor981332/agent-workspace/internal/harness/launch"
 	"github.com/connor981332/agent-workspace/internal/inspect"
 	"github.com/connor981332/agent-workspace/internal/lanes"
+	"github.com/connor981332/agent-workspace/internal/sandbox"
 	"github.com/connor981332/agent-workspace/internal/state"
 	"github.com/connor981332/agent-workspace/internal/ui"
 	"github.com/connor981332/agent-workspace/internal/workspace"
@@ -63,7 +66,10 @@ func newInspectCmd() *cobra.Command {
 			}
 			inspect.Preflight(cmd.Context(), ws.Owner, c, projects)
 			if asJSON {
-				return writeJSON(cmd.OutOrStdout(), map[string]any{"projects": projects})
+				return writeJSON(cmd.OutOrStdout(), map[string]any{"projects": projects, "other_hooks": sandbox.OtherHooks(ws.Owner)})
+			}
+			for _, h := range sandbox.OtherHooks(ws.Owner) {
+				fmt.Fprintf(cmd.OutOrStdout(), "! a hook that is not aw's, which also runs in lanes: %s\n", ui.Clean(h))
 			}
 			for _, p := range projects {
 				fmt.Fprintf(cmd.OutOrStdout(), "%s (%s): %s; %d environment variables, %d findings\n", p.Name, p.Directory, strings.Join(p.Stacks, ", "), len(p.EnvVars), len(p.Findings))
@@ -110,10 +116,10 @@ func doctorProjects(cmd *cobra.Command, asJSON bool) error {
 }
 
 func newOnboardCmd() *cobra.Command {
-	var review bool
+	var review, keepOtherHooks bool
 	var harness string
 	cmd := &cobra.Command{
-		Use:   "onboard [--review] [--harness h]",
+		Use:   "onboard [--review] [--harness h] [--keep-other-hooks]",
 		Short: "Set this workspace up, and have an agent design its configuration for you to review",
 		Long: `The one command to start with. It runs everything aw setup does, reports what aw inspect finds, and
 then starts a harness with the workspace-design skill. If setup or creating the lane fails, the agent
@@ -122,6 +128,9 @@ still starts, in the owner checkout with the failure in front of it, to fix it, 
 Nothing needs to be committed first. The agent works in a lane when the workspace repository has a
 commit to start from, and its result stays on the lane's branch for review. In a workspace kept as
 plain files it works in the owner checkout as a pair session.
+
+Hooks that are not aw's are turned off in the onboarding lane, because another system's guard can
+refuse everything in a lane, and the agent is told which ones. Your checkout keeps them.
 
 Hooks see your environment, so VARIABLE=value aw onboard reaches them. To keep a setting, put it in
 workspace.toml under [projects.<name>.env].
@@ -153,10 +162,10 @@ for what is new or has drifted.`,
 			preflight := reportPreflight(cmd, ws, c, errOut)
 
 			prompt := "Use the aw-workspace-design skill to design this workspace, then stop and report."
-			purpose := "onboard this workspace"
+			purpose := lanes.PurposeOnboard
 			if review {
 				prompt = "Use the aw-workspace-design skill, but only for what is new or has drifted: compare workspace.toml with aw inspect --json, and propose changes for a new project, a new server or a new dependency on data. Leave the rest. Then stop and report."
-				purpose = "review onboarding"
+				purpose = lanes.PurposeReview
 			}
 			if preflight != "" {
 				prompt += "\n\nWhat aw inspect found before anything was created:\n" + preflight
@@ -167,17 +176,29 @@ for what is new or has drifted.`,
 			if err := os.Chdir(ws.Owner); err != nil {
 				return err
 			}
+			laneNote, ownerNote := "", ""
+			if others := sandbox.OtherHooks(ws.Owner); len(others) > 0 {
+				list := strings.Join(others, "\n")
+				ownerNote = "\n\nThese hooks are not aw's, and they run in this checkout. If one refuses your tool calls, say so and ask the human to remove it:\n" + list
+				if keepOtherHooks {
+					fmt.Fprintf(errOut, "aw onboard: keeping hooks that are not aw's, as asked. They run in the lane too:\n  %s\n", strings.Join(others, "\n  "))
+					laneNote = "\n\nThese hooks are not aw's, and they run in this lane too, because the human kept them:\n" + list
+				} else {
+					fmt.Fprintf(errOut, "aw onboard: turning off hooks that are not aw's, in the onboarding lane only, because another system's guard can refuse everything in a lane. Your checkout keeps them, and --keep-other-hooks leaves them on:\n  %s\n", strings.Join(others, "\n  "))
+					laneNote = "\n\nThese hooks are not aw's, and aw turned them off in this lane only. Decide whether the workspace should keep each one, and change the harness files on your branch to match:\n" + list
+				}
+			}
 			m := &lanes.Manager{WS: ws, Cfg: c}
 			var failed error
 			if !m.CanReview(cmd.Context()) {
-				prompt += "\n\nThis workspace is not in a Git repository with a commit, so there is no lane branch to review: you are a pair session in the owner checkout. Leave your changes there, and report them."
+				prompt += ownerNote + "\n\nThis workspace is not in a Git repository with a commit, so there is no lane branch to review: you are a pair session in the owner checkout. Leave your changes there, and report them."
 			} else {
-				failed = startLaneSession(cmd, purpose, harness, "", "", false, launch.PromptArgs(harness, prompt))
+				failed = startLaneSession(cmd, purpose, harness, "", "", false, !keepOtherHooks, launch.PromptArgs(harness, prompt+laneNote))
 				if failed == nil {
 					return nil
 				}
 				fmt.Fprintf(errOut, "aw onboard: no lane could be created (%v). Starting the agent in the owner checkout to work on that.\n", failed)
-				prompt += failureContext(failed, "") + "\n\nNo lane could be created, so you are a pair session in the owner checkout. Fix what stops lanes first, then carry on."
+				prompt += ownerNote + failureContext(failed, "") + "\n\nNo lane could be created, so you are a pair session in the owner checkout. Fix what stops lanes first, then carry on."
 			}
 			w, err := openForWrite()
 			if err != nil {
@@ -192,6 +213,7 @@ for what is new or has drifted.`,
 	}
 	cmd.Flags().BoolVar(&review, "review", false, "propose changes only for what is new or has drifted")
 	cmd.Flags().StringVar(&harness, "harness", "", "the harness to launch")
+	cmd.Flags().BoolVar(&keepOtherHooks, "keep-other-hooks", false, "leave hooks that are not aw's on in the onboarding lane")
 	return cmd
 }
 
@@ -357,22 +379,30 @@ func parseEnv(text string) map[string]string {
 
 func newRehearseCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "rehearse",
+		Use:   "rehearse [lane]",
 		Short: "Create two lanes at once, start their servers, check they do not collide, and clean up",
 		Long: `Create two lanes at the same time, run their setup and start their servers, then check that the lanes
 do not collide: ports, hostnames and data must differ, and nothing may be written into the owner
 checkout. Each project's smoke command runs if it has one. Both lanes are then torn down, and aw
-confirms that nothing is left behind.`,
-		Args: cobra.NoArgs,
-		RunE: run(func(cmd *cobra.Command, _ []string) error {
+confirms that nothing is left behind.
+
+With a lane, or from inside one, it rehearses that lane's proposal as the lane has it now, committed
+or not, in a throwaway copy of the workspace with its own name, ports and containers. Your checkout,
+containers and configuration are not touched, and the copy is removed afterwards. The agent onboarding
+a workspace may do this for its own lane.`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: run(func(cmd *cobra.Command, args []string) error {
 			ctx, stop := context.WithTimeout(cmd.Context(), 20*time.Minute)
 			defer stop()
 			ws, c, err := loadConfig()
 			if err != nil {
 				return err
 			}
-			if ws.LaneRoot != "" {
-				return fmt.Errorf("aw rehearse runs in the owner checkout → run it in %s", ui.Clean(ws.Owner))
+			if len(args) == 1 || ws.LaneRoot != "" {
+				return rehearseLane(cmd, args)
+			}
+			if why := agentContext(); why != "" {
+				return fmt.Errorf("aw rehearse in the owner checkout is only for the human, and this looks like an agent session (%s) → from your own onboarding lane, run bin/aw rehearse", why)
 			}
 			exe, err := os.Executable()
 			if err != nil {
@@ -450,6 +480,102 @@ confirms that nothing is left behind.`,
 			return nil
 		}),
 	}
+}
+
+// rehearseLane rehearses a lane's proposal in a throwaway copy of the workspace.
+func rehearseLane(cmd *cobra.Command, args []string) error {
+	m, done, err := openForRead()
+	if err != nil {
+		return err
+	}
+	defer done()
+	if m.Store == nil {
+		return errors.New("this workspace has no lanes yet → aw new starts one")
+	}
+	var l state.Lane
+	if len(args) == 1 {
+		l, err = m.Resolve(args[0])
+	} else {
+		l, err = laneArg(m, nil)
+	}
+	if err != nil {
+		return err
+	}
+	if why := agentContext(); why != "" && (m.CallerLane() != l.Number || !lanes.IsOnboarding(l)) {
+		return fmt.Errorf("an agent may only rehearse its own onboarding lane, and this looks like an agent session (%s) → ask the human to run aw rehearse %s", why, ui.Clean(l.Name))
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	ctx, stop := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
+	defer stop()
+	out, errOut := cmd.OutOrStdout(), cmd.ErrOrStderr()
+	fmt.Fprintf(out, "Rehearsing lane %s in a throwaway copy of the workspace. Your checkout and containers are not touched.\n", ui.Clean(l.Name))
+	copied, err := m.BuildRehearsal(ctx, l, randomHex(4), func(line string) { fmt.Fprintln(errOut, "aw: "+line) })
+	if copied != nil {
+		defer func() {
+			cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+			defer cancel()
+			if err := destroyRehearsal(cleanup, copied, errOut); err != nil {
+				fmt.Fprintf(errOut, "aw: warning: the throwaway copy was not fully removed: %v\n", err)
+			}
+		}()
+	}
+	if err != nil {
+		return err
+	}
+	copied.Started = true
+	env := rehearsalEnv(exe, copied.Owner)
+	infra := infraOf(&workspace.Workspace{Owner: copied.Owner}, copied.Cfg)
+	if infra.Configured() {
+		c := exec.CommandContext(ctx, exe, "infra", "up")
+		c.Dir, c.Env, c.Stdout, c.Stderr = copied.Owner, env, errOut, errOut
+		if err := c.Run(); err != nil {
+			return fmt.Errorf("the proposal's shared infrastructure did not start: %w", err)
+		}
+	}
+	c := exec.CommandContext(ctx, exe, "rehearse")
+	c.Dir, c.Env, c.Stdout, c.Stderr = copied.Owner, env, out, errOut
+	if err := c.Run(); err != nil {
+		return &silentError{fmt.Errorf("the rehearsal of lane %s failed: %w", l.Name, err)}
+	}
+	return nil
+}
+
+// rehearsalEnv runs aw in the copy as nobody's session, with this very binary.
+func rehearsalEnv(exe, dir string) []string {
+	drop := []string{"AW_SESSION=", "AW_SESSION_PID=", "AW_TOOL_PATH=", "AW_LAUNCHED=", "PWD="}
+	for _, e := range harnessEnv {
+		drop = append(drop, e.env+"=")
+	}
+	env := slices.DeleteFunc(os.Environ(), func(kv string) bool {
+		return slices.ContainsFunc(drop, func(p string) bool { return strings.HasPrefix(kv, p) })
+	})
+	return append(env, "AW_LAUNCHED=1", "AW_TOOL_PATH="+exe, "PWD="+dir)
+}
+
+// destroyRehearsal removes everything the copy made: its containers, infrastructure and files.
+func destroyRehearsal(ctx context.Context, r *lanes.Rehearsal, out io.Writer) error {
+	var errs []error
+	ws := &workspace.Workspace{Owner: r.Owner}
+	if r.Cfg != nil && r.Started {
+		for _, name := range slices.Sorted(mapsKeys(r.Cfg.Projects)) {
+			if r.Cfg.Projects[name].Runner != "devcontainer" {
+				continue
+			}
+			d, err := devcontainerIn(ws, r.Cfg, name)
+			if err == nil {
+				err = d.Destroy(ctx)
+			}
+			errs = append(errs, err)
+		}
+		if infra := infraOf(ws, r.Cfg); infra.Configured() {
+			errs = append(errs, infra.Destroy(ctx, out))
+		}
+	}
+	errs = append(errs, r.Remove())
+	return errors.Join(errs...)
 }
 
 type laneRun struct {

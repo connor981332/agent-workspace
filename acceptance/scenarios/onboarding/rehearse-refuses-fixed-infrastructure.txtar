@@ -1,0 +1,35 @@
+# A rehearsal must not reach the owner's real containers and data. A proposal that fixes a port,
+# a network or a Compose project is refused, naming each, before anything starts.
+# req: R87
+# source: onboarding RideTracker, whose hooks name its real database and infrastructure
+# milestone: M12
+
+stubs docker
+workspace shop --init
+exec aw attach 'onboard this workspace'
+exec sh $WORK/fixed.sh
+! exec aw rehearse onboard-workspace
+stderr 'not isolated'
+stderr 'infra/compose.yaml:.*a fixed host port'
+stderr 'a fixed shared network'
+stderr 'bin/lane-bucket:1: names rt-infra'
+stderr 'AW_PORT_'
+! exists $STUB_LOG
+! exists .worktrees/rehearsal-*
+
+-- fixed.sh --
+cd .worktrees/01
+mkdir -p infra bin
+cat > infra/compose.yaml <<EOS
+name: rt-infra
+services:
+  db:
+    image: postgres
+    ports:
+      - "5432:5432"
+networks:
+  default:
+    name: rt-net
+    external: true
+EOS
+echo 'docker exec rt-infra true' > bin/lane-bucket

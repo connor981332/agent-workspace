@@ -11,6 +11,7 @@ import (
 
 	"github.com/connor981332/agent-workspace/internal/config"
 	"github.com/connor981332/agent-workspace/internal/state"
+	"github.com/connor981332/agent-workspace/internal/workspace"
 )
 
 // Where says where a project command runs: the directory, and the environment contract
@@ -54,6 +55,9 @@ func (m *Manager) LocateIn(n int, project string) (*Where, error) {
 		"AW_OWNER=" + m.WS.Owner,
 		"AW_NAMESPACE=" + m.Cfg.Workspace.Namespace,
 		"AW_TOOL=" + filepath.Join(m.WS.Owner, "bin", "aw"),
+	}
+	if workspace.IsRehearsal(m.WS.Owner) {
+		env = append(env, "AW_REHEARSAL=1", "AW_INFRA_PROJECT="+m.Cfg.Workspace.Namespace+"-infra")
 	}
 	if project != "" {
 		env = append(env, "AW_PROJECT="+project)
