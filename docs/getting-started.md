@@ -5,9 +5,20 @@ and a place in line for the things only one lane can use at a time. You keep you
 
 It runs on Linux and macOS, on amd64 and arm64.
 
-## Join a workspace that already uses it
+## Install
 
 You need `sh`, `git`, `curl` or `wget`, and `sha256sum` or `shasum`. Nothing else.
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/connor981332/agent-workspace/master/install.sh | sh
+aw version
+```
+
+This puts `aw` in `~/.local/bin`, after verifying its checksum, and its signature when `cosign` is
+installed. `AW_VERSION` picks a release and `AW_INSTALL_DIR` the directory. Inside a workspace, `aw`
+always runs the version that workspace pins, so upgrading this copy changes nothing there.
+
+## Join a workspace that already uses it
 
 ```sh
 git clone git@github.com:shop/shop-workspace && cd shop-workspace
@@ -17,7 +28,7 @@ bin/aw setup
 `bin/aw setup` downloads and verifies the version the workspace pins, clones the project repositories,
 creates your individual settings, checks for secret files that are not in Git, installs the hooks,
 installs dependencies, and runs `aw doctor`. You can run it again at any time. It asks before it
-starts any container.
+starts any container. You do not need the global `aw` for this.
 
 Then start work:
 
@@ -29,17 +40,6 @@ That claims a lane and launches your harness in it. Or start a harness yourself 
 it will attach to a lane when it first needs to write.
 
 ## Set up a new workspace
-
-Install a global `aw`. Inside a workspace it always runs that workspace's pinned version, so upgrading
-it changes nothing there.
-
-```sh
-brew install connor981332/tap/aw
-# or
-curl -fsSL https://raw.githubusercontent.com/connor981332/agent-workspace/master/install.sh | sh
-# or
-go install github.com/connor981332/agent-workspace/cmd/aw@latest
-```
 
 In the directory that will hold the workspace, which can be a Git repository or a plain directory of
 project repositories:

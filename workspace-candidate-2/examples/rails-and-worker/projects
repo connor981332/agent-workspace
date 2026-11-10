@@ -1,3 +1,0 @@
-# <alias> <directory> [worktree|shared] [port]
-app      shop                     worktree 3200
-worker   shop-worker              shared   -

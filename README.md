@@ -2,11 +2,18 @@
 
 Agent Workspace is a development environment that facilitates parallel agent sessions. It works with any agentic coding tool, and prevents resource contention so many agents can get work done at the same time on one machine.
 
-> **Status: pre-1.0.** Nothing here is stable yet. Interfaces, file formats and directory layout will change without notice, and nothing is packaged or versioned for outside use. We plan to make this project open source once the design settles. The code is already under the [Apache-2.0 license](LICENSE).
+> **Status: pre-1.0.** Releases are signed and versioned, but interfaces, file formats and directory layout can still change between them. `aw upgrade` migrates a workspace from one release to the next. The code is under the [Apache-2.0 license](LICENSE).
 
 ## Getting started
 
-See [Getting started](docs/getting-started.md), the [supported harnesses](docs/harnesses.md), the [configuration reference](docs/reference/config.md) and the [safety model](docs/safety.md).
+```sh
+curl -fsSL https://raw.githubusercontent.com/connor981332/agent-workspace/master/install.sh | sh
+cd your-workspace   # a directory holding your project repositories, or a single repository
+aw init
+aw onboard
+```
+
+See [Getting started](docs/getting-started.md) for what those do and how to join a workspace that already uses `aw`, and the [supported harnesses](docs/harnesses.md), the [configuration reference](docs/reference/config.md) and the [safety model](docs/safety.md).
 
 ## The problem
 
@@ -28,7 +35,7 @@ Personal settings can override the team's, except for what the team locks.
 
 ## Where things stand
 
-Agent Workspace is a single Go binary for Linux and macOS, with signed releases. It works with Claude Code, Codex, Grok and OpenCode, and other harnesses can be added in configuration. It came out of two earlier implementations, kept in this repository for now under `workspace-candidate-*`, which will be archived after v0.1.0.
+Agent Workspace is a single Go binary for Linux and macOS, with signed releases. It works with Claude Code, Codex, Grok and OpenCode, and other harnesses can be added in configuration.
 
 ## What it does
 

@@ -1,7 +1,8 @@
 # Release candidate implementation plan
 
-How to build the Agent Workspace release candidate: one Go binary, `aw`, which replaces
-`workspace-candidate-1` and `workspace-candidate-2` and will be published as open source.
+How the Agent Workspace release candidate was built: one Go binary, `aw`, which replaced two earlier
+implementations. Those were removed from the repository at v0.1.0, so the paths and names this plan
+cites for them (`workspace-candidate-*`, C1, C2) are in the history, at the tag `candidates-final`.
 
 The design is settled in [docs/spec/](../docs/spec/README.md). This plan does not redesign it. It
 orders the work, defines the test suites that prove each step, and lists the places where the spec
@@ -12,7 +13,7 @@ milestone named in its row.
 
 **State:** PARTIALLY IMPLEMENTED
 
-**Updated:** 2026-11-09
+**Updated:** 2026-11-10
 
 **Branches / MRs:** PRs [#5](https://github.com/connor981332/agent-workspace/pull/5) to
 [#15](https://github.com/connor981332/agent-workspace/pull/15), merged: the plan and settled
@@ -144,10 +145,12 @@ v0.0.11 passed the whole release workflow: Sigstore signature, SLSA provenance, 
 
 **M12 is built.** Declarative adapters, `aw supervise`, the tier-2 warning (R57), documentation for outsiders, contribution guidelines, and a security pass (`docs/dev/security-review.md`). Every requirement now has a passing scenario. Candidate archiving and scrubbing their names from this plan and the spec wait for v0.1.0.
 
-**Pending manual checks:** an independent security review, the public announcement, `v0.1.0` and `v1.0.0`, the Homebrew tap's token, and the v0.1 dogfooding (M7); the macOS devcontainer checklist on Docker Desktop and OrbStack (`docs/dev/macos-devcontainer-checklist.md`, M6); the hot-path and budget benchmarks on an Apple Silicon laptop (T3, M1, M2;
+**Pending manual checks:** an independent security review, the public announcement, `v1.0.0`, the Homebrew tap's token, and the v0.1 dogfooding (M7); the macOS devcontainer checklist on Docker Desktop and OrbStack (`docs/dev/macos-devcontainer-checklist.md`, M6); the hot-path and budget benchmarks on an Apple Silicon laptop (T3, M1, M2;
 docs/dev/benchmarks.md).
 
-**Next step:** The spec owner dogfoods a release candidate on two real workspaces, then `v0.1.0` is tagged and the candidates are archived.
+**Removed the candidates (2026-11-10).** The spec owner decided to remove both from the repository and tag `v0.1.0` after a day of dogfooding `v0.1.0-rc.2` and the fixes from it, ahead of the five working days planned in M7.
+
+**Next step:** The checks listed as pending above.
 
 ## How to use this plan
 
@@ -158,11 +161,11 @@ docs/dev/benchmarks.md).
   column names that milestone, and record it in the spec, not only here.
 - Requirement numbers (R1 to R94) refer to [requirements.md](../docs/spec/requirements.md). "C1"
   means `workspace-candidate-1` (Python) and "C2" means `workspace-candidate-2` (shell). "F*n*"
-  means finding *n* in [C2's findings.md](../workspace-candidate-2/docs/findings.md).
+  means finding *n* in C2's findings.md.
 - Acceptance scenarios are written **before or together with** the code they cover. A pull request
   that adds behavior also adds or enables the scenarios for it.
 - Keep the Status block above up to date. Its fields follow the plan convention from
-  [C1's docs/plans.md](../workspace-candidate-1/docs/plans.md) (R82). The State is one of `DRAFT`,
+  C1's docs/plans.md (R82). The State is one of `DRAFT`,
   `PLANNED`, `PARTIALLY IMPLEMENTED`, `FULLY IMPLEMENTED` or `FULLY VERIFIED`, and the row in
   [plans/README.md](README.md) must agree with it.
 
@@ -661,7 +664,7 @@ schema = 1
   and verifies it. So every scenario goes through the launcher, as users do. The custom commands are
   documented in `acceptance/README.md`, so that another runner could interpret the same files.
 - **Stubs** are POSIX `sh` scripts in `acceptance/stubs/`, ported from C2's
-  [`tests/stubs`](../workspace-candidate-2/tests/stubs/). Each one appends its argv to `$STUB_LOG`
+  `tests/stubs`. Each one appends its argv to `$STUB_LOG`
   and answers from files under `$STUB_STATE`. The `docker exec -w <dir> <container> <cmd>` stub
   runs `<cmd>` on the host in `<dir>`, with the env file applied. That is valid because the runner
   uses the same paths inside and outside the container (S7), and it lets runner scenarios observe
@@ -1108,7 +1111,7 @@ version, in the release notes and in `aw version --json`.
 
 ## 7. CI
 
-The existing workflow, [`.github/workflows/candidates.yml`](../.github/workflows/candidates.yml),
+The existing workflow, `.github/workflows/candidates.yml`,
 stays unchanged until the candidates are archived (§9). A new workflow, `.github/workflows/go.yml`,
 runs alongside it.
 
@@ -1128,7 +1131,7 @@ and take it to the spec owner, because R90 requires real tests on all four platf
 macOS runners have no Docker, so the macOS devcontainer path is covered by stubbed acceptance tests
 in CI and by the manual checklist at M6 and before each release (risk 4).
 
-The Go workflow ignores changes that touch only `workspace-candidate-*` (`paths-ignore`). The
+The Go workflow ran alongside the candidates' own until they were removed. The
 candidates workflow is not edited, so it keeps running on every pull request, as today, until the
 candidates are archived.
 
@@ -1258,7 +1261,7 @@ Branch `m0/acceptance`.
    `owner-snapshot` and `owner-unchanged` commands, with the owner check run after every scenario
    automatically.
 3. Stubs for `docker` and `devcontainer` ported from
-   [C2's stubs](../workspace-candidate-2/tests/stubs/), plus a `git-fail` wrapper.
+   C2's stubs, plus a `git-fail` wrapper.
 4. Scenarios `cli/version`, `cli/unknown-command-exit-code` and `cli/version-json`, and the M1 rows
    of §3.5 as pending scenario files with their headers.
 5. `acceptance/requirements.toml` from §2, and the coverage check.

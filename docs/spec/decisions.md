@@ -1,15 +1,15 @@
 # Design decisions
 
 Each decision gives the choice, the alternative and the cost, in the same form as the candidates'
-own decisions documents. "C1" is [`workspace-candidate-1`](../../workspace-candidate-1/) (Python,
-from the RideTracker workspace). "C2" is [`workspace-candidate-2`](../../workspace-candidate-2/)
-(shell, from the FabWorks workspace).
+own decisions documents. "C1" and "C2" are the two earlier implementations this one replaced: C1 in
+Python, from the RideTracker workspace, and C2 in shell, from the FabWorks workspace. They were removed
+from the repository at v0.1.0, and remain in its history at the tag `candidates-final`. The `# source:` lines in the acceptance scenarios cite them.
 
 ## A new Go codebase, with both candidates as the specification
 
 Neither candidate is refactored into the release. C1 contributes its safety invariants and the
 scenarios in its tests. C2 contributes container identity, providers, modules and its
-[findings](../../workspace-candidate-2/docs/findings.md).
+findings.
 
 **Alternative:** refactor C1, which is closest in scope. **Cost of this choice:** a rewrite takes
 longer to reach parity, and proven code is left behind. But the missing pieces (layered

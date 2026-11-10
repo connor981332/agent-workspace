@@ -1,7 +1,0 @@
-#!/bin/sh
-# Prepare a new lane's databases and assets inside the app container.
-set -eu
-ws="$WS_ROOT/bin/ws"
-"$ws" "app@$WS_LANE" bin/rails db:prepare
-"$ws" "app@$WS_LANE" sh -c 'RAILS_ENV=test bin/rails db:prepare'
-"$ws" "app@$WS_LANE" bin/rails tailwindcss:build

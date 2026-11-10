@@ -103,7 +103,7 @@ arguments, working directory and `AW_SESSION` in `$STUB_LOG`, waits `$STUB_HARNE
 if set, and exits with `$STUB_HARNESS_EXIT`. `gh` and `glab` answer from `forge-reply` rules.
 
 `stubs/` also holds POSIX `sh` test doubles, ported from
-[candidate 2](../workspace-candidate-2/tests/stubs/). Each appends its argv to `$STUB_LOG` and
+the earlier shell implementation. Each appends its argv to `$STUB_LOG` and
 answers from files under `$STUB_STATE`; the comment at the top of each stub lists those files.
 
 ## The harness's own tests

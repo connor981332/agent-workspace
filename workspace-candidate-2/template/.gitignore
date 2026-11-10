@@ -1,9 +1,0 @@
-# Project repos are separate git repositories; bin/bootstrap clones them.
-# Keep in sync with ./projects (kit add-project does).
-# --- projects ---
-
-# Parallel lanes (bin/lane): slots, ports, and resource settings per lane.
-/.lanes/
-
-# Worktrees of this workspace repo itself (docs/development/setup.md#workspace-worktrees).
-/.worktrees/

@@ -2,7 +2,7 @@
 // read-only. Cleanup treats "merged" as permission to delete work, so every path fails closed:
 // anything short of one exact match on the lane's head reports unknown or absent, and the lane is
 // kept. Forks are excluded, because a fork's branch can reuse a lane branch's name. (Ported from
-// candidate 1's forge.py.)
+// the earlier Python implementation's forge.py.)
 package forge
 
 import (
