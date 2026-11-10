@@ -84,8 +84,21 @@ type Scope struct {
 	// DelegatedCommands the team's commands it covers (R64).
 	Delegated         bool
 	DelegatedCommands []string
+	// Safeguards are the optional rule groups the team turned on. Without them aw regulates only what
+	// aw creates: lanes, seats, the owner checkout's lazy claiming and its own state.
+	Safeguards []string
 	// AskSupported is whether the harness can ask the human; if not, an ask is a deny.
 	AskSupported bool
+}
+
+// safeguard reports whether the team turned on an optional group of rules.
+func (s Scope) safeguard(group string) bool { return slices.Contains(s.Safeguards, group) }
+
+// mustRead reports whether an unreadable command could matter to a rule in force: a lane's boundary,
+// or a rule the team chose. Otherwise aw has no say over it, and not being able to read it is no
+// reason to get in the way.
+func (s Scope) mustRead() bool {
+	return s.Role == Lane || len(s.Guards) > 0 || len(s.Safeguards) > 0
 }
 
 // ServerCommand is a configured server's command, as words.
@@ -180,6 +193,9 @@ func decideFiles(s Scope, c Call, cwd shell.Dir) Decision {
 				return d
 			}
 		} else {
+			if !s.safeguard("secrets") && (c.Tool == Read || s.Role != Lane) {
+				continue
+			}
 			if c.Tool == Write {
 				return deny("secrets", "%s is a secret file, linked read-only into the lane; it is not changed from a lane → ask the human to change it in the owner checkout", quote(p))
 			}
@@ -203,7 +219,13 @@ func decideFiles(s Scope, c Call, cwd shell.Dir) Decision {
 func decideShell(s Scope, src string, cwd shell.Dir) Decision {
 	p, err := shell.Parse(src, cwd, &shell.Env{Home: s.Home})
 	if err != nil {
-		return deny("parse", "%v, so it is refused → write it as plain commands, without the construct", err)
+		if s.mustRead() {
+			return deny("parse", "%v, so it is refused → write it as plain commands, without the construct", err)
+		}
+		if s.Role == Unattached {
+			return ask("attach", "%v, so aw cannot tell whether this changes the owner checkout, and the human decides → approve it if it only reads", err)
+		}
+		return allow()
 	}
 	var asks []Decision
 	for _, c := range p.Commands {

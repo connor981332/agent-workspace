@@ -1,0 +1,61 @@
+# aw regulates what aw creates. Git, publishing, secrets, processes and containers are the team's
+# to guard, so onboarding changes nothing about them until the team turns a group on.
+# req: R72
+# source: owner decision 2026-11-10
+# milestone: M12
+
+stubs claude
+workspace shop --init
+owner-may-change
+exec sh -c 'printf "SECRET=1\n" > web/.env'
+exec aw attach 'add feature flag'
+cd .worktrees/01
+
+exec awtest-hook bash 'git push --force origin aw/feature-flag'
+! stdout 'ask|deny'
+exec awtest-hook bash 'gh pr merge 3'
+! stdout 'ask|deny'
+exec awtest-hook bash 'npm publish'
+! stdout 'ask|deny'
+exec awtest-hook bash 'git reset --hard'
+! stdout 'ask|deny'
+exec awtest-hook bash 'kill 1'
+! stdout 'ask|deny'
+exec awtest-hook bash 'docker compose up -d'
+! stdout 'ask|deny'
+exec awtest-hook bash 'printenv'
+! stdout 'ask|deny'
+exec awtest-hook bash 'cat web/.env'
+! stdout 'ask|deny'
+
+# The lane is still aw's.
+! exec awtest-hook bash 'cat ../../README.md'
+stderr 'outside lane'
+! exec awtest-hook bash 'git worktree prune'
+stderr 'aw manages'
+! exec awtest-hook bash 'git checkout -b other'
+stderr 'only on its own branch'
+! exec awtest-hook bash 'git config user.name x'
+! exec awtest-hook bash 'echo x > web/.env'
+stderr 'not changed from a lane'
+cd ../..
+
+# The instructions say nothing about what is not guarded, until it is.
+exec aw setup --harness claude
+! grep 'git push -u' AGENTS.md
+! grep 'by another route' AGENTS.md
+safeguards
+exec aw setup --harness claude
+grep 'git push -u' AGENTS.md
+grep 'by another route' AGENTS.md
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[projects.web]
+secrets = [".env"]
+
+[projects.api]

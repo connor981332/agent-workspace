@@ -5,6 +5,7 @@
 # milestone: M12
 
 workspace shop --init
+safeguards
 exec awtest-hook bash 'd=x; echo "$d"'
 ! stdout .
 exec awtest-hook bash 'foo=1; echo "$foo"'

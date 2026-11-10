@@ -4,6 +4,7 @@
 # milestone: M3
 
 workspace shop --init
+safeguards
 exec sh $WORK/pair.sh
 exec aw config get user.owner_sessions
 stdout pair

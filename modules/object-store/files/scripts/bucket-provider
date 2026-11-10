@@ -7,7 +7,7 @@ request=$(cat)
 lane=$(printf '%s' "$request" | sed -n 's/.*"number":[[:space:]]*\([0-9]*\).*/\1/p')
 bucket="uploads-lane-$lane"
 garage() {
-	id=$(docker ps -q --filter label=com.docker.compose.project={{NAME}}-infra --filter label=com.docker.compose.service=garage | head -n 1)
+	id=$(docker ps -q --filter label=com.docker.compose.project="${AW_INFRA_PROJECT:-{{NAME}}-infra}" --filter label=com.docker.compose.service=garage | head -n 1)
 	[ -n "$id" ] || { printf '{"ok":false,"error":"the object store is not running","fix":"run aw infra up"}\n'; exit 0; }
 	docker exec "$id" /garage "$@" >/dev/null 2>&1
 }

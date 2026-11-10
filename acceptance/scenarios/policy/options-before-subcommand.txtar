@@ -4,6 +4,7 @@
 # milestone: M10
 
 workspace shop --init
+safeguards
 exec sh -c 'mkdir -p $XDG_CONFIG_HOME/agent-workspace; printf "[publication]\nallow = []\n" > $XDG_CONFIG_HOME/agent-workspace/shop.toml'
 exec aw attach 'one'
 cd .worktrees/01

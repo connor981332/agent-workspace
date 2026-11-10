@@ -36,6 +36,7 @@ type Config struct {
 	Devcontainer Devcontainer     `json:"devcontainer"`
 	Roles        map[string]*Role `json:"roles"`
 	Publication  Publication      `json:"publication"`
+	Safeguards   Safeguards       `json:"safeguards"`
 	Delegation   Delegation       `json:"delegation"`
 	// LaneEnv are variables lanes receive, by the module or team that adds them.
 	LaneEnv  map[string]map[string]string `json:"lane_env"`
@@ -128,6 +129,12 @@ type Webhook struct {
 // Plans is the plan mechanism's setting.
 type Plans struct {
 	Enabled bool `json:"enabled"`
+}
+
+// Safeguards are the optional rule groups a team turned on. None is on by default: aw leaves what
+// agents may do outside its own lanes to the harness and the forge.
+type Safeguards struct {
+	Enable []string `json:"enable"`
 }
 
 // Publication is what a team has pre-authorized (R72).

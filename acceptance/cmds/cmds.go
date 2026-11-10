@@ -113,6 +113,7 @@ func Condition(cond string) (bool, error) {
 func Commands() map[string]func(ts *testscript.TestScript, neg bool, args []string) {
 	return map[string]func(ts *testscript.TestScript, neg bool, args []string){
 		"workspace":        cmdWorkspace,
+		"safeguards":       cmdSafeguards,
 		"stubs":            cmdStubs,
 		"json":             cmdJSON,
 		"owner-snapshot":   cmdOwnerSnapshot,
@@ -432,4 +433,14 @@ func cmdEndSession(ts *testscript.TestScript, neg bool, args []string) {
 	delete(st.sessions, args[0])
 	ts.Setenv("AW_SESSION", "")
 	ts.Setenv("AW_SESSION_PID", "")
+}
+
+// cmdSafeguards turns on every optional group of rules in the workspace in the current directory.
+func cmdSafeguards(ts *testscript.TestScript, neg bool, args []string) {
+	path := ts.MkAbs("workspace.toml")
+	data, err := os.ReadFile(path)
+	ts.Check(err)
+	text := string(data) + "\n[safeguards]\nenable = [\"git-safety\", \"publication\", \"secrets\", \"processes\", \"containers\"]\n"
+	ts.Check(os.WriteFile(path, []byte(text), 0o644))
+	needWorkspace(ts, "safeguards").snap = takeSnapshot(ts)
 }

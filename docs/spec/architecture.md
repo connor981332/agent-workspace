@@ -309,7 +309,7 @@ A lane has one branch in each repository, so a lane is a change set. Merge order
 merge requests linked to each other. `generated_contracts` on a project lists files agents may not
 edit (R70).
 
-`[publication] allow`, or `publication` on a project, pre-authorizes `push` (only the lane's own
+With the `publication` safeguard on, `[publication] allow`, or `publication` on a project, pre-authorizes `push` (only the lane's own
 branch), `open-merge-request` and `merge`. Everything else outward-facing asks. A force push, deleting
 a branch, a release or a package is never pre-authorized. (Decided by the spec owner, 2026-11-09.)
 

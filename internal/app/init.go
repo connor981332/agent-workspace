@@ -181,10 +181,10 @@ name = {{ printf "%q" .Name }}
 namespace = {{ printf "%q" .Namespace }}
 schema = {{ .Schema }}
 
-# What agents may do from their lanes without asking: push only the lane's own branch, open a merge
-# request, and comment on or merge the lane's own. Force pushes and deleting branches are never allowed.
-[publication]
-allow = ["push", "open-merge-request", "merge"]
+# By default aw regulates only its own lanes, seats and state. To have it also guard what agents do
+# with Git, publishing, secrets, processes or containers, uncomment the groups you want.
+# [safeguards]
+# enable = ["git-safety", "publication", "secrets", "processes", "containers"]
 {{ range .Projects }}
 [projects.{{ .Name }}]
 {{- if ne .Directory .Name }}

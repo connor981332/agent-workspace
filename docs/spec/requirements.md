@@ -149,8 +149,8 @@ expected but can follow.
 - **R59.** Ref protection is enforced inside Git by a `reference-transaction` hook as well as by the
   guards.
 - **R60.** The human can grant a pair session in the owner checkout. Only the human can grant it.
-- **R61.** A pair session acts with the owner's seat for resources, and is still refused destructive
-  Git, unapproved publication and changes to the workspace's own configuration.
+- **R61.** A pair session acts with the owner's seat for resources, and still needs approval for
+  changes to the workspace's own configuration. Enabled safeguards apply to it as well.
 - **R62.** Work can move from the owner checkout to a lane (`aw move-to-lane`) and a lane's head can be
   tried in the owner checkout (`aw try`).
 
@@ -177,7 +177,7 @@ expected but can follow.
 - **R70.** Generated contracts are never hand-edited.
 - **R71.** GitHub (`gh`) and GitLab (`glab`) are supported through adapters. A forge's report of a
   merge counts as proof only for exactly one same-repository change at the lane's exact head.
-- **R72.** Publication policy is configurable. The default asks before anything outward-facing. A team
+- **R72.** Guarding Git, publication, secrets, processes and containers is opt-in, through `[safeguards] enable`. With nothing enabled, `aw` regulates only its own lanes, seats and state (spec owner, 2026-11-10). With the `publication` group on, policy is configurable and the default asks before anything outward-facing. A team
   can pre-authorize narrow cases.
 
 ## Shared infrastructure and stand-ins (wishlist 15, 16, 18)

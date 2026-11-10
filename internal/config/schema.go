@@ -89,6 +89,7 @@ func (n *node) checked(f func(v any) (string, string)) *node {
 var (
 	capabilities       = []string{"publish", "merge", "containers", "servers"}
 	publicationActions = []string{"push", "open-merge-request", "merge"}
+	safeguardGroups    = []string{"git-safety", "publication", "secrets", "processes", "containers"}
 )
 
 // oneOfEach checks that every string in a list is one of the allowed values.
@@ -282,7 +283,10 @@ var schema = table("",
 			"deny", strList("Capabilities this role does not have: publish, merge, servers.").checked(oneOfEach(capabilities...)),
 			"instructions", str("A file, from the workspace root, whose text a session in this role receives when it starts."),
 		)),
-	"publication", table("What agents may publish without asking. The default asks before anything outward-facing (R72).",
+	"safeguards", table("Optional rules. None is on by default: aw regulates only its own lanes, seats and state, and leaves the rest to the harness and the forge.",
+		"enable", strList("Groups to turn on: git-safety (destructive Git), publication (ask before anything outward-facing), secrets, processes (kill and the like), containers.").checked(oneOfEach(safeguardGroups...)).teamOnly(),
+	),
+	"publication", table("With the publication safeguard on, what agents may publish without asking (R72).",
 		"allow", strList("Pre-authorized actions: push (only the lane's own branch), open-merge-request, merge. Force pushes, deleting "+
 			"branches, releases and packages are never pre-authorized.").checked(oneOfEach(publicationActions...)),
 	),

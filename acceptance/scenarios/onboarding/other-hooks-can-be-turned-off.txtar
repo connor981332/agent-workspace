@@ -1,5 +1,5 @@
 # A workspace migrating from another system has hooks that can refuse everything in an aw lane. The
-# onboarding lane leaves them out by default, says which, and leaves the human's checkout alone.
+# onboarding lane keeps them unless asked, says which, and always leaves the human's checkout alone.
 # req: R85
 # source: onboarding RideTracker, which had its own lane guard
 # milestone: M12
@@ -12,27 +12,28 @@ exec aw setup --harness claude
 exec aw inspect
 stdout 'not aw''s.*old-hook'
 
-# Off by default, while aw's own hooks are uncommitted.
+# On by default: onboarding does not change how the workspace's agents behave.
 exec aw onboard --harness claude
-stderr 'turning off hooks that are not aw''s'
+stderr 'not aw''s and they run in the lane too'
 stderr 'old-hook'
+grep 'old-hook' .worktrees/01/.claude/settings.json
+grep 'they run in this lane too' $STUB_LOG
+exec aw discard 01 --yes
+! exists .worktrees/01
+
+# Off when asked, in that lane only.
+exec aw onboard --harness claude --without-other-hooks
+stderr 'turning off hooks that are not aw''s'
 ! grep 'old-hook' .worktrees/01/.claude/settings.json
 grep 'hook claude pre-tool-use' .worktrees/01/.claude/settings.json
 grep 'aw turned them off in this lane only' $STUB_LOG
 grep 'old-hook' .claude/settings.json
 exec aw discard 01 --yes
-! exists .worktrees/01
-
-# Kept when asked.
-exec aw onboard --harness claude --keep-other-hooks
-grep 'old-hook' .worktrees/01/.claude/settings.json
-grep 'because the human kept them' $STUB_LOG
-exec aw discard 01 --yes
 
 # Off too when both sets of hooks are already committed, so nothing else is copied into the lane.
 exec git add -A
 exec git commit -qm 'aw and the old hooks'
-exec aw onboard --harness claude --review
+exec aw onboard --harness claude --review --without-other-hooks
 ! grep 'old-hook' .worktrees/01/.claude/settings.json
 grep 'hook claude pre-tool-use' .worktrees/01/.claude/settings.json
 exec aw discard 01 --yes

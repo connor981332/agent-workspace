@@ -6,6 +6,7 @@
 
 owner-may-change
 workspace solo --single --init
+safeguards
 env CLAUDE_CODE_SESSION_ID=s-1
 ! exec aw attach --role infra 'one'
 stderr 'only the human can assign it'

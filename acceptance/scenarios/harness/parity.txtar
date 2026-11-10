@@ -4,6 +4,7 @@
 # milestone: M3
 
 workspace shop --init
+safeguards
 exec aw attach 'add feature flag'
 cd .worktrees/01
 exec sh $WORK/table.sh

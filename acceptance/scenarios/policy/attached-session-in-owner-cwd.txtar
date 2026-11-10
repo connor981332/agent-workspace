@@ -9,6 +9,7 @@
 # pair instructions (lazy claiming), where C1 allowed them.
 
 workspace shop --init
+safeguards
 session s-1 claude
 exec aw attach 'add feature flag'
 env LANE=$OWNER/.worktrees/01

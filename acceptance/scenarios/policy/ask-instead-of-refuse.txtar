@@ -7,7 +7,8 @@
 
 workspace shop --init
 owner-may-change
-grep 'open-merge-request' workspace.toml
+safeguards
+exec sh -c 'printf "\n[publication]\nallow = [\"push\", \"open-merge-request\", \"merge\"]\n" >> workspace.toml'
 exec aw attach 'add feature flag'
 
 # In a lane, destructive Git and the human's commands reach the human.

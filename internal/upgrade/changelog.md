@@ -7,6 +7,15 @@ Newest first. A line starting with **Breaking:** is called out by `aw upgrade`.
 - `aw upgrade`: moves a workspace to a release, shows this changelog, migrates configuration, and regenerates managed files. A managed file edited by hand is never overwritten.
 - Homebrew tap, and a Renovate preset.
 
+## 0.1.4
+
+- **Breaking:** aw now regulates only its own lanes, seats and state. Guards on destructive Git, publishing, secrets, processes and containers are off unless you turn them on with `[safeguards] enable = ["git-safety", "publication", "secrets", "processes", "containers"]` in `workspace.toml`, so add that to keep them.
+- `aw init` no longer pre-authorizes publishing, and generated instructions mention publishing only when that safeguard is on.
+- `aw onboard` keeps hooks that are not aw's in its lane. `--without-other-hooks` replaces `--keep-other-hooks`.
+- A command aw cannot read is refused only when a rule in force depends on it.
+- `aw rehearse` now checks every project's Compose files and custom data providers, not only `infra/` and devcontainers, and refuses a proposal that could reach real containers or data. A host project's Compose files get a project name of their own in a rehearsal.
+- Custom data providers are told a rehearsal's names, and the object-store module's provider uses them. Reinstall the module to get this: an older copy now stops the rehearsal.
+
 ## 0.1.3
 
 - Where a person can answer, human-only commands and destructive Git in a lane now ask instead of refusing. Force pushes, deleting branches and secrets stay refused.
