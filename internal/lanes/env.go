@@ -47,6 +47,11 @@ func (m *Manager) LocateIn(n int, project string) (*Where, error) {
 		var ok bool
 		if p, ok = m.Cfg.Projects[project]; !ok {
 			names := sortedKeys(m.Cfg.Projects)
+			for _, n := range names {
+				if strings.HasSuffix(n, "-"+project) {
+					return nil, fmt.Errorf("there is no project named %q → did you mean %s? Known: %s", project, n, strings.Join(names, ", "))
+				}
+			}
 			return nil, fmt.Errorf("there is no project named %q → known: %s", project, strings.Join(names, ", "))
 		}
 		ownerDir = filepath.Join(m.WS.Owner, p.Directory)

@@ -14,7 +14,7 @@ exec aw new 'fix checkout tax' --mux -- --model opus
 stderr 'opened claude in tmux session checkout-tax'
 exec cat $STUB_LOG
 stdout '^tmux \[new-session\] \[-d\] \[-s\] \[checkout-tax\] '
-stdout '^claude \[--model\] \[opus\]$'
+stdout '^claude \[--model\] \[opus\]'
 stdout '^claude cwd .*/\.worktrees/01$'
 stdout '^claude AW_SESSION=claude:new-[0-9a-f]{16}$'
 exec aw sweep --json

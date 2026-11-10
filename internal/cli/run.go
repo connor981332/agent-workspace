@@ -162,6 +162,7 @@ func startLaneSession(cmd *cobra.Command, purpose, harness, branch, role string,
 		t.Report(cmd.ErrOrStderr(), "new")
 	}
 	extra = append(launch.SandboxArgs(harness, m.SandboxRoots(c.Dir)), extra...)
+	extra = append(extra, launch.DirArgs(harness, m.SandboxRoots(c.Dir))...)
 	if useMux {
 		return openInMux(cmd, mx, c.Lane.Name, c.Root, harness, id, append([]string{harness}, extra...))
 	}

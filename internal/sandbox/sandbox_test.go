@@ -42,3 +42,20 @@ func TestAllowRehearse(t *testing.T) {
 		t.Errorf("after removing: %s", got)
 	}
 }
+
+func TestInstallAddsTheLanesWorktrees(t *testing.T) {
+	root := t.TempDir()
+	worktree, gitDir := "/w/api/.worktrees/02", "/w/api/.git"
+	if _, err := Install(root, []string{gitDir, worktree}); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(ClaudeFile)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	dirs := text[strings.Index(text, "additionalDirectories"):strings.Index(text, `"sandbox"`)]
+	if !strings.Contains(dirs, worktree) || strings.Contains(dirs, gitDir) {
+		t.Errorf("additionalDirectories are wrong:\n%s", text)
+	}
+}

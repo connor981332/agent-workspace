@@ -42,3 +42,18 @@ func SandboxArgs(harness string, writable []string) []string {
 	}
 	return []string{"-c", "sandbox_workspace_write.writable_roots=[" + strings.Join(quoted, ",") + "]"}
 }
+
+// DirArgs tell a harness about the directories a lane's links lead to, so that it does not ask about
+// each path through them. They go after everything else, because the option takes several values.
+func DirArgs(harness string, writable []string) []string {
+	if harness != "claude" {
+		return nil
+	}
+	var out []string
+	for _, w := range writable {
+		if !strings.HasSuffix(w, "/.git") {
+			out = append(out, "--add-dir", w)
+		}
+	}
+	return out
+}
