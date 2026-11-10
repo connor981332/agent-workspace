@@ -385,7 +385,7 @@ func TestPairShellSelfModification(t *testing.T) {
 		"sed -i s/a/b/ workspace.toml":    Ask,
 		"dd if=x of=.claude/settings":     Ask,
 		"ln -s x .githooks/pre-push":      Ask,
-		"touch \"$X\"":                    Ask,
+		"touch \"$X\"":                    Deny,
 		"cd api && echo x > ../AGENTS.md": Ask,
 		"echo x > .git/config":            Deny,
 		"rm -rf .git/aw":                  Deny,
@@ -544,13 +544,14 @@ func TestMessagesAreNotPaths(t *testing.T) {
 	})
 }
 
-// Someone who has pre-authorized merging should be told why a merge still asks, and how to avoid it.
+// A pre-authorized merge by number is refused with the command that works: a refusal reaches the agent,
+// which can correct itself, where a question would only interrupt the human.
 func TestMergeByNumberExplainsWhyItAsks(t *testing.T) {
 	f := newFixture(t)
 	s := f.scope(Lane)
 	s.AskSupported, s.Publication = true, []string{"merge"}
 	d := Decide(s, Call{Tool: Shell, Cwd: f.lane, Command: "glab mr merge 132 --yes"})
-	if d.Verdict != Ask || !strings.Contains(d.Message, "with no number") || strings.Contains(d.Message, "[publication]") {
+	if d.Verdict != Deny || !strings.Contains(d.Message, "with no number") || !strings.Contains(d.Message, "ask the human") {
 		t.Errorf("got %s: %s", d.Verdict, d.Message)
 	}
 	if d := Decide(s, Call{Tool: Shell, Cwd: f.lane, Command: "glab mr merge --auto-merge --yes"}); d.Verdict != Allow {

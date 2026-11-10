@@ -921,7 +921,7 @@ func selfModRule(s Scope, c shell.Command) Decision {
 			abs, ok = absolute(w.Text, c.Dir)
 		}
 		if !ok {
-			return ask("self-modification", "this command writes to %s, and aw cannot tell whether that is the workspace's own configuration → write the path literally, or ask the human to approve it", quote(w.Text))
+			return deny("self-modification", "this command writes to a path aw cannot read until it runs, so aw cannot tell whether that is the workspace's own configuration → write the path literally")
 		}
 		return s.selfModification(abs, w.Text)
 	}
@@ -1042,17 +1042,31 @@ func (s Scope) publishDecision(action string, c shell.Command, args []shell.Word
 	if s.Role != Lane {
 		return nil
 	}
-	allowed := slices.Contains(s.RoleAllow, capability) || slices.Contains(s.Publication, action)
-	for dir, list := range s.ProjectPublication {
-		if within(c.Dir.Physical, dir) && slices.Contains(list, action) {
-			allowed = true
-		}
-	}
-	if !allowed || (action == "push" && !s.pushesOwnBranch(args)) || (actsOnAnMR(args) && !s.ownMergeRequest(args)) {
+	if !s.preauthorized(action, c) || (action == "push" && !s.pushesOwnBranch(args)) || (actsOnAnMR(args) && !s.ownMergeRequest(args)) {
 		return nil
 	}
 	d := allow()
 	return &d
+}
+
+// preauthorized reports whether this lane's role or the team's policy pre-authorizes an action here.
+func (s Scope) preauthorized(action string, c shell.Command) bool {
+	if s.Role != Lane {
+		return false
+	}
+	capability := "publish"
+	if action == "merge" {
+		capability = "merge"
+	}
+	if slices.Contains(s.RoleAllow, capability) || slices.Contains(s.Publication, action) {
+		return true
+	}
+	for dir, list := range s.ProjectPublication {
+		if within(c.Dir.Physical, dir) && slices.Contains(list, action) {
+			return true
+		}
+	}
+	return false
 }
 
 // actsOnAnMR is a forge command on one existing merge request: merging or commenting on it. Creating
@@ -1195,9 +1209,15 @@ func publicationRule(s Scope, c shell.Command) Decision {
 	if what == "" {
 		return allow()
 	}
-	if action := publishAction(name, sub, sub2, c, args); action != "" && actsOnAnMR(args) && s.Role == Lane &&
-		(slices.Contains(s.Publication, action) || slices.Contains(s.RoleAllow, action)) && !s.ownMergeRequest(args) {
-		return ask("publication", "%s, and only this lane's own merge request is pre-approved, which aw cannot tell from a number or another repository → approve it, or run it from the worktree with no number, so that it means this lane's branch", what)
+	// A refusal reaches the agent and a question reaches the human, so what the agent can fix by
+	// writing the command another way is refused with the command, and never interrupts anyone.
+	if action := publishAction(name, sub, sub2, c, args); action != "" && s.preauthorized(action, c) {
+		switch {
+		case actsOnAnMR(args) && !s.ownMergeRequest(args):
+			return deny("publication", "%s, and only this lane's own merge request is pre-approved, which aw cannot tell from a number or another repository → run it from the project's worktree with no number, so that it means this lane's branch; if it is not this lane's, ask the human to do it", what)
+		case action == "push" && !s.pushesOwnBranch(args):
+			return deny("publication", "%s, and only this lane's own branch is pre-approved → run git push -u origin HEAD from the worktree; for anything else, ask the human to do it", what)
+		}
 	}
 	return ask("publication", "%s, which needs the human's approval → approve it, or stop being asked by adding it to [publication] allow in workspace.toml or your own aw settings (push, open-merge-request, merge)", what)
 }
