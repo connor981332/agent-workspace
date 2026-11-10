@@ -44,6 +44,7 @@ func scanProjects(ws *workspace.Workspace, c *config.Config) ([]*inspect.Project
 		if err != nil {
 			return nil, err
 		}
+		p.DropAccepted(c.Projects[name].Accepted)
 		out = append(out, p)
 	}
 	return out, nil
@@ -417,14 +418,7 @@ a workspace may do this for its own lane.`,
 			r := &rehearsal{exe: exe, owner: ws.Owner}
 			out := cmd.OutOrStdout()
 			repos := ownerRepos(ws, c)
-			snapshot := func() string {
-				var b strings.Builder
-				for _, dir := range repos {
-					s, _ := gitrun.In(dir).Run(ctx, "status", "--porcelain")
-					b.WriteString(dir + "\n" + s)
-				}
-				return b.String()
-			}
+			snapshot := func() []string { return ownerStatus(ctx, repos) }
 			before := snapshot()
 			projects, err := scanProjects(ws, c)
 			if err != nil {
@@ -470,8 +464,12 @@ a workspace may do this for its own lane.`,
 			if terr := r.teardown(ctx, ws, c, lanesMade); terr != nil {
 				r.collide("left behind: %v", terr)
 			}
-			if after := snapshot(); after != before {
-				r.collide("the rehearsal wrote into the owner checkout")
+			if changed := statusChanges(before, snapshot()); len(changed) > 0 {
+				where := "the owner checkout"
+				if workspace.IsRehearsal(ws.Owner) {
+					where = "its throwaway copy's own checkout, not yours"
+				}
+				r.collide("the rehearsal wrote into %s: %s", where, strings.Join(changed, ", "))
 			}
 			for _, x := range r.collisions {
 				fmt.Fprintf(cmd.ErrOrStderr(), "collision: %s\n", ui.Clean(x))
@@ -531,6 +529,8 @@ func rehearseLane(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	realRepos := ownerRepos(m.WS, m.Cfg)
+	realBefore := ownerStatus(ctx, realRepos)
 	copied.Started = true
 	env := rehearsalEnv(exe, copied.Owner)
 	infra := infraOf(&workspace.Workspace{Owner: copied.Owner}, copied.Cfg)
@@ -543,8 +543,12 @@ func rehearseLane(cmd *cobra.Command, args []string) error {
 	}
 	c := exec.CommandContext(ctx, exe, "rehearse")
 	c.Dir, c.Env, c.Stdout, c.Stderr = copied.Owner, env, out, errOut
-	if err := c.Run(); err != nil {
-		return &silentError{fmt.Errorf("the rehearsal of lane %s failed: %w", l.Name, err)}
+	failed := c.Run()
+	if changed := statusChanges(realBefore, ownerStatus(ctx, realRepos)); len(changed) > 0 {
+		fmt.Fprintf(errOut, "aw: warning: your real checkout changed during the rehearsal (you may have changed it yourself): %s\n", ui.Clean(strings.Join(changed, ", ")))
+	}
+	if failed != nil {
+		return &silentError{fmt.Errorf("the rehearsal of lane %s failed: %w", l.Name, failed)}
 	}
 	return nil
 }
@@ -582,6 +586,36 @@ func destroyRehearsal(ctx context.Context, r *lanes.Rehearsal, out io.Writer) er
 	}
 	errs = append(errs, r.Remove())
 	return errors.Join(errs...)
+}
+
+// ownerStatus is what is uncommitted in each repository, one entry per file.
+func ownerStatus(ctx context.Context, repos []string) []string {
+	var out []string
+	for _, dir := range repos {
+		text, _ := gitrun.In(dir).Run(ctx, append([]string{"status", "--porcelain", "-uall", "--"}, notLanes...)...)
+		for _, line := range strings.Split(strings.TrimRight(text, "\n"), "\n") {
+			if line != "" {
+				out = append(out, filepath.Base(dir)+": "+line)
+			}
+		}
+	}
+	return out
+}
+
+// statusChanges lists what appeared, changed state or went away between two statuses.
+func statusChanges(before, after []string) []string {
+	var out []string
+	for _, l := range after {
+		if !slices.Contains(before, l) {
+			out = append(out, l)
+		}
+	}
+	for _, l := range before {
+		if !slices.Contains(after, l) {
+			out = append(out, "no longer: "+l)
+		}
+	}
+	return out
 }
 
 type laneRun struct {

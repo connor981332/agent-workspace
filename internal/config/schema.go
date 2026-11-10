@@ -106,6 +106,7 @@ func oneOfEach(allowed ...string) func(v any) (string, string) {
 
 var (
 	nameRE      = regexp.MustCompile(`^[a-z][a-z0-9-]{0,39}$`)
+	acceptedRE  = regexp.MustCompile(`^[^\s/][^\s]*$`)
 	namespaceRE = regexp.MustCompile(`^[a-z][a-z0-9]{0,19}$`)
 	nameFix     = "use lowercase letters, digits and hyphens, starting with a letter (at most 40 characters)"
 )
@@ -190,6 +191,9 @@ var schema = table("",
 			"local_files", strList("Gitignored files that are not secrets, such as a local properties file or a large generated "+
 				"schema, copied into every new lane from the owner checkout, relative to the project. Only the files named here are "+
 				"copied, as a clone where the file system can. Use secrets for anything an agent should not read."),
+			"accepted_findings", mapOf("Readiness findings a person has reviewed, by file: the key is a path relative to the project "+
+				"(dir/** matches a directory), and the value says why it is fine. aw rehearse and aw doctor --projects skip them.",
+				acceptedRE, "name a file relative to the project, e.g. \".env.template\" or \"ci/**\"", str("")),
 			"post_checkout", str("run: the repository's own post-checkout hook runs as a setup step of each lane, which can be retried. skip: it does not run in lanes.").
 				oneOf("run", "skip").withDefault("run"),
 			"env", mapOf("Variables for this project's hooks and aw run commands, such as a switch one of its hooks reads.", envRE, envFix, str("")),

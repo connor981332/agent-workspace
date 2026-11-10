@@ -166,6 +166,7 @@ type Project struct {
 	Contracts    []string              `json:"generated_contracts"`
 	Secrets      []string              `json:"secrets"`
 	LocalFiles   []string              `json:"local_files"`
+	Accepted     map[string]string     `json:"accepted_findings"`
 	PostCheckout string                `json:"post_checkout"`
 	Env          map[string]string     `json:"env"`
 	Generated    []string              `json:"generated"`
