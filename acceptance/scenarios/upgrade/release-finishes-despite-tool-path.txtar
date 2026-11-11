@@ -1,0 +1,24 @@
+# aw upgrade ignores AW_TOOL_PATH: the new release is fetched and verified, and it regenerates the
+# managed files itself, so that a local build never writes what the merge request reviews.
+# req: R18
+# source: dogfood, RideTracker upgrade to 0.1.4 ran the dev build named by AW_TOOL_PATH
+# milestone: M8
+
+owner-may-change
+workspace solo --single --init
+# The local build is the old release here: it starts the upgrade, and the new release finishes it.
+env AW_TOOL_PATH=$XDG_CACHE_HOME/agent-workspace/bin/$AW_VERSION/aw
+env AW_MIRROR=$AW_NEW_MIRROR
+exec aw upgrade --to $AW_NEW_VERSION
+stderr 'AW_TOOL_PATH is set, and aw upgrade ignores it'
+stdout 'aw 0.0.0-acceptance → '$AW_NEW_VERSION
+! stderr 'doctor: pin'
+stdout 'Next: commit this'
+grep $AW_NEW_VERSION .aw/version
+exists $XDG_CACHE_HOME/agent-workspace/bin/$AW_NEW_VERSION/aw
+
+# The finishing step refuses to run as anything but the pinned version, here the old release.
+env AW_TOOL_PATH=
+env AW_LAUNCHED=1
+! exec $AW_BIN __upgrade-finish --from $AW_VERSION
+stderr 'pins aw .*, but this is aw .*, so it changed nothing'
