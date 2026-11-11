@@ -73,8 +73,14 @@ the same version applies those choices.`,
 			if upgrade.Compare(target, from) < 0 {
 				return fmt.Errorf("aw %s is older than the pinned %s, and aw upgrade only goes forward → to go back, restore .aw/version and .aw/lock from Git", target, from)
 			}
+			// The release does the upgrade, not a local build: AW_TOOL_PATH would have bin/aw skip
+			// fetching and verifying it, and regenerate the managed files with other code.
+			env := releaseEnv()
+			if len(env) < len(os.Environ()) {
+				fmt.Fprintf(cmd.ErrOrStderr(), "aw: AW_TOOL_PATH is set, and aw upgrade ignores it: aw %s itself finishes the upgrade\n", target)
+			}
 			if target != from {
-				if err := movePin(cmd, ws.Owner, from, target); err != nil {
+				if err := movePin(cmd, ws.Owner, from, target, env); err != nil {
 					return err
 				}
 			}
@@ -88,7 +94,7 @@ the same version applies those choices.`,
 			for _, f := range take {
 				args = append(args, "--take", f)
 			}
-			return syscall.Exec(script, args, os.Environ())
+			return syscall.Exec(script, args, env)
 		}),
 	}
 	cmd.Flags().StringVar(&to, "to", "", "the release to move to (default: the latest)")
@@ -99,7 +105,7 @@ the same version applies those choices.`,
 
 // movePin rewrites the pin and has the launcher fetch and verify the new binary. If that fails the
 // pin goes back, so that a failed download leaves the workspace as it was.
-func movePin(cmd *cobra.Command, owner, from, target string) error {
+func movePin(cmd *cobra.Command, owner, from, target string, env []string) error {
 	lock, platforms, err := launcher.Lock(launcher.Mirror(target), target)
 	if err != nil {
 		return err
@@ -128,7 +134,7 @@ func movePin(cmd *cobra.Command, owner, from, target string) error {
 		return err
 	}
 	fetch := exec.Command(filepath.Join(owner, launcher.ScriptPath), "version")
-	fetch.Stderr = cmd.ErrOrStderr()
+	fetch.Env, fetch.Stderr = env, cmd.ErrOrStderr()
 	if err := fetch.Run(); err != nil {
 		restore()
 		return fmt.Errorf("could not fetch and verify aw %s (%v), so the workspace stays on %s", target, err, from)
@@ -153,6 +159,11 @@ func newUpgradeFinishCmd() *cobra.Command {
 	return cmd
 }
 
+// releaseEnv is this environment without AW_TOOL_PATH, so that bin/aw runs the pinned release.
+func releaseEnv() []string {
+	return slices.DeleteFunc(os.Environ(), func(kv string) bool { return strings.HasPrefix(kv, "AW_TOOL_PATH=") })
+}
+
 // finishUpgrade is run by the new version, once the pin names it.
 func finishUpgrade(cmd *cobra.Command, from string, eject, take []string) error {
 	out, errOut := cmd.OutOrStdout(), cmd.ErrOrStderr()
@@ -164,6 +175,13 @@ func finishUpgrade(cmd *cobra.Command, from string, eject, take []string) error 
 	ws, err := workspace.Find(cwd)
 	if err != nil {
 		return err
+	}
+	// Only the pinned version may regenerate the managed files: another would write what it
+	// generates, not what the pin generates.
+	if pinned, err := readPin(ws.Owner); err != nil {
+		return fmt.Errorf("reading the pin: %w → restore .aw/version from Git", err)
+	} else if pinned != to {
+		return fmt.Errorf("the workspace pins aw %s, but this is aw %s, so it changed nothing → run aw upgrade again without AW_TOOL_PATH", ui.Clean(pinned), to)
 	}
 	if from != to {
 		fmt.Fprintf(out, "aw %s → %s\n", ui.Clean(from), to)
