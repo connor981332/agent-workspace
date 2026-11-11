@@ -16,3 +16,18 @@ func TestAllowed(t *testing.T) {
 		}
 	}
 }
+
+func TestDeclaresInside(t *testing.T) {
+	gen := []string{"lib/generated/prisma", "*.pyc", "node_modules", "build/**/out"}
+	for _, d := range []string{"lib/", "lib/generated/", "src/", "build/"} {
+		if !declaresInside(d, gen) {
+			t.Errorf("%q: a declared path may be inside", d)
+		}
+	}
+	if declaresInside("docs/", []string{"lib/generated/prisma", "node_modules"}) {
+		t.Error(`"docs/": nothing declared is inside`)
+	}
+	if declaresInside("lib/gen/", []string{"lib/generated/prisma"}) {
+		t.Error(`"lib/gen/" is not "lib/generated/"`)
+	}
+}

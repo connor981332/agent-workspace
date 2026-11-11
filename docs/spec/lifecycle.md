@@ -205,8 +205,10 @@ A lane becomes `recyclable` only when every repository in it is clean and has on
 3. A forge reports exactly one merged change from the same repository at exactly this head.
 
 A deleted remote branch, a handoff and a quiet session prove nothing. Ignored files that a project
-does not list as `generated` block recycling, because they may be someone's work. Removal never
-forces.
+(or, for the workspace repository, `[workspace]`) does not list as `generated` block recycling,
+because they may be someone's work. When Git reports a whole ignored directory and a generated
+path lies inside it, aw looks at the files inside instead. Removal never forces. `aw sweep` says,
+for each kept lane, what would let it be recycled.
 
 ## Warm pool
 

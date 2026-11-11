@@ -94,6 +94,21 @@ nothing. Recycled lanes return to the warm pool; lanes beyond [lanes] pool, or o
 						fmt.Fprintf(out, "   error: %s\n", ui.Clean(d.Error))
 					}
 				}
+				var next []*lanes.Decision
+				for _, d := range rep.Lanes {
+					if d.Action == lanes.ActionKeep && len(d.Next) > 0 {
+						next = append(next, d)
+					}
+				}
+				if len(next) > 0 {
+					fmt.Fprintln(out, "\nTo recycle a kept lane:")
+					for _, d := range next {
+						fmt.Fprintf(out, "%s %s\n", d.Dir, ui.Clean(d.Name))
+						for _, step := range d.Next {
+							fmt.Fprintf(out, "   %s\n", ui.Clean(step))
+						}
+					}
+				}
 				for _, e := range rep.Open {
 					fmt.Fprintf(out, "Unfinished: %s of lane %02d failed (%s) → aw sweep --apply --retry %d\n", e.Kind, e.Lane, ui.Clean(e.Detail), e.ID)
 				}
@@ -105,7 +120,7 @@ nothing. Recycled lanes return to the warm pool; lanes beyond [lanes] pool, or o
 						}
 					}
 					if n > 0 {
-						fmt.Fprintf(out, "Nothing was changed. Run aw sweep --apply to recycle or remove %d lane(s).\n", n)
+						fmt.Fprintf(out, "Nothing was changed. If this looks right, run aw sweep --apply to recycle or remove %d lane(s).\n", n)
 					}
 				}
 			}

@@ -60,6 +60,8 @@ type Workspace struct {
 	Namespace string `json:"namespace"`
 	Schema    int    `json:"schema"`
 	Forge     string `json:"forge"`
+	// Generated are the workspace repository's own generated paths.
+	Generated []string `json:"generated"`
 }
 
 type Lanes struct {

@@ -30,6 +30,7 @@ The workspace itself. Team layer only.
 | `namespace` | string | — | Names the state, Git metadata, environment prefixes and the individual file (~/.config/agent-workspace/<namespace>.toml). Lowercase letters and digits, starting with a letter. *Team only.* |
 | `schema` | integer | — | Configuration schema version. This release reads schema 1. *Team only.* |
 | `forge` | one of `"auto"`, `"github"`, `"gitlab"`, `"none"` | `"auto"` | Where merge requests live: auto (from each remote's host), github, gitlab or none. |
+| `generated` | array of strings | — | Ignored paths (Git pathspecs) in the workspace repository itself that builds create and that do not block recycling a lane, such as *.pyc or tools/cache. Each project declares its own under [projects.<name>]. |
 
 ## `[lanes]`
 

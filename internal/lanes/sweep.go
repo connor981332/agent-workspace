@@ -39,6 +39,7 @@ type Decision struct {
 	Action string           `json:"action"`
 	Reason string           `json:"reason"`
 	Repos  []evidence.Repo  `json:"repos,omitempty"`
+	Next   []string         `json:"next,omitempty"`   // for a kept lane, what would let it be recycled
 	Result string           `json:"result,omitempty"` // after --apply: done, skipped, failed
 	Error  string           `json:"error,omitempty"`
 	lane   state.Lane       `json:"-"`
@@ -209,8 +210,10 @@ func (m *Manager) decide(ctx context.Context, d *Decision, sessions []state.Sess
 			return
 		case !ev.Clean:
 			reasons = append(reasons, repoLabel(r)+": "+ev.Dirty)
+			d.Next = append(d.Next, cleanStep(r, ev))
 		case ev.Proof == "":
 			reasons = append(reasons, repoLabel(r)+": "+ev.Reason)
+			d.Next = append(d.Next, fmt.Sprintf("%s: merge its work (aw changeset opens the merge requests), or aw resume %s to keep working on it", repoLabel(r), l.Name))
 		}
 	}
 	if len(reasons) > 0 {
@@ -222,6 +225,27 @@ func (m *Manager) decide(ctx context.Context, d *Decision, sessions []state.Sess
 		return
 	}
 	d.Action, d.Reason = ActionRecycle, "every repository is clean and proven merged"
+}
+
+// cleanStep says how to make a repository clean enough to recycle.
+func cleanStep(r state.LaneRepo, ev evidence.Repo) string {
+	if len(ev.Ignored) == 0 {
+		return fmt.Sprintf("%s: commit or discard the changes in %s", repoLabel(r), r.Path)
+	}
+	shown := ev.Ignored
+	if len(shown) > 3 {
+		shown = append(slices.Clone(shown[:3]), "…")
+	}
+	section := "[workspace]"
+	if r.Project != "" {
+		section = fmt.Sprintf("[projects.%s]", r.Project)
+	}
+	it := "it"
+	if len(ev.Ignored) > 1 {
+		it = "them"
+	}
+	return fmt.Sprintf("%s: if builds make %s, add %s to generated under %s in workspace.toml; if not, delete %s from %s",
+		repoLabel(r), strings.Join(shown, ", "), it, section, it, r.Path)
 }
 
 // forgeProof asks the repository's forge whether exactly this head was merged (lifecycle.md, merge
@@ -268,10 +292,12 @@ func repoLabel(r state.LaneRepo) string {
 }
 
 // evidenceOptions lists what may be ignored in a lane repository without blocking: the project's
-// generated paths, its secret links, and in the lane root the project links and .aw/owner.
+// generated paths, its secret links, and in the lane root the workspace's generated paths, the project
+// links and .aw/owner.
 func (m *Manager) evidenceOptions(r state.LaneRepo) evidence.Options {
 	o := evidence.Options{ExpectBranch: r.Branch}
 	if r.Project == "" {
+		o.Generated = append(o.Generated, m.Cfg.Workspace.Generated...)
 		o.Ours = append(o.Ours, append([]string{".aw/owner", workspace.MaterializedPath}, sandbox.Ours(r.Path)...)...)
 		for _, name := range sortedKeys(m.Cfg.Projects) {
 			if p := m.Cfg.Projects[name]; p.Directory != "." && p.Lanes != "shared" {

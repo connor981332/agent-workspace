@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"github.com/connor981332/agent-workspace/internal/workspace"
 	"path"
+	"slices"
 	"strings"
 
 	"github.com/connor981332/agent-workspace/internal/gitx/run"
@@ -27,12 +28,15 @@ type Repo struct {
 	Branch  string `json:"branch"`
 	Head    string `json:"head"`
 	BaseRef string `json:"base_ref"`
-	Base    string `json:"base"`    // the base ref's commit now
-	Clean   bool   `json:"clean"`   // no tracked changes, no untracked files, no blocking ignored files
-	Dirty   string `json:"dirty"`   // why not clean
-	Proof   string `json:"proof"`   // Ancestor, Patch, Forge, or ""
-	Reason  string `json:"reason"`  // why there is no proof
-	Unknown bool   `json:"unknown"` // something could not be read: protect
+	Base    string `json:"base"`  // the base ref's commit now
+	Clean   bool   `json:"clean"` // no tracked changes, no untracked files, no blocking ignored files
+	Dirty   string `json:"dirty"` // why not clean
+	// Ignored are the ignored files and directories that keep the lane, when those are what makes it
+	// not clean.
+	Ignored []string `json:"ignored,omitempty"`
+	Proof   string   `json:"proof"`   // Ancestor, Patch, Forge, or ""
+	Reason  string   `json:"reason"`  // why there is no proof
+	Unknown bool     `json:"unknown"` // something could not be read: protect
 	// Forge is what the forge said, when it was asked.
 	Forge any `json:"forge,omitempty"`
 }
@@ -86,13 +90,30 @@ func Check(ctx context.Context, path, baseRef string, o Options) Repo {
 		}
 		var kept []string
 		for _, e := range strings.Split(strings.TrimRight(listed, "\n"), "\n") {
-			if e != "" && !allowed(e, o.Generated, o.Ours) {
-				kept = append(kept, e)
+			if e == "" || allowed(e, o.Generated, o.Ours) {
+				continue
 			}
+			// Git lists a wholly ignored directory as one entry. When a declared path lies inside
+			// it, what else it holds decides, so it is listed file by file.
+			if strings.HasSuffix(e, "/") && declaresInside(e, o.Generated, o.Ours) {
+				inside, err := g.Run(ctx, "ls-files", "--others", "--ignored", "--exclude-standard", "--", e)
+				if err != nil {
+					return unknown("listing ignored files failed: %v", err)
+				}
+				for _, f := range strings.Split(strings.TrimRight(inside, "\n"), "\n") {
+					if f != "" && !allowed(f, o.Generated, o.Ours) {
+						kept = append(kept, f)
+					}
+				}
+				continue
+			}
+			kept = append(kept, e)
 		}
-		ignored := strings.Join(kept, "\n")
-		if ignored != "" {
-			r.Dirty = summarize("ignored files that are not declared generated", ignored)
+		if len(kept) > 0 {
+			slices.Sort(kept) // listing a directory's files can name one twice
+			kept = slices.Compact(kept)
+			r.Ignored = kept
+			r.Dirty = summarize("ignored files that are not declared generated", strings.Join(kept, "\n"))
 		}
 	}
 	r.Clean = r.Dirty == ""
@@ -130,9 +151,23 @@ func Check(ctx context.Context, path, baseRef string, o Options) Repo {
 	return r
 }
 
+// declaresInside reports whether a declared path could lie inside dir ("dir/"): one under it, or a
+// pattern without a slash, which matches at any depth.
+func declaresInside(dir string, lists ...[]string) bool {
+	for _, list := range lists {
+		for _, p := range list {
+			p = strings.TrimPrefix(p, "/")
+			if strings.HasPrefix(p, dir) || (strings.ContainsAny(p, "*?[") && !strings.Contains(strings.TrimSuffix(p, "/"), "/")) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // allowed reports whether an ignored entry (a file, or a directory as "dir/") is a declared
 // generated path, one of aw's own links, or under one of them. A directory Git collapsed above a
-// declared path is not allowed: what else it holds is unknown.
+// declared path is not allowed here: Check lists what it holds instead.
 func allowed(entry string, lists ...[]string) bool {
 	e := strings.TrimSuffix(entry, "/")
 	for _, list := range lists {
