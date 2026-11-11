@@ -11,7 +11,7 @@ env AW_TOOL_PATH=$XDG_CACHE_HOME/agent-workspace/bin/$AW_VERSION/aw
 env AW_MIRROR=$AW_NEW_MIRROR
 exec aw upgrade --to $AW_NEW_VERSION
 stderr 'AW_TOOL_PATH is set, and aw upgrade ignores it'
-stdout 'aw 0.0.0-acceptance → '$AW_NEW_VERSION
+stdout 'aw '$AW_VERSION' → '$AW_NEW_VERSION
 ! stderr 'doctor: pin'
 stdout 'Next: commit this'
 grep $AW_NEW_VERSION .aw/version
