@@ -1,61 +1,270 @@
-# agent-workspace
+# Agent Workspace
 
-Agent Workspace is a development environment that facilitates parallel agent sessions. It works with any agentic coding tool, and prevents resource contention so many agents can get work done at the same time on one machine.
+`aw` lets you run several coding agents at once, on the same repositories, without them stepping on
+each other or on you.
 
-> **Status: pre-1.0.** Releases are signed and versioned, but interfaces, file formats and directory layout can still change between them. `aw upgrade` migrates a workspace from one release to the next. The code is under the [Apache-2.0 license](LICENSE).
+Each piece of work gets its own **lane**: a Git worktree of every project in the workspace, on its own
+branch, with its own ports, hostname, databases and environment. Agents work inside their lane and
+cannot write outside it. Your own checkout stays yours. When an agent is done it hands the lane off
+for review, and once the work is proven merged, `aw` recycles the lane.
 
-## Getting started
+It works with Claude Code, Codex, OpenCode and Grok out of the box, and runs on Linux and macOS
+(amd64 and arm64).
+
+> `aw` is pre-1.0. Configuration and commands may still change between releases. `aw upgrade`
+> migrates a workspace for you.
+
+## How it fits together
+
+```
+my-workspace/                  ← the workspace repository: workspace.toml, bin/aw
+├── api/                       ← a project repository (your "owner checkout" of it)
+│   └── .worktrees/01/         ← lane 01's worktree of api, on branch aw/checkout-tax
+├── web/
+│   └── .worktrees/01/         ← lane 01's worktree of web, on the same branch
+└── .worktrees/01/             ← lane 01's root: where the agent works
+    ├── api -> ../../api/.worktrees/01
+    └── web -> ../../web/.worktrees/01
+```
+
+- **Workspace.** A Git repository holding `workspace.toml`, which lists your projects (each its own
+  Git repository) and how to install, run and serve them. A single repository can also be its own
+  workspace.
+- **Owner checkout.** Your normal clones of the projects. Agents may read here, but their first write
+  is refused and they are told to claim a lane. You can explicitly invite one to work alongside you
+  with `aw pair`.
+- **Lane.** One piece of work across every project. It is named from the purpose you give it
+  (`"fix checkout tax rounding"` becomes `checkout-tax`) and also has a number. Every command that
+  takes a lane accepts either.
+- **Resources and seats.** Things lanes have to share, such as a dev stack that only fits in memory
+  once, or a pool of mobile emulators. A lane takes a seat with `aw serve`, waits in a queue when
+  none is free, and you (the human) go to the front of the line.
+- **Pin.** Each workspace pins an exact version of `aw`, checked by checksum. `bin/aw` is a small
+  launcher that runs that version, and a globally installed `aw` defers to it, so everyone on the team
+  runs the same `aw` in a given workspace.
+
+`aw` enforces lanes through the harness's tool hooks: every file write and shell command an agent
+makes is checked before it runs. By default `aw` only guards what it owns (lanes, seats and its own
+state). Stricter rules for Git, publishing, secrets, processes and containers are opt-in.
+
+## Install
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/connor981332/agent-workspace/master/install.sh | sh
-cd your-workspace   # a directory holding your project repositories, or a single repository
-aw init
-aw onboard
 ```
 
-See [Getting started](docs/getting-started.md) for what those do and how to join a workspace that already uses `aw`, and the [supported harnesses](docs/harnesses.md), the [configuration reference](docs/reference/config.md) and the [safety model](docs/safety.md).
+This puts `aw` in `~/.local/bin`, after checking the release checksum (and its signature, if
+`cosign` is installed). Set `AW_VERSION` to pick a release or `AW_INSTALL_DIR` to change the
+directory.
 
-## The problem
+You also need Git 2.34 or newer, `curl` or `wget`, and `sha256sum` or `shasum`, plus whichever
+harness you use (`claude` by default). Docker and the devcontainer CLI are only needed if your
+projects run in devcontainers or use shared infrastructure. `aw doctor` checks all of this.
 
-Running several coding agents against the same product at once goes wrong in predictable ways. They edit the same checkout, fight over one dev server or database, start and stop each other's containers, and leave behind work nobody can safely clean up. Teams patch this with hand-written conventions in agent instruction files, which are easy to ignore and hard to share.
+## Get started
 
-Agent Workspace aims to make those conventions real: isolated workspaces per agent, coordinated access to shared resources, guardrails that are enforced rather than requested, and cleanup that never loses work.
+Several commands only work from your own terminal, not from inside an agent session. `aw` will tell
+an agent to ask you when it tries one. Run the steps below yourself.
 
-## Three levels
+### Setting up a new workspace
 
-The design separates what is generic from what belongs to a product or a person.
+1. **Create the workspace.** In a new Git repository, or in a directory that holds your project
+   repositories:
 
-| Level | Lives in | Holds |
-|---|---|---|
-| **Framework** | this repository | The generic machinery. It knows nothing about any particular product. |
-| **Team / organization** | a team's own workspace repo | Repos, commands, shared infrastructure, instructions, rules and shared plans and docs. |
-| **Individual** | a developer's private area | Personal overrides, plans, notes and skills, kept out of the team repo. |
+   ```sh
+   git init my-workspace && cd my-workspace
+   aw init
+   ```
 
-Personal settings can override the team's, except for what the team locks.
+   This writes `workspace.toml`, with one project for each Git repository it finds directly inside,
+   or the repository itself if you run it in one. It also writes the pin, `bin/aw`, and the
+   `.gitignore` entries.
 
-## Where things stand
+2. **Add projects** that are not there yet:
 
-Agent Workspace is a single Go binary for Linux and macOS, with signed releases. It works with Claude Code, Codex, Grok and OpenCode, and other harnesses can be added in configuration.
+   ```sh
+   aw add project api git@github.com:acme/api.git
+   ```
 
-## What it does
+3. **Onboard.**
 
-- gives each agent a lane: its own worktree of every repository, its own data, ports and hostname;
-- queues access to what only one lane can use at a time, with the human going first and crashed holders recovered;
-- pins one exact, verified version per workspace, updated through a merge request;
-- runs in your project's dev container or on the host;
-- removes only work it can prove was merged;
-- stands in for shared services with optional modules, and helps an agent propose your configuration, which you review.
+   ```sh
+   aw onboard
+   ```
 
-The [specification](docs/spec/README.md) has the details.
+   This is the main setup step. It runs `aw setup` (clones projects, installs hooks and dependencies,
+   creates your personal configuration), reports what lanes will need (checkout hooks, local files,
+   tools), and then starts an agent with a workspace-design skill. The agent drafts the rest of
+   `workspace.toml` for you (install and run commands, servers and ports, per-lane databases, shared
+   resources) and checks it with `aw rehearse`, which creates two lanes at once and confirms they do
+   not collide. Its proposal lands on a lane branch for you to review and merge.
 
-## Principles
+4. **Check the result.**
 
-- **The tool is never the bottleneck.** Only the project's own work, such as booting servers or migrating databases, takes noticeable time.
-- **Uncertain work stays.** Cleanup removes only work it can prove was merged.
-- **Guards fail closed.** If a guard cannot run, the action is blocked.
-- **Honest about safety.** Hooks are guardrails for cooperative agents, not a security sandbox. Do not run untrusted agents or prompts on the strength of this tool. See the [safety model](docs/safety.md).
-- **Any agent tool.** One set of instructions, not one per harness.
+   ```sh
+   aw doctor
+   ```
 
-## Contributing
+   It names the fix for every problem it finds and writes nothing, so it is safe to run any time.
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+Commit `workspace.toml`, `.aw/` and `bin/aw` so your team gets the same setup.
+
+### Joining a workspace someone else set up
+
+```sh
+git clone git@github.com:acme/workspace.git && cd workspace
+aw setup
+```
+
+`aw setup` is safe to rerun. It asks before starting any containers (pass `--containers` to skip the
+question).
+
+## Everyday use
+
+### Starting work
+
+```sh
+aw new "fix checkout tax rounding"
+```
+
+This claims a lane (a pre-warmed one from the pool when there is one) and launches your harness in it.
+Arguments after `--` go to the harness unchanged. Use `--mux` to open it in a new tmux or herdr
+window, `--branch` to start on an existing branch, and `--harness` to use a different agent this time.
+
+If you already started an agent in the owner checkout, it can claim a lane for itself with
+`aw attach "<purpose>"`. It will be prompted to do so the first time it tries to write.
+
+### What agents do inside a lane
+
+| Command | What it does |
+| --- | --- |
+| `aw run <project> [cmd…]` | Run a command in the lane's worktree of a project, with the lane's environment (`AW_LANE`, `AW_PROJECT_PATH` and so on). With no command it runs the project's `run`. |
+| `aw serve <resource>` | Take a seat and start the lane's servers on its own ports. Exits with status 3 and a queue position if every seat is taken. `--wait` waits instead. |
+| `aw stop <resource>` | Give the seat back. |
+| `aw snapshot <name>` / `aw restore <name>` | Save the lane's data, or replace it with a named snapshot. |
+| `aw finish --summary "…"` | Hand off for review. Records the exact head of every repository and a note on what to verify. Refuses, listing every problem, if anything is uncommitted or off-branch. |
+
+### Keeping track
+
+| Command | What it does |
+| --- | --- |
+| `aw` | The dashboard. |
+| `aw lanes` | The short list: number, name, state, purpose and location. |
+| `aw recap` | Every lane in full: what needs you, what is running, each handoff. `--remote` adds merge request state from the forge. |
+| `aw queue` | Who holds and who waits for each resource. |
+| `aw whoami` | Whether you are in the owner checkout or a lane, and which session. |
+
+All of these only read.
+
+### Reviewing and cleaning up
+
+- `aw try <lane>` checks out a lane's exact heads in your owner checkout so you can run them in your
+  own environment. `aw try --back` puts everything back.
+- `aw changeset` opens the lane's linked merge requests in merge order.
+- `aw sweep` shows which lanes are proven merged, and `aw sweep --apply` recycles them. A lane counts
+  as merged only when its heads are in the base branch, its commits are patch-equivalent, or the forge
+  reports that exact head merged. A deleted remote branch is not enough.
+- `aw park <lane>` protects a lane from cleanup until `aw unpark`.
+- `aw discard <lane>` abandons a lane's work. Every branch is archived under `refs/aw/archive/` first,
+  so nothing committed is lost.
+
+### Picking up where you left off
+
+- `aw resume` reopens an interrupted session with the harness's own resume. `aw resume --all --mux`
+  reopens all of them after a reboot.
+- `aw open <lane>` starts a fresh session on a lane, with its latest handoff as the first prompt.
+
+### Working alongside an agent
+
+- `aw pair` starts an agent in your owner checkout that may edit there. Destructive Git and changes
+  to the workspace's own configuration stay refused.
+- `aw move-to-lane "<purpose>"` moves your uncommitted work into a new lane.
+- `aw delegate` lets sessions in your checkout do routine maintenance (setup, sweep, park) for a
+  limited time.
+
+## Configuration
+
+Configuration has three layers, later ones overriding earlier ones:
+
+1. Framework defaults.
+2. The team layer, `workspace.toml`, committed to the workspace repository.
+3. Your individual layer, `~/.config/agent-workspace/<namespace>.toml`. It holds personal choices
+   such as `[user] harness` and `[user] multiplexer`. The team can lock keys with `[locks]`.
+
+A minimal single-repository workspace:
+
+```toml
+[workspace]
+name = "Solo"
+namespace = "solo"
+schema = 1
+
+[projects.app]
+directory = "."
+install = "npm ci"
+run = "npm test"
+
+[projects.app.servers.dev]
+command = "exec npm run dev -- --port {port}"
+port = 5173
+```
+
+[`examples/shop/workspace.toml`](examples/shop/workspace.toml) shows a larger workspace with several
+repositories, devcontainers, per-lane Postgres and Redis, shared resources and team commands.
+
+To check or debug configuration:
+
+```sh
+aw config validate             # report every problem
+aw config get lanes.max        # the effective value
+aw config explain lanes.max    # and which layer set it
+```
+
+The full reference is [`docs/reference/config.md`](docs/reference/config.md).
+
+### Optional safeguards
+
+To have `aw` also refuse or ask about things outside its own lanes, turn on groups in
+`workspace.toml`:
+
+```toml
+[safeguards]
+enable = ["git-safety", "publication", "secrets", "processes", "containers"]
+```
+
+- `git-safety` refuses destructive Git.
+- `publication` asks before anything outward-facing, such as pushing.
+- `secrets` stops agents reading or printing secret files and the environment.
+- `processes` refuses `kill` and the like.
+- `containers` keeps container lifecycle commands with the human.
+
+Teams can also declare their own guards under `[guards]` and roles under `[roles]`.
+
+### Modules
+
+`aw modules` lists first-party add-ons, and `aw add module <name>` installs one. They include a
+shared Postgres, a mail catcher with an inbox per lane, an S3-compatible object store with a bucket
+per lane, a per-session browser for agents, and webhook forwarding to the lane that registered last.
+
+## Upgrading
+
+```sh
+git switch -c upgrade-aw
+aw upgrade
+```
+
+`aw upgrade` updates the pin, migrates `workspace.toml`, regenerates the files `aw` manages, and runs
+`aw doctor`. Commit the result and review it as a merge request. Files you edited by hand are never
+overwritten. You choose to keep them (`--eject`) or replace them (`--take`).
+
+## Building from source
+
+```sh
+go build -o aw ./cmd/aw
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for tests and development.
+
+## License
+
+See [LICENSE](LICENSE).
