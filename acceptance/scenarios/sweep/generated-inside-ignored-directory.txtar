@@ -1,0 +1,39 @@
+# Git lists a wholly ignored directory as one entry. When a declared generated path lies inside it,
+# sweep looks inside: only what is not generated keeps the lane, and the kept lane says how to
+# release it. The workspace repository declares its own generated paths under [workspace].
+# req: R25
+# source: dogfood, RideTracker lanes kept by lib/generated/ and bin/lib/rt_tools/__pycache__/
+# milestone: M2
+
+workspace shop --init
+exec sh -c 'printf "lib/generated/\n" > web/.gitignore && git -C web add .gitignore && git -C web commit -qm ignore && git -C web push -q'
+exec sh -c 'printf "__pycache__/\n" >> .gitignore && git add .gitignore && git commit -qm ignore && git push -q'
+owner-snapshot
+exec aw attach 'add feature flag'
+
+# Only generated files inside lib/generated/ and *.pyc in the workspace repository: recycled.
+exec sh -c 'mkdir -p web/.worktrees/01/lib/generated/prisma .worktrees/01/tools/__pycache__ && echo 1 > web/.worktrees/01/lib/generated/prisma/index.js && echo 1 > .worktrees/01/tools/__pycache__/x.pyc'
+exec aw sweep --json
+json stdout .lanes[0].action recycle
+
+# Something else beside them keeps the lane, and the next step names the setting.
+exec sh -c 'echo mine > web/.worktrees/01/lib/generated/notes.txt && echo mine > .worktrees/01/tools/__pycache__/notes.txt'
+exec aw sweep --json
+json stdout .lanes[0].action keep
+exec aw sweep
+stdout 'web: 1 ignored files that are not declared generated \(lib/generated/notes\.txt\)'
+stdout '^   web: if builds make lib/generated/notes\.txt, add it to generated under \[projects\.web\] in workspace\.toml; if not, delete it from '
+stdout '^   workspace repository: if builds make tools/__pycache__/notes\.txt, add it to generated under \[workspace\] in workspace\.toml'
+! stdout 'Nothing was changed'
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+generated = ["*.pyc"]
+
+[projects.web]
+generated = ["lib/generated/prisma"]
+
+[projects.api]

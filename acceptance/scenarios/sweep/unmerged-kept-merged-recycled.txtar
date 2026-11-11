@@ -14,6 +14,8 @@ json stdout .lanes[0].action keep
 json stdout .lanes[0].reason 'solo: not proven merged: 1 commit not in refs/remotes/origin/main'
 exec aw sweep
 stdout '^01 feature-flag +keep +solo: not proven merged'
+stdout '^To recycle a kept lane:'
+stdout '^   solo: merge its work \(aw changeset opens the merge requests\), or aw resume feature-flag to keep working on it$'
 
 git-merge . aw/feature-flag
 exec aw sweep --json
@@ -21,7 +23,7 @@ json stdout .lanes[0].action recycle
 json stdout .lanes[0].repos[0].proof ancestor
 json stdout .applied false
 exec aw sweep
-stdout 'Nothing was changed\. Run aw sweep --apply to recycle or remove 1 lane'
+stdout 'Nothing was changed\. If this looks right, run aw sweep --apply to recycle or remove 1 lane'
 
 exec aw sweep --apply --json
 json stdout .lanes[0].action recycle

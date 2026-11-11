@@ -127,6 +127,8 @@ var schema = table("",
 		"schema", integer("Configuration schema version. This release reads schema 1.").teamOnly(),
 		"forge", str("Where merge requests live: auto (from each remote's host), github, gitlab or none.").
 			oneOf("auto", "github", "gitlab", "none").withDefault("auto"),
+		"generated", strList("Ignored paths (Git pathspecs) in the workspace repository itself that builds create and that do "+
+			"not block recycling a lane, such as *.pyc or tools/cache. Each project declares its own under [projects.<name>]."),
 	),
 	"lanes", table("Lanes: the numbered, stable directories agents work in.",
 		"max", integer("Most lanes that may exist at once.").between(1, 999).withDefault(int64(10)),
