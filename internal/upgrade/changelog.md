@@ -7,6 +7,14 @@ Newest first. A line starting with **Breaking:** is called out by `aw upgrade`.
 - `aw upgrade`: moves a workspace to a release, shows this changelog, migrates configuration, and regenerates managed files. A managed file edited by hand is never overwritten.
 - Homebrew tap, and a Renovate preset.
 
+## 0.1.5
+
+- `aw upgrade` ignores `AW_TOOL_PATH`: the new release is downloaded, verified and finishes the upgrade itself, so a local build never regenerates the managed files. The finishing step refuses to run as any version but the pinned one.
+- `aw sweep` looks inside an ignored directory that holds a declared generated path, so `lib/generated/` with only `lib/generated/prisma` in it no longer keeps a lane.
+- `[workspace] generated` declares the workspace repository's own generated paths.
+- `aw sweep` ends with what would let each kept lane be recycled, and its `--apply` hint asks whether the preview looks right.
+- `aw lanes` ends with how to continue a lane: `aw resume` for one whose last session can be reopened, and `aw open` for a fresh session from the handoff.
+
 ## 0.1.4
 
 - **Breaking:** aw now regulates only its own lanes, seats and state. Guards on destructive Git, publishing, secrets, processes and containers are off unless you turn them on with `[safeguards] enable = ["git-safety", "publication", "secrets", "processes", "containers"]` in `workspace.toml`, so add that to keep them.
