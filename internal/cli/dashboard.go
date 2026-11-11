@@ -329,6 +329,13 @@ or its number. aw recap shows each lane in full. It writes nothing.`,
 			for _, r := range rows {
 				fmt.Fprintf(out, "%s %-24s %-12s %s\n   %s\n", r.Dir, ui.Clean(r.Name), r.State, quoted(r.Purpose), ui.Clean(r.Root))
 			}
+			// What to do next is for the human in the owner checkout: an agent does not start
+			// sessions, and in a lane the work is already here.
+			if ids, _ := issuedIdentities(); len(ids) == 0 && m.CallerLane() == 0 && m.Store != nil {
+				if err := continueHint(out, m, all); err != nil {
+					return err
+				}
+			}
 			return nil
 		}),
 	}
@@ -432,4 +439,47 @@ func efforts(ws *workspace.Workspace, ss []*lanes.LaneStatus) []effort {
 		out = append(out, *byPlan[id])
 	}
 	return out
+}
+
+// continueHint ends aw lanes with how to continue a lane that no session is running in: aw resume
+// for a lane whose last session can be reopened, and aw open for any of them.
+func continueHint(out io.Writer, m *lanes.Manager, all []state.Lane) error {
+	sessions, err := state.Sessions(m.Store.DB())
+	if err != nil {
+		return err
+	}
+	running, last := map[int]bool{}, map[int]bool{}
+	for _, s := range sessions {
+		if s.Pair || s.Lane == 0 {
+			continue
+		}
+		for _, l := range all {
+			if l.Number == s.Lane && l.Generation == s.LaneGeneration {
+				if s.State == state.SessionActive && s.Alive() {
+					running[l.Number] = true
+				} else {
+					last[l.Number] = true
+				}
+			}
+		}
+	}
+	var idle, resumable []string
+	for _, l := range all {
+		if l.State == state.LanePool || running[l.Number] {
+			continue
+		}
+		idle = append(idle, l.Name)
+		if last[l.Number] {
+			resumable = append(resumable, ui.Clean(l.Name))
+		}
+	}
+	if len(idle) == 0 {
+		return nil
+	}
+	fmt.Fprintln(out, "\nContinue a lane:")
+	if len(resumable) > 0 {
+		fmt.Fprintf(out, "   aw resume <lane>   reopen its last session where it stopped (%s)\n", strings.Join(resumable, ", "))
+	}
+	fmt.Fprintln(out, "   aw open <lane>     start a fresh session that begins with the lane's latest handoff")
+	return nil
 }
