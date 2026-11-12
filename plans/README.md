@@ -11,3 +11,4 @@ ships its own plan mechanism.
 | Plan | State | Updated | Summary |
 |---|---|---|---|
 | [release-candidate.md](release-candidate.md) | PARTIALLY IMPLEMENTED | 2026-11-10 | Milestones, acceptance suite, module layout, benchmarks, release pipeline and CI for the Go release candidate. |
+| [agent-feedback.md](agent-feedback.md) | PLANNED | 2026-11-12 | Response to the 0.1.5 agent ergonomics feedback, change requests and owner feature requests, in five phases. |
