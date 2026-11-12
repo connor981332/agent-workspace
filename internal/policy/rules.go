@@ -246,6 +246,7 @@ var ownerOnly = map[string]string{
 	"containers": "starts, recreates or stops shared containers",
 	"infra":      "takes down the shared infrastructure", "supervise": "installs a user service",
 	"add": "changes the workspace's modules or projects", "eject": "changes what aw manages",
+	"pull": "updates the owner checkouts",
 }
 
 // OwnerOnly reports whether an aw command is one only the human runs.

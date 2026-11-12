@@ -226,6 +226,7 @@ session there.`,
 			}
 			startSetup(cmd.ErrOrStderr(), w, c)
 			fmt.Fprintf(out, "Moved the work to lane %s %s, on %s.\n", c.Dir, ui.Clean(c.Lane.Name), branch)
+			printNotes(cmd.ErrOrStderr(), c.Notes)
 			if sessions > 0 {
 				fmt.Fprintln(out, "The pair session moved with it, and now works in the lane.")
 			}

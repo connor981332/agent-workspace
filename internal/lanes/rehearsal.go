@@ -189,9 +189,23 @@ func (m *Manager) cloneInto(ctx context.Context, x state.LaneRepo, dst string) e
 		return err
 	}
 	if ok(g.OK(ctx, "diff", "--cached", "--quiet")) {
-		return nil
+		return originAtHead(ctx, g, branch)
 	}
-	_, err = g.Run(ctx, "-c", "user.name=aw", "-c", "user.email=aw@localhost", "commit", "-q", "--no-verify", "-m", "the lane's uncommitted changes")
+	if _, err = g.Run(ctx, "-c", "user.name=aw", "-c", "user.email=aw@localhost", "commit", "-q", "--no-verify", "-m", "the lane's uncommitted changes"); err != nil {
+		return err
+	}
+	return originAtHead(ctx, g, branch)
+}
+
+// originAtHead makes the copy's origin/<branch> its head, and origin's default branch. A new lane
+// starts from origin's default branch, and in the copy that must be the lane's proposal, not the
+// owner's branch the clone saw.
+func originAtHead(ctx context.Context, g run.Git, branch string) error {
+	ref := "refs/remotes/origin/" + branch
+	if _, err := g.Run(ctx, "update-ref", ref, "HEAD"); err != nil {
+		return err
+	}
+	_, err := g.Run(ctx, "symbolic-ref", "refs/remotes/origin/HEAD", ref)
 	return err
 }
 

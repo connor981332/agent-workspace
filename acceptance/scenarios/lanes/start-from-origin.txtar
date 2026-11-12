@@ -1,0 +1,43 @@
+# A new lane starts each repository from origin's default branch as last fetched, not from the owner
+# checkout: the owner's unpushed commits and other branches are the owner's, not the lane's. aw says
+# how the owner checkout differs, and the lane's recap does not count the owner's commits. The
+# workspace repository is the exception that refuses: it holds the lanes' hooks and configuration.
+# req: R21
+# source: RideTracker dogfood, 2026-11-12 (base commits shown in every lane)
+# milestone: M12
+
+workspace shop --init --repos web,api
+owner-may-change
+
+# web has a commit origin lacks; api is on another branch.
+exec git -C web commit -q --allow-empty -m 'owner only'
+exec git -C api switch -q -c owner/experiment
+exec git -C api commit -q --allow-empty -m 'trying something'
+
+exec aw attach 'add feature flag'
+stderr 'aw: note: project web: your checkout has 1 commit that origin/main lacks, and the lane starts without it → push it'
+stderr 'aw: note: project api: your checkout is on owner/experiment, and the lane starts from origin/main → to start from owner/experiment instead, use --branch owner/experiment'
+! stderr 'last fetched'
+exec git -C web/.worktrees/01 rev-parse HEAD
+cp stdout lane-web
+exec git -C web rev-parse origin/main
+cmp stdout lane-web
+exec git -C api/.worktrees/01 rev-parse HEAD
+cp stdout lane-api
+exec git -C api rev-parse origin/main
+cmp stdout lane-api
+exec aw recap
+stdout 'proven merged → aw sweep: feature-flag'
+
+# The workspace repository with a commit no remote has: no lane, and the fix.
+exec git commit -q --allow-empty -m 'unpushed workspace change'
+! exec aw attach 'second change'
+stderr 'no lane was created: the workspace repository has 1 commit that no remote has, and a lane starts from origin/main'
+stderr '→ push it \(git push\), or start the lane from your branch with --branch main'
+! exists .worktrees/02
+exec git push -q origin HEAD
+
+# A copy of origin older than a day is named, with the command that refreshes it.
+exec touch -t 202001010000 .git/logs/refs/remotes/origin/main web/.git/logs/refs/remotes/origin/main api/.git/logs/refs/remotes/origin/main
+exec aw attach 'third change'
+stderr 'aw: note: the lane starts from origin as last fetched, up to [0-9]+ days ago \(the workspace repository, project api, project web\) → run aw pull'

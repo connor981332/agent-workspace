@@ -70,6 +70,8 @@ type Claimed struct {
 	FromPool bool             `json:"from_pool"` // a warm lane was claimed
 	// Setup: the lane has setup steps, and the caller starts them in the background.
 	Setup bool `json:"setup"`
+	// Notes say how the lane's start differs from the owner checkout, for the person to see.
+	Notes []string `json:"notes,omitempty"`
 }
 
 // repoPlan is one repository a lane gets a worktree of.
@@ -89,6 +91,12 @@ type repoPlan struct {
 	localFiles []string
 	// lacksBranch: --branch named a branch this repository does not have.
 	lacksBranch bool
+	// notes say how the lane's start differs from the owner checkout, for the person to see.
+	notes []string
+	// unpushed counts the owner's commits on its branch that no remote has.
+	unpushed int
+	current  string    // the owner checkout's branch
+	fetched  time.Time // when origin's refs were last updated, or zero
 }
 
 // Root returns the lane root of lane n.
@@ -213,7 +221,7 @@ func (m *Manager) Claim(ctx context.Context, req ClaimRequest) (*Claimed, error)
 	t.Mark("record")
 	compose.CopyPersonal(m.WS.Owner, m.Root(lane.Number))
 	return &Claimed{Lane: lane, Dir: Dir(lane.Number, m.Cfg.Lanes.Max), Root: m.Root(lane.Number), Repos: repos, FromPool: fromPool,
-		Setup: lane.State == state.LaneSettingUp}, nil
+		Setup: lane.State == state.LaneSettingUp, Notes: notes(plans)}, nil
 }
 
 // existing returns the lane the session already holds, waiting while another call builds it.
@@ -327,6 +335,11 @@ func (m *Manager) plan(ctx context.Context, req ClaimRequest) ([]repoPlan, error
 		case errors.Is(err, errNoCommit): // the lane root is a plain directory
 		case err != nil:
 			return nil, err
+		case p.unpushed > 0:
+			// The workspace repository holds the lane's hooks and configuration: a lane that quietly
+			// lacked the owner's newest would run old ones.
+			return nil, fmt.Errorf("no lane was created: the workspace repository has %d commit%s that no remote has, and a lane starts from %s, so it would run without %s → push %s (git push), or start the lane from your branch with --branch %s",
+				p.unpushed, plural(p.unpushed), shortRef(p.baseRef), them(p.unpushed), them(p.unpushed), p.current)
 		default:
 			plans = append(plans, p)
 		}
@@ -379,11 +392,21 @@ func (m *Manager) planRepo(ctx context.Context, project, rel, branch string, sec
 	if err != nil {
 		return p, fmt.Errorf("no lane was created: %s in %s is not on a branch (detached HEAD) → check out its main branch there", label(p), owner)
 	}
+	p.current = current
 	p.baseRef = "refs/heads/" + current
 	if up, err := g.Line(ctx, "rev-parse", "--symbolic-full-name", current+"@{upstream}"); err == nil && up != "" {
 		p.baseRef = up
 	}
 	start := "refs/heads/" + current
+	// A new lane starts from origin's default branch as last fetched, not from whatever the owner
+	// checkout has: its unpushed commits and other branches are the owner's, not the lane's.
+	if def := defaultBranch(ctx, g); def != "" {
+		p.baseRef, start = def, def
+		p.fetched = fetchedAt(owner, def)
+		if branch == "" {
+			ownerDrift(ctx, g, &p, def)
+		}
+	}
 	if branch != "" {
 		if ok, _ := g.OK(ctx, "check-ref-format", "--branch", branch); !ok {
 			return p, fmt.Errorf("%q is not a branch name → name an existing branch", branch)

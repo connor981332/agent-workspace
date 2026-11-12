@@ -29,6 +29,7 @@ exec sh -c 'PATH=/usr/bin:/bin; rm bin/aw; git commit -q --allow-empty -m "witho
 
 exec git add .githooks
 exec git commit -q -m 'team hooks'
+exec git push -q origin HEAD
 exec aw attach 'add feature flag'
 cd .worktrees/01
 exec rm -f $WORK/ran

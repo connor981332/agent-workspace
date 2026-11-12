@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"slices"
 	"strconv"
@@ -144,6 +145,7 @@ lists the lanes that exist.`,
 				return writeJSON(out, map[string]any{
 					"number": c.Lane.Number, "lane": c.Dir, "name": c.Lane.Name, "purpose": c.Lane.Purpose,
 					"state": c.Lane.State, "root": c.Root, "repos": c.Repos, "reused": c.Reused, "returned": c.Returned, "joined": c.Joined, "from_pool": c.FromPool,
+					"notes": c.Notes,
 				})
 			}
 			verb := "Claimed"
@@ -158,6 +160,7 @@ lists the lanes that exist.`,
 			}
 			fmt.Fprintf(out, "%s lane %s %s for %q.\n", verb, c.Dir, ui.Clean(c.Lane.Name), ui.Clean(c.Lane.Purpose))
 			fmt.Fprintf(out, "Work in the lane root: cd %s\n", shellQuote(c.Root))
+			printNotes(cmd.ErrOrStderr(), c.Notes)
 			return nil
 		}),
 	}
@@ -198,4 +201,11 @@ func applyRole(ctx context.Context, w *writeContext, c *lanes.Claimed, role stri
 		return nil
 	}
 	return w.store.Write(ctx, func(tx *sql.Tx) error { return state.SetLaneRole(tx, c.Lane.Number, role) })
+}
+
+// printNotes shows how a new lane's start differs from the owner checkout.
+func printNotes(w io.Writer, notes []string) {
+	for _, n := range notes {
+		fmt.Fprintf(w, "aw: note: %s\n", ui.Clean(n))
+	}
 }

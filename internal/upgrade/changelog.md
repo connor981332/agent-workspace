@@ -4,6 +4,9 @@ Newest first. A line starting with **Breaking:** is called out by `aw upgrade`.
 
 ## 0.2.0
 
+- **Breaking:** a new lane starts from origin's default branch as last fetched, not from the owner checkout's branch, so a lane no longer carries the owner's unpushed commits or other branch. `aw new` says when the owner checkout differs, or when origin was last fetched over a day ago. A workspace repository with unpushed commits refuses to start a lane until they are pushed, or `--branch` names the branch to start from.
+- `aw pull` fetches origin in every owner checkout and fast-forwards those on the default branch. It never merges, rebases or switches branches.
+- `aw recap` shows only a lane's own work: repositories the lane has not changed collapse into one "no changes" line, a commit already on origin counts as pushed, and the workspace files aw copied into a lane are not counted as uncommitted work.
 - `aw upgrade`: moves a workspace to a release, shows this changelog, migrates configuration, and regenerates managed files. A managed file edited by hand is never overwritten.
 - Homebrew tap, and a Renovate preset.
 

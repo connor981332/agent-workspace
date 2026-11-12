@@ -35,6 +35,16 @@ A lane belongs to work. Sessions attach to it and detach from it, crash or end, 
    reached, in which case the error names what can be cleaned up.
 2. Record the lane's name and purpose, bump its generation, and create the lane branch in every
    lane-enabled project.
+
+   Each lane branch starts from origin's default branch as last fetched (`origin/HEAD`, else
+   `origin/main` or `origin/master`), not from the owner checkout. A repository with no such ref
+   starts from the owner's branch. `--branch` starts from a named branch instead. aw never fetches
+   here, because a network round trip does not fit the `aw new` budget ([speed.md](speed.md)):
+   `aw pull` fetches origin in every owner checkout and fast-forwards those on the default branch.
+   The claim prints a note when the owner checkout is on another branch, has commits the default
+   branch lacks, or last updated origin's refs more than a day ago. A workspace repository with
+   commits no remote has refuses the claim, because it holds the hooks and configuration the lane
+   would run. A lane's own work is what its head has beyond both its starting commit and the base.
 3. Return to the caller. Everything below runs in the background, and its progress is visible in `aw`.
 4. Providers create or reset the lane's data.
 5. Lifecycle steps run in order: `prepare`, each project's `install` (skipped when its stamp is

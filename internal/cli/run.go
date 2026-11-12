@@ -149,6 +149,7 @@ func startLaneSession(cmd *cobra.Command, purpose, harness, branch, role string,
 		return err
 	}
 	fmt.Fprintf(cmd.ErrOrStderr(), "aw: lane %s %s, starting %s\n", c.Dir, c.Lane.Name, harness)
+	printNotes(cmd.ErrOrStderr(), c.Notes)
 	if !slices.Contains(knownHarnesses, harness) && w.cfg.Harnesses[harness] == nil {
 		fmt.Fprintf(cmd.ErrOrStderr(), "aw: warning: %s has no hooks here, so nothing confines it to the lane. It gets the instructions in AGENTS.md, and bin/aw is its way in (docs/harnesses.md)\n", harness)
 	}
