@@ -164,9 +164,14 @@ func printSections(out io.Writer, all []*lanes.LaneStatus, width int, detail boo
 				}
 				line("  " + strings.Repeat(" ", 17) + note)
 			}
+			var untouched []string
 			for _, r := range ls.Repos {
 				if r.Error != "" {
 					line(fmt.Sprintf("  %17s%s: %s", "", r.Project, r.Error))
+					continue
+				}
+				if r.Dirty == 0 && r.Ahead == 0 && r.Remote == nil {
+					untouched = append(untouched, r.Project) // where the lane started holds none of its work
 					continue
 				}
 				remote := ""
@@ -177,6 +182,9 @@ func printSections(out io.Writer, all []*lanes.LaneStatus, width int, detail boo
 					}
 				}
 				line(fmt.Sprintf("  %17s%s %s: %s%s", "", r.Project, short(r.Head), r.Push, remote))
+			}
+			if len(untouched) > 0 {
+				line(fmt.Sprintf("  %17sno changes: %s", "", strings.Join(untouched, ", ")))
 			}
 		}
 	}
