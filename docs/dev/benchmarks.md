@@ -288,6 +288,26 @@ The same machine as M1, on power, on its NVMe disk (btrfs). aw built from the m1
 | grant-next | 100 | 27.20 | 43.48 | 45.12 | 46.73 | 50.00 | pass |
 | preempt | 100 | 7.44 | 8.16 | 8.57 | 28.63 | 50.00 | pass |
 
+### Linux laptop, 2026-11-12, lane attribution fix
+
+The same machine, not quiet (load average about 2). aw built from fix/lane-attribution. The dashboard
+costs about 10 ms more at p50 than on 2026-11-09: recap now asks each repository without an upstream
+whether any remote has its head, and counts a lane's commits against its starting commit as well as
+its base. Claims now read origin's default branch and how the owner checkout differs from it.
+
+| Operation | n | p50 ms | p95 ms | p99 ms | max ms | limit ms | result |
+|---|---|---|---|---|---|---|---|
+| hook | 1000 | 4.66 | 5.32 | 5.62 | 6.74 | 8.00 | pass |
+| whoami | 500 | 3.76 | 4.26 | 4.48 | 4.61 | 10.00 | pass |
+| config-get | 500 | 3.73 | 4.19 | 4.54 | 5.00 | 10.00 | pass |
+| attach-from-pool | 100 | 65.48 | 75.95 | 81.01 | 85.66 | 100.00 | pass |
+| new-until-harness | 100 | 67.74 | 80.80 | 99.40 | 107.91 | 150.00 | pass |
+| dashboard | 200 | 53.74 | 56.13 | 56.84 | 58.06 | 100.00 | pass |
+| ref-hook | 1000 | 5.06 | 5.58 | 6.15 | 6.59 | 8.00 | pass |
+| serve-free-seat | 100 | 8.50 | 9.53 | 31.33 | 41.43 | 50.00 | pass |
+| grant-next | 100 | 34.41 | 44.66 | 46.33 | 55.64 | 50.00 | pass |
+| preempt | 100 | 7.68 | 8.49 | 8.88 | 37.38 | 50.00 | pass |
+
 ### Apple Silicon laptop
 
 Not yet measured: pending, for a maintainer with a Mac.
