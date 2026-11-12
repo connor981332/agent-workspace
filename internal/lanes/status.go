@@ -267,19 +267,22 @@ func (m *Manager) repoStatus(ctx context.Context, r state.LaneRepo) RepoStatus {
 // ownCommits counts the lane's own commits: those on its head that are neither where it started nor
 // on the base branch. Commits the starting point already had, such as ones the owner had not pushed,
 // are not the lane's, and neither are the base's commits the lane merged in since.
+// One Git call in the usual case; a base ref that is gone, such as a pruned upstream, costs a retry.
 func ownCommits(ctx context.Context, g run.Git, r state.LaneRepo) int {
-	args := []string{"rev-list", "--count", "HEAD"}
+	var refs []string
 	for _, ref := range []string{r.BaseSHA, r.BaseRef} {
-		if ref != "" && ok(g.OK(ctx, "rev-parse", "--verify", "--quiet", ref+"^{commit}")) {
-			args = append(args, "^"+ref)
+		if ref != "" {
+			refs = append(refs, "^"+ref)
 		}
 	}
-	count, err := g.Line(ctx, args...)
-	if err != nil {
-		return 0
+	for len(refs) > 0 {
+		if out, err := g.Line(ctx, append([]string{"rev-list", "--count", "HEAD"}, refs...)...); err == nil {
+			n, _ := strconv.Atoi(out)
+			return n
+		}
+		refs = refs[:len(refs)-1] // without the base ref; the starting commit is always there
 	}
-	n, _ := strconv.Atoi(count)
-	return n
+	return 0
 }
 
 // statusPath is the path of an ordinary changed entry in git status --porcelain=v2.

@@ -19,15 +19,26 @@ const StaleFetch = 24 * time.Hour
 
 // defaultBranch is origin's default branch as last fetched, such as refs/remotes/origin/main, or ""
 // when the repository has no such ref. origin/HEAD names it after a clone; otherwise main or master.
+// One Git call, because every claim comes through here.
 func defaultBranch(ctx context.Context, g run.Git) string {
-	if ref, err := g.Line(ctx, "symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"); err == nil && ref != "" {
-		if ok(g.OK(ctx, "rev-parse", "--verify", "--quiet", ref+"^{commit}")) {
-			return ref
+	out, err := g.Run(ctx, "for-each-ref", "--format=%(refname) %(symref)",
+		"refs/remotes/origin/HEAD", "refs/remotes/origin/main", "refs/remotes/origin/master")
+	if err != nil {
+		return ""
+	}
+	have := map[string]string{}
+	for _, line := range strings.Split(out, "\n") {
+		if f := strings.Fields(line); len(f) > 0 {
+			have[f[0]] = strings.Join(f[1:], "") // the symbolic ref's target, or ""
 		}
 	}
-	for _, name := range []string{"main", "master"} {
-		ref := "refs/remotes/origin/" + name
-		if ok(g.OK(ctx, "rev-parse", "--verify", "--quiet", ref+"^{commit}")) {
+	if target := have["refs/remotes/origin/HEAD"]; target != "" {
+		if _, ok := have[target]; ok || strings.HasPrefix(target, "refs/remotes/origin/") {
+			return target
+		}
+	}
+	for _, ref := range []string{"refs/remotes/origin/main", "refs/remotes/origin/master"} {
+		if _, ok := have[ref]; ok {
 			return ref
 		}
 	}
