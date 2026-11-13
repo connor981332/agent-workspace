@@ -285,8 +285,7 @@ owner checkout. "(delete)" means the new value is zero. "—" means no hook call
 ## Devcontainer CLI behavior for F5
 
 Checked on 2026-11-12 by reading the source of `@devcontainers/cli` 0.89.0, the pinned version
-(`dist/spec-node/devContainersSpecCLI.js`), for the 0.1.5 change requests' F5. Two of their four
-checks need VS Code, and are still open.
+(`dist/spec-node/devContainersSpecCLI.js`), for the 0.1.5 change requests' F5. Check 4 needs VS Code and is still open.
 
 | Check | Finding |
 |---|---|

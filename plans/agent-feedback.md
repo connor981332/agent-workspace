@@ -44,7 +44,12 @@ full acceptance tests passing:
   and an omitted one, plus Mode B with stubbed docker/devcontainer, seat ports and Git exclusion.
 - `config.check` refuses `local_compose` on a host runner, absolute paths, `..` components and unclean
   paths. Changelog, Runners architecture and the regenerated config reference describe Mode B.
-- Mode A and the config-hash/recreation behavior in 5.2 are not implemented.
+- Shared 5.2 groundwork is implemented: the fragment carries a hash of the devcontainer/Compose
+  configuration, dotenv files, referenced environment values and aw's settings. A changed or missing
+  label replaces only an idle service container, with volumes kept; seats, setups, attached sessions,
+  unreadable state or failed/incomplete process inspection refuse replacement. Scenarios cover each
+  busy/refusal path and stable reuse. Mode A remains gated on the owner's VS Code check 4.
+- Onboarding offers a local Compose slot as an optional project MR, with the ownership tradeoff.
 - Vet, gofmt and full unit/acceptance checks pass. Benchmarks are recorded in
   `docs/dev/benchmarks.md`: absolute budgets failed on this non-quiet run; the reduced interleaved
   comparison against master passed every regression check.
