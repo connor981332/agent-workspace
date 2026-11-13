@@ -311,3 +311,25 @@ its base. Claims now read origin's default branch and how the owner checkout dif
 ### Apple Silicon laptop
 
 Not yet measured: pending, for a maintainer with a Mac.
+
+### Linux laptop, 2026-11-12, external owner-port offset
+
+The same non-quiet machine (`connor-fw13`, Linux amd64), `feedback/8-owner-port` at `5a44787`,
+compared interleaved against the owner's `aw-dev` built from master `e33468a`. Command:
+`TMPDIR=~/.cache/aw-tmp GOTMPDIR=~/.cache/aw-tmp go run ./bench -mode relative -scale 0.1 -baseline-aw ~/.local/bin/aw-dev`.
+All relative regression checks passed. The config schema change is documentation text only;
+the broker probes the same port count, using a literal host owner_port instead of adding an offset.
+These reduced-sample results do not certify the absolute budgets.
+
+| Operation | n | branch p50 ms | master p50 ms | result |
+|---|---|---|---|---|
+| hook | 100 | 12.77 | 14.08 | pass |
+| whoami | 50 | 9.99 | 11.10 | pass |
+| config-get | 50 | 5.84 | 6.81 | pass |
+| attach-from-pool | 10 | 136.39 | 138.19 | pass |
+| new-until-harness | 10 | 137.06 | 140.49 | pass |
+| dashboard | 20 | 84.27 | 83.85 | pass |
+| ref-hook | 100 | 13.98 | 14.81 | pass |
+| serve-free-seat | 10 | 21.00 | 21.96 | pass |
+| grant-next | 10 | 53.90 | 53.88 | pass |
+| preempt | 10 | 15.54 | 17.36 | pass |

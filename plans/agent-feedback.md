@@ -260,8 +260,10 @@ monolith.
 ## To verify
 
 - B2 in a scratch Compose project with `name:` (5.1).
-- Item 8: whether the port offset is why the owner's container did not count as a seat; then fix, or
-  document what counts as the owner's copy.
+- **Verified, item 8:** a nonzero workspace offset shifted the probe for an external host server,
+  allowing a lane to overcommit its resource. `feedback/8-owner-port` reproduces and fixes this:
+  host `owner_port` is literal; devcontainer detection retains aw's publication offset. Full unit,
+  vet and uncached acceptance suites pass, as does the reduced interleaved master comparison.
 - Item 2: why a Read of the owner checkout was allowed, when `decideFiles` applies the boundary.
 - Item 10: how a lane with unmerged commits was handed out with a new purpose.
 - F5: the change requests' four checks (5.2).
