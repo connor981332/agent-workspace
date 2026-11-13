@@ -14,7 +14,7 @@ harness). Not every suggestion is taken: each section says what is kept as it is
 **Branches / MRs:** #81 to #89 and #91 are merged into master. #91 completes F5 Mode A after
 all 16 checks passed, including the corrected canonical-path test on both macOS architectures.
 [#90](https://github.com/connor981332/agent-workspace/pull/90) is the final owner-port integration;
-its merge is approved, master/#91 has been merged into it, and combined verification is running.
+its merge is approved, master/#91 has been merged into it, and combined local unit/vet/acceptance checks plus every full absolute latency budget pass.
 
 **Done:** Phases 1 to 4, 5.1 to 5.3, 5.5, 5.6 as skill text, 5.7 as `on_acquire` only. Changes
 from the plan as written:
@@ -43,7 +43,7 @@ from the plan as written:
   covers generated CLI selection, the Compose name, seat ports, Git exclusion and refresh on reuse.
 - All four F5 prerequisite checks are now answered in `docs/dev/spikes.md`.
 
-**Next step:** finish combined integration verification and merge #90 after every check passes;
+**Next step:** merge #90 after every combined CI check passes;
 rebuild the owner's dev binary, then prepare v0.2.0 at the protected release approval gate.
 The owner approved all remaining merges/builds and requested the release approval link.
 The explicitly deferred features above remain deferred; they are not part of this completion scope.

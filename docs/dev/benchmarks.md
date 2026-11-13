@@ -401,3 +401,24 @@ runner description. Reduced-sample comparisons do not certify quiet-machine abso
 | serve-free-seat | 10 | 9.39 | 10.01 | pass |
 | grant-next | 10 | 29.02 | 29.30 | pass |
 | preempt | 10 | 6.93 | 7.74 | pass |
+
+### Linux laptop, 2026-11-12, v0.2.0 integrated release candidate
+
+`connor-fw13`, Linux amd64, integrated candidate `d89b48a` (Modes A/B, options and owner-port fix).
+Full absolute run: `TMPDIR=~/.cache/aw-tmp GOTMPDIR=~/.cache/aw-tmp go run ./bench`.
+No other aw tests or builds were running during measurement; host load was approximately 3.
+All ten absolute budgets passed, including the suite's automatic retry where needed. This full
+candidate result supersedes the earlier diagnostic absolute failures for release readiness.
+
+| Operation | n | p50 ms | p95 ms | p99 ms | max ms | limit ms | result |
+|---|---|---|---|---|---|---|---|
+| hook | 1000 | 5.12 | 6.01 | 6.48 | 7.78 | 8.00 | pass |
+| whoami | 500 | 4.00 | 4.74 | 5.06 | 5.46 | 10.00 | pass |
+| config-get | 500 | 4.02 | 4.61 | 5.05 | 5.30 | 10.00 | pass |
+| attach-from-pool | 100 | 67.57 | 79.94 | 97.69 | 103.32 | 100.00 | pass |
+| new-until-harness | 100 | 68.02 | 84.46 | 87.52 | 87.82 | 150.00 | pass |
+| dashboard | 200 | 56.51 | 61.49 | 66.17 | 76.68 | 100.00 | pass |
+| ref-hook | 1000 | 5.74 | 6.90 | 7.58 | 11.86 | 8.00 | pass |
+| serve-free-seat | 100 | 9.45 | 10.98 | 32.35 | 40.14 | 50.00 | pass |
+| grant-next | 100 | 28.61 | 44.72 | 45.74 | 51.64 | 50.00 | pass |
+| preempt | 100 | 8.09 | 9.52 | 11.26 | 27.85 | 50.00 | pass |
