@@ -82,7 +82,8 @@ local_files = ["schema.graphqls"]      # copied into each lane, as a clone where
 | Command | What it does |
 |---|---|
 | `aw` | Shows the lanes, the queue and what needs you. |
-| `aw new "<purpose>"` | Claims a lane, named from the purpose, and launches a harness in it. |
+| `aw new "<purpose>"` | Claims a lane, named from the purpose, and launches a harness in it. The lane starts from origin's default branch as last fetched. |
+| `aw pull` | Fetches origin in every checkout and fast-forwards those on the default branch, so new lanes start from the newest work. |
 | `aw lanes` | Lists the lanes. `aw recap` shows each in full. |
 | `aw run <project> <command>` | Runs a command in the project, in this lane. |
 | `aw serve <resource>`, `aw stop <resource>` | Takes and gives up a seat on a resource, starting and stopping its servers. |

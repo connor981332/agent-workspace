@@ -1,0 +1,35 @@
+# aw recap shows a lane's own work. A repository the lane has not changed is where the lane started,
+# so it is listed once as having no changes, not as unpushed work: its commit is already on origin.
+# The workspace files aw copied into the lane root when it built the lane, still as aw wrote them,
+# are not uncommitted work either.
+# req: R81
+# source: RideTracker dogfood, 2026-11-12 (untouched repositories shown as lane work)
+# milestone: M12
+
+workspace shop --init --repos web,api
+exec aw attach 'add feature flag'
+lane-commit 01 web/a.txt 'first'
+exec aw recap
+stdout 'web [0-9a-f]{7}: not pushed'
+stdout 'no changes: .*api'
+! stdout 'api [0-9a-f]{7}'
+exec aw recap --json
+json stdout .lanes[0].repos[1].project api
+json stdout .lanes[0].repos[1].push pushed
+json stdout .lanes[0].repos[1].ahead 0
+
+# An uncommitted change to a workspace file in the owner checkout is copied into the next lane.
+# That copy is aw's, not the lane's.
+owner-may-change
+exec sh -c 'echo "# a note" >> AGENTS.md'
+exec aw attach 'second change'
+exec git -C .worktrees/02 status --porcelain
+stdout 'AGENTS.md'
+exec aw recap
+stdout 'proven merged → aw sweep: second-change'
+! stdout 'dirty'
+
+# Once someone edits the copy, it is the lane's work.
+exec sh -c 'echo "# edited in the lane" >> .worktrees/02/AGENTS.md'
+exec aw recap
+stdout '\.: 1 dirty'

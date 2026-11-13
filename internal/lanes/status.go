@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -16,6 +17,7 @@ import (
 	"github.com/connor981332/agent-workspace/internal/forge"
 	"github.com/connor981332/agent-workspace/internal/gitx/run"
 	"github.com/connor981332/agent-workspace/internal/state"
+	"github.com/connor981332/agent-workspace/internal/workspace"
 )
 
 // Dashboard sections (ux.md, "After a reboot").
@@ -216,8 +218,16 @@ func (m *Manager) repoStatus(ctx context.Context, r state.LaneRepo) RepoStatus {
 		return rs
 	}
 	ab := ""
+	// Copies aw made when it built the lane, still as it wrote them, are not the lane's work.
+	var copies []string
+	if r.Project == "" || m.relOf(r) == "." {
+		copies = workspace.UnchangedMaterialized(r.Path)
+	}
 	for _, line := range strings.Split(out, "\n") {
 		switch {
+		case strings.HasPrefix(line, "1 .M ") && slices.Contains(copies, statusPath(line)),
+			strings.HasPrefix(line, "? ") && slices.Contains(copies, strings.TrimPrefix(line, "? ")):
+			// not counted
 		case strings.HasPrefix(line, "# branch.oid "):
 			rs.Head = strings.TrimPrefix(line, "# branch.oid ")
 		case strings.HasPrefix(line, "# branch.head "):
@@ -232,26 +242,60 @@ func (m *Manager) repoStatus(ctx context.Context, r state.LaneRepo) RepoStatus {
 			rs.Dirty++
 		}
 	}
+	g := run.In(r.Path)
+	rs.Ahead = ownCommits(ctx, g, r)
 	switch {
-	case rs.upstream == "" && rs.Branch != "":
-		// No upstream configured: a push without -u still leaves origin's remote-tracking ref.
+	case rs.upstream == "" && rs.Ahead == 0:
+		// Nothing of the lane's own: what it has is where it started or the base's, which are not
+		// its to push. Most of a lane's repositories are like this, so this saves them a Git call.
+		rs.Push = "pushed"
+	case rs.upstream == "":
+		// No upstream configured. A commit some remote branch already has is pushed; a push
+		// without -u still leaves origin's ref.
 		ref := "refs/remotes/origin/" + rs.Branch
-		if _, err := run.In(r.Path).Line(ctx, "rev-parse", "--verify", "--quiet", ref); err != nil {
+		if n, err := g.Line(ctx, "rev-list", "--count", "HEAD", "--not", "--remotes"); err == nil && n == "0" {
+			rs.Push = "pushed"
+		} else if rs.Branch == "" || !ok(g.OK(ctx, "rev-parse", "--verify", "--quiet", ref)) {
 			rs.Push = "not pushed"
-		} else if n, err := run.In(r.Path).Line(ctx, "rev-list", "--count", ref+"..HEAD"); err == nil {
+		} else if n, err := g.Line(ctx, "rev-list", "--count", ref+"..HEAD"); err == nil {
 			rs.Push = pushState(n, "origin/"+rs.Branch)
 		}
-	case rs.upstream == "":
-		rs.Push = "not pushed"
 	case ab != "":
 		var ahead, behind int
 		fmt.Sscanf(ab, "+%d -%d", &ahead, &behind)
 		rs.Push = pushState(strconv.Itoa(ahead), rs.upstream)
 	}
-	if count, err := run.In(r.Path).Line(ctx, "rev-list", "--count", r.BaseRef+"..HEAD"); err == nil {
-		rs.Ahead, _ = strconv.Atoi(count)
-	}
 	return rs
+}
+
+// ownCommits counts the lane's own commits: those on its head that are neither where it started nor
+// on the base branch. Commits the starting point already had, such as ones the owner had not pushed,
+// are not the lane's, and neither are the base's commits the lane merged in since.
+// One Git call in the usual case; a base ref that is gone, such as a pruned upstream, costs a retry.
+func ownCommits(ctx context.Context, g run.Git, r state.LaneRepo) int {
+	var refs []string
+	for _, ref := range []string{r.BaseSHA, r.BaseRef} {
+		if ref != "" {
+			refs = append(refs, "^"+ref)
+		}
+	}
+	for len(refs) > 0 {
+		if out, err := g.Line(ctx, append([]string{"rev-list", "--count", "HEAD"}, refs...)...); err == nil {
+			n, _ := strconv.Atoi(out)
+			return n
+		}
+		refs = refs[:len(refs)-1] // without the base ref; the starting commit is always there
+	}
+	return 0
+}
+
+// statusPath is the path of an ordinary changed entry in git status --porcelain=v2.
+func statusPath(line string) string {
+	fields := strings.SplitN(line, " ", 9)
+	if len(fields) < 9 {
+		return ""
+	}
+	return fields[8]
 }
 
 func pushState(ahead, upstream string) string {

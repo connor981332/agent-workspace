@@ -1,0 +1,42 @@
+# aw pull fetches origin in every owner checkout and fast-forwards those on the default branch. A
+# checkout on another branch, or with commits origin lacks, is fetched and left alone. New lanes then
+# start from what it fetched. It changes the owner checkouts, so it is the human's.
+# req: R21
+# source: RideTracker dogfood, 2026-11-12 (lanes start from origin as last fetched)
+# milestone: M12
+
+workspace shop --init --repos web,api,mobile
+owner-may-change
+# A teammate pushes to each project's origin.
+exec sh -c 'for p in web api mobile; do git clone -q "$WORK/remotes/$p.git" "$WORK/mate-$p" && git -C "$WORK/mate-$p" commit -q --allow-empty -m teammate && git -C "$WORK/mate-$p" push -q origin HEAD; done'
+# api is on another branch; mobile has a commit of its own.
+exec git -C api switch -q -c owner/experiment
+exec git -C mobile commit -q --allow-empty -m 'owner only'
+
+exec aw pull
+stdout '^web: fast-forwarded with origin/main \(1 commit\)$'
+stdout '^api: fetched only \(on owner/experiment, left alone\)$'
+stdout '^mobile: fetched only \(1 local commit origin/main lacks, so it cannot fast-forward → rebase or merge, then push\)$'
+stdout '^\.: up to date with origin/main$'
+exec git -C web rev-parse HEAD
+cp stdout web-head
+exec git -C $WORK/mate-web rev-parse HEAD
+cmp stdout web-head
+exec git -C api rev-parse --abbrev-ref HEAD
+stdout '^owner/experiment$'
+
+# A new lane starts from what was fetched, even where the owner checkout was left alone.
+exec aw attach 'add feature flag'
+exec git -C api/.worktrees/01 rev-parse HEAD
+cp stdout lane-api
+exec git -C $WORK/mate-api rev-parse HEAD
+cmp stdout lane-api
+
+exec aw pull --json
+json stdout .repos[1].repo api
+json stdout .repos[1].outcome 'fetched only'
+
+# Agents may not run it.
+cd .worktrees/01
+! exec awtest-hook -harness codex bash 'bin/aw pull'
+stderr 'aw pull updates the owner checkouts, which only the human does'

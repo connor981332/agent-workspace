@@ -118,8 +118,10 @@ func (m *Manager) materialize(ctx context.Context, root string, plans []repoPlan
 	return addExcludes(filepath.Join(common, "info", "exclude"), excludes)
 }
 
-// uncommitted lists the workspace files the owner checkout has and the lane's commit does not, or has
-// differently: aw setup edits files such as .claude/settings.json, and a lane needs its hooks.
+// uncommitted lists the workspace files the owner checkout has and the lane's commit does not, or
+// that the owner has changed and not committed: aw setup edits files such as .claude/settings.json,
+// and a lane needs its hooks. A file the owner committed is not copied: the lane starts from origin,
+// which may have a newer version than an owner checkout that has not pulled.
 func uncommitted(ctx context.Context, p repoPlan) ([]string, error) {
 	g := run.In(p.owner)
 	type listing struct {
@@ -132,7 +134,7 @@ func uncommitted(ctx context.Context, p repoPlan) ([]string, error) {
 		tree <- listing{text, err}
 	}()
 	go func() {
-		text, err := g.Run(ctx, append([]string{"diff", "-z", "--name-only", p.baseSHA, "--"}, workspaceRoots...)...)
+		text, err := g.Run(ctx, append([]string{"diff", "-z", "--name-only", "HEAD", "--"}, workspaceRoots...)...)
 		changed <- listing{text, err}
 	}()
 	have, err := g.Run(ctx, append([]string{"ls-files", "-z", "--cached", "--others", "--exclude-standard", "--"}, workspaceRoots...)...)

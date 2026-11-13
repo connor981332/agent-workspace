@@ -131,6 +131,12 @@ This claims a lane (a pre-warmed one from the pool when there is one) and launch
 Arguments after `--` go to the harness unchanged. Use `--mux` to open it in a new tmux or herdr
 window, `--branch` to start on an existing branch, and `--harness` to use a different agent this time.
 
+Every repository in a new lane starts from origin's default branch as last fetched, not from
+whatever your own checkout has, so your unpushed commits stay yours. aw never fetches on its own:
+`aw pull` fetches origin in every checkout and fast-forwards those on the default branch. `aw new`
+tells you when your checkout differs from where the lane starts, or when origin was last fetched
+over a day ago.
+
 If you already started an agent in the owner checkout, it can claim a lane for itself with
 `aw attach "<purpose>"`. It will be prompted to do so the first time it tries to write.
 
