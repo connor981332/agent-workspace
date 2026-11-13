@@ -510,6 +510,10 @@ func checkDevcontainers(owner string, c *config.Config, add func(Check)) {
 			add(Check{Name: "devcontainer " + name, Status: Fail, Message: firstPart(err), Fix: fixPart(err, "fix the project's devcontainer.json")})
 			continue
 		}
+		if runners.UsesGeneratedConfig(j, local) {
+			add(Check{Name: "devcontainer " + name, Status: OK, Message: "aw generates " + runners.GeneratedConfig + "; select the aw configuration in VS Code's picker so Rebuild keeps its mount and seat ports"})
+			continue
+		}
 		if local != "" {
 			add(Check{Name: "devcontainer " + name, Status: OK, Message: "aw writes its mount and seat ports into " + local + ", which the project's configuration lists, so VS Code's Rebuild keeps them"})
 			continue

@@ -8,26 +8,48 @@ echo "devcontainer $*" >> "$STUB_LOG"
 echo "devcontainer env BUILDX_BAKE_ENTITLEMENTS_FS=${BUILDX_BAKE_ENTITLEMENTS_FS:-}" >> "$STUB_LOG"
 [ "$1" = up ] || exit 1
 [ ! -e "$STUB_STATE/up-fails" ] || { echo "stub: up failed" >&2; exit 1; }
-dir="$3"
+dir="" config=""
+shift
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --workspace-folder) dir="$2"; shift 2 ;;
+    --config) config="$2"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+config="${config:-$dir/.devcontainer/devcontainer.json}"
 name="$(basename "$dir")_devcontainer"
 service="$(basename "$dir")"
 fragment="$dir/.devcontainer/aw.compose.yaml"
-if [ -f "$dir/.devcontainer/devcontainer.json" ]; then
-  s="$(sed -n 's/.*"service": *"\([^"]*\)".*/\1/p' "$dir/.devcontainer/devcontainer.json")"
+if [ -f "$config" ]; then
+  s="$(sed -n 's/.*"service": *"\([^"]*\)".*/\1/p' "$config")"
   service="${s:-$service}"
 fi
-# Read the listed files, including a project's local Compose slot. The fixtures put the
-# dockerComposeFile list on one line, as they do the service name above.
+# Read string or array dockerComposeFile, including the generated config's multiline array.
 listed=""
-if [ -f "$dir/.devcontainer/devcontainer.json" ]; then
-  listed="$(sed -n 's/.*"dockerComposeFile": *\[\(.*\)\].*/\1/p' "$dir/.devcontainer/devcontainer.json" | tr ',"' '  ')"
+if [ -f "$config" ]; then
+  listed="$(awk '
+    /"dockerComposeFile"[ \t]*:/ { active=1; sub(/^.*"dockerComposeFile"[ \t]*:[ \t]*/, ""); array=index($0,"[") }
+    active {
+      line=$0
+      while (match(line,/"[^"]*"/)) {
+        print substr(line,RSTART+1,RLENGTH-2)
+        line=substr(line,RSTART+RLENGTH)
+      }
+      if (!array || index($0,"]")) exit
+    }' "$config")"
 fi
-for file in $listed; do
-  candidate="$dir/.devcontainer/$file"
+while IFS= read -r file; do
+  case "$file" in
+    /*) candidate="$file" ;;
+    *) candidate="$(dirname "$config")/$file" ;;
+  esac
   if [ -f "$candidate" ] && grep -q '^# Written by aw;' "$candidate"; then
     fragment="$candidate"
   fi
-done
+done <<FILES
+$listed
+FILES
 if [ -f "$fragment" ]; then
   n="$(sed -n 's/^name: *//p' "$fragment")"
   name="${n:-$name}"
