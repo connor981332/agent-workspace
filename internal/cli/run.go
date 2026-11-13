@@ -3,6 +3,7 @@ package cli
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -118,9 +119,9 @@ func startLaneSession(cmd *cobra.Command, purpose, harness, branch, role string,
 	if err := lanes.CheckName(harness); err != nil {
 		return fmt.Errorf("%q is not a harness name", harness)
 	}
-	path, err := exec.LookPath(harness)
+	path, err := harnessPath(harness)
 	if err != nil {
-		return fmt.Errorf("the harness %s is not installed (not on PATH) → install it, or choose another with --harness or [user] harness", harness)
+		return err
 	}
 	if useMux {
 		if err := mux.Check(w.cfg.User.Multiplexer); err != nil {
@@ -148,12 +149,16 @@ func startLaneSession(cmd *cobra.Command, purpose, harness, branch, role string,
 	if err := applyRole(cmd.Context(), w, c, role); err != nil {
 		return err
 	}
-	fmt.Fprintf(cmd.ErrOrStderr(), "aw: lane %s %s, starting %s\n", c.Dir, c.Lane.Name, harness)
+	fmt.Fprintf(cmd.ErrOrStderr(), "aw: lane %s %s, starting %s\n", c.Dir, c.Lane.Name, harnessLabel(harness))
 	printNotes(cmd.ErrOrStderr(), c.Notes)
-	if !slices.Contains(knownHarnesses, harness) && w.cfg.Harnesses[harness] == nil {
+	if harness != shellHarness && !slices.Contains(knownHarnesses, harness) && w.cfg.Harnesses[harness] == nil {
 		fmt.Fprintf(cmd.ErrOrStderr(), "aw: warning: %s has no hooks here, so nothing confines it to the lane. It gets the instructions in AGENTS.md, and bin/aw is its way in (docs/harnesses.md)\n", harness)
 	}
 	mx := w.cfg.User.Multiplexer
+	var shellEnv []string
+	if harness == shellHarness {
+		shellEnv = laneShellEnv(m, c.Lane.Number) // before the state closes
+	}
 	t.Mark("claim")
 	startSetup(cmd.ErrOrStderr(), w, c)
 	t.Mark("setup")
@@ -162,30 +167,78 @@ func startLaneSession(cmd *cobra.Command, purpose, harness, branch, role string,
 	if timing.Debug() {
 		t.Report(cmd.ErrOrStderr(), "new")
 	}
-	extra = append(launch.SandboxArgs(harness, m.SandboxRoots(c.Dir)), extra...)
-	extra = append(extra, launch.DirArgs(harness, m.SandboxRoots(c.Dir))...)
+	argv0 := harness
+	if harness == shellHarness {
+		argv0 = path
+		fmt.Fprintf(cmd.ErrOrStderr(), "aw: a shell in lane %s; exit it when you are done. The lane stays yours: bin/aw finish hands it off, and bin/aw resume %s --shell comes back.\n", c.Lane.Name, c.Lane.Name)
+	} else {
+		extra = append(launch.SandboxArgs(harness, m.SandboxRoots(c.Dir)), extra...)
+		extra = append(extra, launch.DirArgs(harness, m.SandboxRoots(c.Dir))...)
+	}
 	if useMux {
-		return openInMux(cmd, mx, c.Lane.Name, c.Root, harness, id, append([]string{harness}, extra...))
+		return openInMux(cmd, mx, c.Lane.Name, c.Root, harness, id, append([]string{argv0}, extra...))
 	}
 	if err := os.Chdir(c.Root); err != nil {
 		return err
 	}
 	env := append(os.Environ(), "AW_SESSION="+harness+":"+id, fmt.Sprintf("AW_SESSION_PID=%d", os.Getpid()), "PWD="+c.Root)
+	env = append(env, shellEnv...)
 	// The harness replaces this process: it keeps this PID, so the session's process identity
 	// recorded at the claim stays true.
-	return syscall.Exec(path, append([]string{harness}, extra...), env)
+	return syscall.Exec(path, append([]string{argv0}, extra...), env)
+}
+
+// shellHarness stands for the user's own shell: aw new --shell and aw resume --shell set up the lane
+// and hand it to a person, with no agent and no hooks (plans/agent-feedback.md, 3.2).
+const shellHarness = "shell"
+
+// harnessPath finds the program to start for a harness: $SHELL for the shell.
+func harnessPath(harness string) (string, error) {
+	if harness == shellHarness {
+		if sh := os.Getenv("SHELL"); sh != "" {
+			if path, err := exec.LookPath(sh); err == nil {
+				return path, nil
+			}
+		}
+		return exec.LookPath("sh")
+	}
+	path, err := exec.LookPath(harness)
+	if err != nil {
+		return "", fmt.Errorf("the harness %s is not installed (not on PATH) → install it, or choose another with --harness or [user] harness", harness)
+	}
+	return path, nil
+}
+
+func harnessLabel(harness string) string {
+	if harness == shellHarness {
+		return "your shell"
+	}
+	return harness
+}
+
+// laneShellEnv is the lane root's environment, as aw run gives it, for a shell in the lane.
+func laneShellEnv(m *lanes.Manager, lane int) []string {
+	where, err := m.LocateIn(lane, "")
+	if err != nil {
+		return nil
+	}
+	return where.Env
 }
 
 func newNewCmd() *cobra.Command {
 	var harness, branch, role string
 	var useMux bool
+	var shell bool
 	cmd := &cobra.Command{
-		Use:   `new "<purpose>" [--harness h] [--mux] [--branch b] [-- harness arguments…]`,
+		Use:   `new "<purpose>" [--harness h | --shell] [--mux] [--branch b] [-- harness arguments…]`,
 		Short: "Claim a lane and launch a harness in it",
 		Long: `Claim a lane for the purpose (from the warm pool when there is one), then launch the harness in the
 lane root: the individual layer's [user] harness, or --harness. Arguments after -- go to the harness
 unchanged. The harness runs as this process, with AW_SESSION set, so the session is recorded
-against the lane.`,
+against the lane.
+
+With --shell, it starts your own shell ($SHELL) in the lane root instead, with the lane's
+environment, for working in the lane yourself.`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: run(func(cmd *cobra.Command, args []string) error {
 			purpose, extra := args[0], []string{}
@@ -197,9 +250,16 @@ against the lane.`,
 			} else if len(args) > 1 {
 				return &usageError{fmt.Errorf(`aw new takes one purpose; quote it, and put harness arguments after --`)}
 			}
+			if shell {
+				if harness != "" {
+					return &usageError{errors.New("--shell starts your shell, so it takes no --harness")}
+				}
+				harness = shellHarness
+			}
 			return startLaneSession(cmd, purpose, harness, branch, role, useMux, false, false, extra)
 		}),
 	}
+	cmd.Flags().BoolVar(&shell, "shell", false, "start your own shell in the lane, instead of a harness")
 	cmd.Flags().StringVar(&role, "role", "", "the team role this lane works under")
 	cmd.Flags().StringVar(&harness, "harness", "", "the harness to launch (default: [user] harness)")
 	cmd.Flags().StringVar(&branch, "branch", "", "start the lane on this existing branch")

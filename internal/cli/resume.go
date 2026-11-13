@@ -121,14 +121,15 @@ func find(w *writeContext, all []candidate, name string) (candidate, error) {
 }
 
 func newResumeCmd() *cobra.Command {
-	var all, useMux bool
+	var all, useMux, shell bool
 	cmd := &cobra.Command{
-		Use:   "resume [name] [--all] [--mux]",
+		Use:   "resume [name] [--all] [--mux] [--shell]",
 		Short: "Reopen a session where it left off",
 		Long: `Relaunch a session's harness in its lane, with the harness's own resume flag and the recorded session
 ID. With no name, choose from a list. --all --mux reopens every interrupted session, each in its own
 window or pane. If the harness can no longer resume it, this falls back to
-aw open: a new session on the same lane, given the latest handoff. "pair" names the pair session.`,
+aw open: a new session on the same lane, given the latest handoff. "pair" names the pair session.
+With --shell, it starts your own shell in the lane instead, with the lane's environment.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: run(func(cmd *cobra.Command, args []string) error {
 			w, err := openForWrite()
@@ -166,9 +167,16 @@ aw open: a new session on the same lane, given the latest handoff. "pair" names 
 			if c.lane != nil && c.lane.State == state.LaneParked {
 				return fmt.Errorf("lane %s is parked → aw unpark %s, then aw resume %s", c.lane.Name, c.lane.Name, c.lane.Name)
 			}
+			if shell {
+				if c.lane == nil || useMux || all {
+					return &usageError{errors.New("--shell opens one lane in this terminal: name a lane, without --mux")}
+				}
+				return open(cmd, w, *c.lane, shellHarness)
+			}
 			return resume(cmd, w, c, useMux)
 		}),
 	}
+	cmd.Flags().BoolVar(&shell, "shell", false, "start your own shell in the lane, instead of resuming the harness")
 	cmd.Flags().BoolVar(&all, "all", false, "reopen every interrupted session (with --mux)")
 	cmd.Flags().BoolVar(&useMux, "mux", false, "open it in your terminal multiplexer")
 	return cmd
@@ -342,9 +350,9 @@ func open(cmd *cobra.Command, w *writeContext, l state.Lane, harnessName string)
 	if err := lanes.CheckName(harnessName); err != nil {
 		return fmt.Errorf("%q is not a harness name", harnessName)
 	}
-	path, err := exec.LookPath(harnessName)
+	path, err := harnessPath(harnessName)
 	if err != nil {
-		return fmt.Errorf("the harness %s is not installed (not on PATH) → install it, or choose another with --harness or [user] harness", harnessName)
+		return err
 	}
 	sessions, err := state.Sessions(w.store.DB())
 	if err != nil {
@@ -366,13 +374,19 @@ func open(cmd *cobra.Command, w *writeContext, l state.Lane, harnessName string)
 		return err
 	}
 	root := manager(w).Root(l.Number)
-	fmt.Fprintf(cmd.ErrOrStderr(), "aw: opening lane %s with %s\n", ui.Clean(l.Name), harnessName)
+	fmt.Fprintf(cmd.ErrOrStderr(), "aw: opening lane %s with %s\n", ui.Clean(l.Name), harnessLabel(harnessName))
+	m := manager(w)
+	env := append(os.Environ(), "AW_SESSION="+harnessName+":"+id, fmt.Sprintf("AW_SESSION_PID=%d", os.Getpid()), "PWD="+root)
+	argv := append([]string{harnessName}, launch.PromptArgs(harnessName, openPrompt(l, handoff))...)
+	if harnessName == shellHarness {
+		env = append(env, laneShellEnv(m, l.Number)...)
+		argv = []string{path}
+	}
 	w.Close()
 	if err := os.Chdir(root); err != nil {
 		return err
 	}
-	env := append(os.Environ(), "AW_SESSION="+harnessName+":"+id, fmt.Sprintf("AW_SESSION_PID=%d", os.Getpid()), "PWD="+root)
-	return syscall.Exec(path, append([]string{harnessName}, launch.PromptArgs(harnessName, openPrompt(l, handoff))...), env)
+	return syscall.Exec(path, argv, env)
 }
 
 func claimForOpen(ctx context.Context, w *writeContext, l state.Lane, h *state.Handoff, harnessName, id string) error {

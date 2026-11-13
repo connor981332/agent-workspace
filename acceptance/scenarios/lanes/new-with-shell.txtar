@@ -1,0 +1,36 @@
+# aw new --shell claims a lane and starts the person's own shell in it, with the lane's environment
+# and no harness; aw resume --shell comes back to the lane the same way. A shell started this way is
+# a person's, so aw does not take it for an agent.
+# req: R77
+# source: owner feature request, 2026-11-12 (plans/agent-feedback.md, 3.2)
+# milestone: M12
+
+workspace shop --init
+chmod 755 $WORK/myshell
+env SHELL=$WORK/myshell
+exec aw new 'try the new parser' --shell
+stderr 'aw: lane 01 parser, starting your shell'
+stderr 'bin/aw resume parser --shell comes back'
+exec cat $WORK/shell.log
+stdout '^cwd=.*/\.worktrees/01$'
+stdout '^session=shell:new-[0-9a-f]{16}$'
+stdout '^owner=.+'
+stdout '^agent=no$'
+
+! exec aw new 'x' --shell --harness codex
+stderr 'takes no --harness'
+
+# The shell exited; the lane is still there, and resume --shell opens it again.
+exec aw resume parser --shell
+stderr 'opening lane parser with your shell'
+exec cat $WORK/shell.log
+stdout '^session=shell:open-[0-9a-f]{16}$'
+
+-- myshell --
+#!/bin/sh
+{
+	echo "cwd=$PWD"
+	echo "session=$AW_SESSION"
+	echo "owner=$AW_OWNER"
+	if aw pull 2>&1 | grep -q 'only for the human'; then echo agent=yes; else echo agent=no; fi
+} > "$WORK/shell.log"
