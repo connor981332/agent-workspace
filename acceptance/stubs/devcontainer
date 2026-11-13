@@ -16,6 +16,15 @@ if [ -f "$dir/.devcontainer/devcontainer.json" ]; then
   s="$(sed -n 's/.*"service": *"\([^"]*\)".*/\1/p' "$dir/.devcontainer/devcontainer.json")"
   service="${s:-$service}"
 fi
+# Read the listed files, including a project's local Compose slot. The fixtures put the
+# dockerComposeFile list on one line, as they do the service name above.
+listed="$(sed -n 's/.*"dockerComposeFile": *\[\(.*\)\].*/\1/p' "$dir/.devcontainer/devcontainer.json" | tr ',"' '  ')"
+for file in $listed; do
+  candidate="$dir/.devcontainer/$file"
+  if [ -f "$candidate" ] && grep -q '^# Written by aw;' "$candidate"; then
+    fragment="$candidate"
+  fi
+done
 if [ -f "$fragment" ]; then
   n="$(sed -n 's/^name: *//p' "$fragment")"
   name="${n:-$name}"

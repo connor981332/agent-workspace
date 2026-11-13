@@ -43,7 +43,6 @@ command = "devcontainer"
   // the team's file
   "dockerComposeFile": ["compose.yaml", "aw.compose.yaml"],
   "service": "app",
-  "workspaceFolder": "${localWorkspaceFolder}",
   "remoteUser": "dev",
   "initializeCommand": "bin/aw containers claim solo",
 }
