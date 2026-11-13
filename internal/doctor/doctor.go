@@ -148,12 +148,32 @@ func Run(dir, version string, withTimings bool) *Report {
 	checkMachine(ws.Owner, c, add)
 	checkDevcontainers(ws.Owner, c, add)
 	checkSandboxes(ws.Owner, c, add)
+	checkOwnerCheckout(ws, c, add)
 	checkLanes(ws, c, stateDir, add)
 	addMachine(add)
 	if withTimings {
 		r.Timings = t.Phases()
 	}
 	return r
+}
+
+// checkOwnerCheckout warns when the owner checkout would configure new lanes from something other
+// than origin's default branch.
+func checkOwnerCheckout(ws *workspace.Workspace, c *config.Config, add func(Check)) {
+	if c == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	m := &lanes.Manager{WS: ws, Cfg: c}
+	drift := m.OwnerConfigDrift(ctx)
+	for _, d := range drift {
+		msg, fix, _ := strings.Cut(d, " → ")
+		add(Check{Name: "owner checkout", Status: Warn, Message: msg, Fix: fix})
+	}
+	if len(drift) == 0 {
+		add(Check{Name: "owner checkout", Status: OK, Message: "on origin's default branch as last fetched"})
+	}
 }
 
 // checkLanes dry-runs lane creation in each repository, and finds what failed lanes left. A workspace

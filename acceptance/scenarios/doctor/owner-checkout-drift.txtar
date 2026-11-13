@@ -1,0 +1,34 @@
+# Lanes are configured from the owner checkout's workspace.toml, so aw doctor warns when that
+# checkout is not origin's default branch as last fetched: on another branch, behind it, or with an
+# uncommitted workspace.toml. It never fetches.
+# req: R14
+# source: plans/agent-feedback.md, item 3
+# milestone: M12
+
+workspace shop --init --repos web,api
+owner-may-change
+exec aw doctor
+stdout '^✓ owner checkout: on origin''s default branch as last fetched$'
+
+# Behind: origin moved on, and was fetched.
+exec git commit -q --allow-empty -m 'team work'
+exec git push -q origin HEAD:main
+exec git reset -q --hard HEAD~1
+exec aw doctor
+stdout '^! owner checkout: 1 commit behind origin/main as last fetched; lanes are configured from its workspace.toml → aw pull$'
+exec aw attach 'look around'
+stderr 'aw: note: the workspace repository: your checkout is 1 commit behind origin/main, and lanes are configured from its workspace.toml → aw pull'
+
+# On a feature branch, behind too.
+exec git switch -q -c owner/feature
+exec aw doctor
+stdout '^! owner checkout: on owner/feature, 1 commit behind origin/main'
+stdout 'git switch main && aw pull'
+
+# An uncommitted workspace.toml.
+exec git switch -q main
+exec git merge -q --ff-only origin/main
+exec sh -c 'echo "# trying something" >> workspace.toml'
+exec aw doctor
+stdout '^! owner checkout: workspace.toml has uncommitted changes, which new lanes already use'
+! stdout 'behind'

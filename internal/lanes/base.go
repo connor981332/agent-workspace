@@ -63,7 +63,50 @@ func ownerDrift(ctx context.Context, g run.Git, p *repoPlan, def string) {
 	case n > 0:
 		p.notes = append(p.notes, fmt.Sprintf("%s: your checkout has %d commit%s that %s lacks, and the lane starts without %s → push %s to include %s in new lanes",
 			label(*p), n, plural(n), shortRef(def), them(n), them(n), them(n)))
+	case p.project == "":
+		// The workspace repository holds the configuration lanes are built from, which aw reads from
+		// the owner checkout: one behind origin builds lanes from an older design.
+		if behind := count(ctx, g, def, "^HEAD"); behind > 0 {
+			p.notes = append(p.notes, fmt.Sprintf("%s: your checkout is %d commit%s behind %s, and lanes are configured from its workspace.toml → aw pull",
+				label(*p), behind, plural(behind), shortRef(def)))
+		}
 	}
+}
+
+// OwnerConfigDrift says how the owner's checkout of the workspace repository differs from origin's
+// default branch, in ways that change every new lane: lanes are configured from its workspace.toml,
+// so a checkout on a merged feature branch, behind origin, or with an uncommitted workspace.toml
+// edit configures lanes from something else than the team's current design (plans/agent-feedback.md,
+// item 3). As last fetched: it never fetches. Each warning ends with its fix.
+func (m *Manager) OwnerConfigDrift(ctx context.Context) []string {
+	g := run.In(m.WS.Owner)
+	def := defaultBranch(ctx, g)
+	var out []string
+	if def != "" {
+		name := strings.TrimPrefix(def, "refs/remotes/origin/")
+		current, _ := g.Line(ctx, "symbolic-ref", "--quiet", "--short", "HEAD")
+		behind := count(ctx, g, def, "^HEAD")
+		switch {
+		case current != name && behind > 0:
+			out = append(out, fmt.Sprintf("on %s, %d commit%s behind %s; lanes are configured from its workspace.toml → git switch %s && aw pull",
+				orDetached(current), behind, plural(behind), shortRef(def), name))
+		case current != name:
+			out = append(out, fmt.Sprintf("on %s, not %s; lanes are configured from its workspace.toml → git switch %s when that branch is merged", orDetached(current), name, name))
+		case behind > 0:
+			out = append(out, fmt.Sprintf("%d commit%s behind %s as last fetched; lanes are configured from its workspace.toml → aw pull", behind, plural(behind), shortRef(def)))
+		}
+	}
+	if status, err := g.Run(ctx, "--no-optional-locks", "status", "--porcelain", "--", "workspace.toml"); err == nil && strings.TrimSpace(status) != "" {
+		out = append(out, "workspace.toml has uncommitted changes, which new lanes already use → commit them through a lane and a merge request, or git restore workspace.toml")
+	}
+	return out
+}
+
+func orDetached(branch string) string {
+	if branch == "" {
+		return "a detached HEAD"
+	}
+	return branch
 }
 
 func count(ctx context.Context, g run.Git, args ...string) int {
