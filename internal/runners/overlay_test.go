@@ -16,6 +16,10 @@ func TestGeneratedOverlayPreservesProjectAndRegenerates(t *testing.T) {
 	for _, initialize := range []string{`"echo original"`, `["sh", "-c", "echo original"]`, `{"first":"echo one","second":["echo","two"]}`} {
 		t.Run(initialize, func(t *testing.T) {
 			dir := t.TempDir()
+			alias := filepath.Join(t.TempDir(), "checkout-alias")
+			if err := os.Symlink(dir, alias); err != nil {
+				t.Fatal(err)
+			}
 			dev := filepath.Join(dir, ".devcontainer")
 			if err := os.MkdirAll(dev, 0o755); err != nil {
 				t.Fatal(err)
@@ -56,7 +60,7 @@ port = 3000
 			}
 			load := func() *Devcontainer {
 				t.Helper()
-				d, err := NewDevcontainer(cfg, dir, "solo", t.TempDir())
+				d, err := NewDevcontainer(cfg, alias, "solo", t.TempDir())
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -84,7 +88,7 @@ port = 3000
 			if got["name"] != "Project configuration (aw)" {
 				t.Errorf("picker name: %v", got["name"])
 			}
-			wantFiles := []any{filepath.Join(dev, "compose.yaml"), filepath.Join(dev, "aw", Fragment)}
+			wantFiles := []any{filepath.Join(d.Dir, ".devcontainer", "compose.yaml"), filepath.Join(d.Dir, ".devcontainer", "aw", Fragment)}
 			if !reflect.DeepEqual(got["dockerComposeFile"], wantFiles) {
 				t.Errorf("Compose files: %v", got["dockerComposeFile"])
 			}
