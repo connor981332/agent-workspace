@@ -1,5 +1,5 @@
 # aw discard archives every branch of the lane under refs/aw/archive/ before removing it, refuses
-# uncommitted work, and asks for confirmation (here, --yes).
+# uncommitted work, and asks for confirmation (here, --yes), saying first what would be archived.
 # req: R27 R34
 # source: C2 tests::t_lane_rm_force_and_drop_data
 # milestone: M2
@@ -17,6 +17,10 @@ exec git -C web/.worktrees/01 checkout -- flag.txt
 
 ! exec aw discard feature-flag
 stderr 'confirm with --yes'
+# The refusal says what would be archived, so whoever asked can decide in one call.
+stderr 'Lane feature-flag has work of its own; its branches would be archived under refs/aw/archive/feature-flag/<time>:'
+stderr '^  web: 1 commit, not pushed$'
+! stderr '  api:'
 exec aw discard feature-flag --yes --json
 json stdout .lane feature-flag
 ! exists .worktrees/01 web/.worktrees/01

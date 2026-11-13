@@ -181,7 +181,11 @@ func printSections(out io.Writer, all []*lanes.LaneStatus, width int, detail boo
 						remote = fmt.Sprintf(", remote: !%d %s", r.Remote.IID, r.Remote.State)
 					}
 				}
-				line(fmt.Sprintf("  %17s%s %s: %s%s", "", r.Project, short(r.Head), r.Push, remote))
+				push := r.Push
+				if r.Published != "" && push == "pushed" {
+					push = "pushed as " + r.Published
+				}
+				line(fmt.Sprintf("  %17s%s %s: %s%s", "", r.Project, short(r.Head), push, remote))
 			}
 			if len(untouched) > 0 {
 				line(fmt.Sprintf("  %17sno changes: %s", "", strings.Join(untouched, ", ")))
@@ -354,21 +358,28 @@ or its number. aw recap shows each lane in full. It writes nothing.`,
 func newRecapCmd() *cobra.Command {
 	var asJSON, remote, all bool
 	cmd := &cobra.Command{
-		Use:   "recap [--remote]",
+		Use:   "recap [lane] [--remote]",
 		Short: "Every lane in full: what needs you, what runs, each handoff (aw lanes is the short list)",
 		Long: `Show every lane in full: what needs you, what is running, what is parked and what can be cleaned
 up, with each lane's handoff and each repository's head and push state. In a lane it shows that
-lane only, unless --all. It reads local state only; --remote also asks the forge for each change's
-state, within a deadline. It writes nothing.`,
-		Args: cobra.NoArgs,
-		RunE: run(func(cmd *cobra.Command, _ []string) error {
+lane only, unless --all; a lane's name or number shows that one. It reads local state only; --remote
+also asks the forge for each change's state, within a deadline. It writes nothing.`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: run(func(cmd *cobra.Command, args []string) error {
 			m, done, err := openForRead()
 			if err != nil {
 				return err
 			}
 			defer done()
 			o := lanes.StatusOptions{Remote: remote}
-			if !all {
+			switch {
+			case len(args) == 1:
+				l, err := m.Resolve(args[0])
+				if err != nil {
+					return err
+				}
+				o.Only = l.Number
+			case !all:
 				o.Only = m.CallerLane()
 			}
 			ss, err := statuses(cmd, m, o)

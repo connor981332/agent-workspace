@@ -83,6 +83,8 @@ type Scope struct {
 	ProjectPublication map[string][]string
 	// LaneBranches are the branches a pre-authorized push from this lane may touch.
 	LaneBranches []string
+	// PublishedBranches are the remote names aw push --as gave the lane's branches.
+	PublishedBranches []string
 	// Delegated is whether a maintenance delegation applies to this owner-checkout session, and
 	// DelegatedCommands the team's commands it covers (R64).
 	Delegated         bool

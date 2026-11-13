@@ -168,6 +168,9 @@ archived the same way, and a worktree with uncommitted files is left alone.`,
 				return err
 			}
 			if !yes {
+				// Say what would go, so the next call can decide: the lane's own commits are archived,
+				// and those no remote has exist nowhere else afterwards.
+				printDiscardPreview(cmd, m, l)
 				if !ui.IsTerminal(os.Stdin) {
 					return fmt.Errorf("aw discard removes lane %s; confirm with --yes", l.Name)
 				}
@@ -198,6 +201,34 @@ archived the same way, and a worktree with uncommitted files is left alone.`,
 	cmd.Flags().BoolVar(&orphans, "orphans", false, "clean up the branches and worktrees no lane records")
 	cmd.Flags().BoolVar(&asJSON, "json", false, "print what was archived as JSON")
 	return cmd
+}
+
+// printDiscardPreview lists, on stderr, each repository of a lane with work of its own: how many
+// commits it has, whether they are pushed, and uncommitted changes, which would stop the discard.
+func printDiscardPreview(cmd *cobra.Command, m *lanes.Manager, l state.Lane) {
+	ss, err := m.Status(cmd.Context(), lanes.StatusOptions{Only: l.Number})
+	if err != nil || len(ss) == 0 {
+		return
+	}
+	errOut := cmd.ErrOrStderr()
+	any := false
+	for _, r := range ss[0].Repos {
+		if r.Ahead == 0 && r.Dirty == 0 {
+			continue
+		}
+		if !any {
+			fmt.Fprintf(errOut, "Lane %s has work of its own; its branches would be archived under refs/aw/archive/%s/<time>:\n", l.Name, l.Name)
+			any = true
+		}
+		line := fmt.Sprintf("  %s: %d commit%s, %s", ui.Clean(r.Project), r.Ahead, plural(r.Ahead), r.Push)
+		if r.Dirty > 0 {
+			line += fmt.Sprintf(", %d uncommitted (discard refuses until they are committed or removed)", r.Dirty)
+		}
+		fmt.Fprintln(errOut, line)
+	}
+	if !any {
+		fmt.Fprintf(errOut, "Lane %s has no commits or changes of its own.\n", l.Name)
+	}
 }
 
 func discardOrphans(cmd *cobra.Command, m *lanes.Manager, yes, asJSON bool) error {

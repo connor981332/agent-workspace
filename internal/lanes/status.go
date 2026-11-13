@@ -55,16 +55,18 @@ type SessionStatus struct {
 
 // RepoStatus is one repository of a lane.
 type RepoStatus struct {
-	Project  string        `json:"project"`
-	Branch   string        `json:"branch,omitempty"`
-	Head     string        `json:"head,omitempty"`
-	Dirty    int           `json:"dirty"`
-	Ahead    int           `json:"ahead"`  // of the base
-	Push     string        `json:"push"`   // pushed, N ahead of <upstream>, not pushed, unknown
-	Proven   bool          `json:"proven"` // proven merged; false is not proven, or not tried (see Status)
-	Error    string        `json:"error,omitempty"`
-	Remote   *forge.Change `json:"remote,omitempty"`
-	upstream string
+	Project string        `json:"project"`
+	Branch  string        `json:"branch,omitempty"`
+	Head    string        `json:"head,omitempty"`
+	Dirty   int           `json:"dirty"`
+	Ahead   int           `json:"ahead"`  // of the base
+	Push    string        `json:"push"`   // pushed, N ahead of <upstream>, not pushed, unknown
+	Proven  bool          `json:"proven"` // proven merged; false is not proven, or not tried (see Status)
+	Error   string        `json:"error,omitempty"`
+	Remote  *forge.Change `json:"remote,omitempty"`
+	// Published is the remote branch aw push --as pushed it under, if not the lane's own name.
+	Published string `json:"published,omitempty"`
+	upstream  string
 }
 
 // HandoffStatus is a lane's latest handoff.
@@ -211,7 +213,7 @@ func parallel[T any](items []T, f func(T)) {
 
 // repoStatus reads one worktree with one git status call: branch, head, upstream, ahead and dirty.
 func (m *Manager) repoStatus(ctx context.Context, r state.LaneRepo) RepoStatus {
-	rs := RepoStatus{Project: repoKey(r), Push: "unknown"}
+	rs := RepoStatus{Project: repoKey(r), Push: "unknown", Published: r.Published}
 	out, err := run.In(r.Path).Run(ctx, "--no-optional-locks", "status", "--porcelain=v2", "--branch", "-unormal")
 	if err != nil {
 		rs.Error = "cannot be read"
@@ -330,7 +332,7 @@ func (m *Manager) remoteStatus(ctx context.Context, r state.LaneRepo, head strin
 	if c == nil {
 		return nil
 	}
-	ch := c.Find(ctx, forge.Identity{Host: host, Project: project, Target: target}, r.Branch, head)
+	ch := c.Find(ctx, forge.Identity{Host: host, Project: project, Target: target}, r.RemoteBranch(), head)
 	if time.Now().After(deadline) && !strings.HasPrefix(ch.Availability, forge.Verified) {
 		ch = forge.Change{Availability: "unknown (deadline)"}
 	}

@@ -197,7 +197,8 @@ var schema = table("",
 				"schema, copied into every new lane from the owner checkout, relative to the project. Only the files named here are "+
 				"copied, as a clone where the file system can. Use secrets for anything an agent should not read."),
 			"accepted_findings", mapOf("Readiness findings a person has reviewed, by file: the key is a path relative to the project "+
-				"(dir/** matches a directory), and the value says why it is fine. aw rehearse and aw doctor --projects skip them.",
+				"(dir/** matches a directory), and the value says why it is fine. aw rehearse and aw doctor --projects skip them; rehearsal "+
+				"still refuses a script that names the Compose project of an accepted Compose file, since starting it would reach the real one.",
 				acceptedRE, "name a file relative to the project, e.g. \".env.template\" or \"ci/**\"", str("")),
 			"post_checkout", str("run: the repository's own post-checkout hook runs as a setup step of each lane, which can be retried. skip: it does not run in lanes.").
 				oneOf("run", "skip").withDefault("run"),

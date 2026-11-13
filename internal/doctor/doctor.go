@@ -98,7 +98,9 @@ func Run(dir, version string, withTimings bool) *Report {
 		add(Check{Name: "git repository", Status: OK, Message: filepath.Dir(stateDir)})
 	}
 
-	c, err := config.Load(ws.Owner)
+	// In a lane, its own workspace.toml: the change it proposes is what is worth checking there.
+	configDir := ws.ConfigDir()
+	c, err := config.Load(configDir)
 	t.Mark("load configuration")
 	var cerrs config.Errors
 	switch {
@@ -109,7 +111,11 @@ func Run(dir, version string, withTimings bool) *Report {
 	case err != nil:
 		add(Check{Name: "configuration", Status: Fail, Message: firstPart(err), Fix: fixPart(err, "check workspace.toml")})
 	default:
-		add(Check{Name: "configuration", Status: OK, Message: fmt.Sprintf("valid (%d projects, schema %d)", len(c.Projects), c.Workspace.Schema)})
+		msg := fmt.Sprintf("valid (%d projects, schema %d)", len(c.Projects), c.Workspace.Schema)
+		if configDir != ws.Owner {
+			msg += ", in this lane's workspace.toml; lanes use the owner checkout's until it is merged"
+		}
+		add(Check{Name: "configuration", Status: OK, Message: msg})
 		for _, ref := range c.Refused {
 			add(Check{Name: "configuration", Status: Warn,
 				Message: fmt.Sprintf("%s: %s is locked by the team (lock %q), so this setting is ignored", ref.Pos, ref.Key, ref.Lock),
@@ -148,12 +154,32 @@ func Run(dir, version string, withTimings bool) *Report {
 	checkMachine(ws.Owner, c, add)
 	checkDevcontainers(ws.Owner, c, add)
 	checkSandboxes(ws.Owner, c, add)
+	checkOwnerCheckout(ws, c, add)
 	checkLanes(ws, c, stateDir, add)
 	addMachine(add)
 	if withTimings {
 		r.Timings = t.Phases()
 	}
 	return r
+}
+
+// checkOwnerCheckout warns when the owner checkout would configure new lanes from something other
+// than origin's default branch.
+func checkOwnerCheckout(ws *workspace.Workspace, c *config.Config, add func(Check)) {
+	if c == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	m := &lanes.Manager{WS: ws, Cfg: c}
+	drift := m.OwnerConfigDrift(ctx)
+	for _, d := range drift {
+		msg, fix, _ := strings.Cut(d, " → ")
+		add(Check{Name: "owner checkout", Status: Warn, Message: msg, Fix: fix})
+	}
+	if len(drift) == 0 {
+		add(Check{Name: "owner checkout", Status: OK, Message: "on origin's default branch as last fetched"})
+	}
 }
 
 // checkLanes dry-runs lane creation in each repository, and finds what failed lanes left. A workspace

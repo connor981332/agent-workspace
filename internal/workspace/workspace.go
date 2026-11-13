@@ -124,6 +124,18 @@ func IsGitRepo(dir string) bool {
 	return err == nil
 }
 
+// ConfigDir is where this command's workspace.toml is: the lane root's copy in a lane that has one,
+// since that is the change the lane proposes, and otherwise the owner checkout's. Lanes themselves
+// are always configured from the owner checkout's.
+func (w *Workspace) ConfigDir() string {
+	if w.LaneRoot != "" {
+		if _, err := os.Stat(filepath.Join(w.LaneRoot, "workspace.toml")); err == nil {
+			return w.LaneRoot
+		}
+	}
+	return w.Owner
+}
+
 // StateDir is <workspace git dir>/aw, shared by every worktree of the workspace repository. A
 // workspace kept as plain files has .aw/state instead.
 func (w *Workspace) StateDir() (string, error) {

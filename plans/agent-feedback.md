@@ -7,22 +7,29 @@ harness). Not every suggestion is taken: each section says what is kept as it is
 
 ## Status
 
-**State:** PLANNED
+**State:** PARTIALLY IMPLEMENTED
 
 **Updated:** 2026-11-12
 
-**Branches / MRs:** `fix/lane-attribution` (local, not pushed) already holds B4 and part of item 3.
-Nothing else started.
+**Branches / MRs:** stacked, each on the one before:
+[#81](https://github.com/connor981332/agent-workspace/pull/81) `fix/lane-attribution` (B4, part of
+item 3), [#82](https://github.com/connor981332/agent-workspace/pull/82) `fix/acceptance-tmp`
+(acceptance runs leaking into `$TMPDIR`),
+[#83](https://github.com/connor981332/agent-workspace/pull/83) `feedback/1-guard` (Phase 1),
+[#84](https://github.com/connor981332/agent-workspace/pull/84) `feedback/2-branches` (Phase 2).
 
-**Done:** Read the three documents and the code each item touches; confirmed causes for items 9 and
-13 and bugs B1, B2, B3 and B5 (see [Findings](#findings-from-the-code)). The owner accepted every
-recommendation below on 2026-11-12, including the three decisions in
-[Decisions](#decisions-taken).
+**Done:** Phases 1 and 2, with scenarios for each item. Two changes from the plan as written:
+- 2.6, F4: rehearsal does not guess which Compose files a host project's scripts start; aw cannot
+  see into them, and a wrong guess would let a rehearsal reach real containers. A person's review
+  in `accepted_findings` decides instead, and an accepted file's Compose project name is still
+  refused beside a container command. The runtime refusal of an accepted file is not built.
+- 2.2: `aw push` also records the remote name for recap and sweep's forge lookups, which by the
+  lane's own branch name would never find the merge request.
 
 **In progress:** nothing.
 
-**Next step:** Phase 1, step 1.1 (owner-checkout reads from a lane), on a new branch from
-`fix/lane-attribution` once that branch is merged, or stacked on it.
+**Next step:** Phase 3, 3.1 (pair bypasses aw's own rules), on a branch stacked on
+`feedback/2-branches`.
 
 ## Decisions taken
 

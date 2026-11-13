@@ -30,3 +30,13 @@ cd $OWNER/api/.worktrees/01
 exec aw recap
 stdout 'first-thing'
 ! stdout 'second-thing'
+
+# A lane's name or number shows that one, from anywhere, as lanes, setup and discard take it.
+cd $OWNER
+exec aw recap second-thing
+stdout 'second-thing'
+! stdout 'first-thing'
+exec aw recap 1
+stdout 'first-thing'
+! stdout 'second-thing'
+! exec aw recap no-such-lane

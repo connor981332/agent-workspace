@@ -117,7 +117,7 @@ func checkRefs(input []byte) error {
 	if err != nil {
 		return err
 	}
-	return checkLines(input, own, common, func(refused []string) error { return refusal(refused, own) })
+	return checkLines(input, own, common, func(refused []string) error { return refusal(refused, own, common) })
 }
 
 // checkLines applies the rule to each line of a transaction: <old> <new> <ref>.
@@ -141,10 +141,16 @@ func checkLines(input []byte, own []string, common string, fail func([]string) e
 	return nil
 }
 
-func refusal(refs, own []string) error {
+func refusal(refs, own []string, common string) error {
 	hint := "work on the lane's own branch"
 	if len(own) > 0 {
-		hint = "work on the lane's branch, " + strings.TrimPrefix(own[0], "refs/heads/")
+		branch := strings.TrimPrefix(own[0], "refs/heads/")
+		hint = "work on the lane's branch, " + branch
+		if common != "" && !refExists(common, own[0]) {
+			// Renamed, most likely: Git's rename never shows this hook the new name.
+			return fmt.Errorf("a lane may change only its own branches, so this ref update is refused: %s. The lane's branch, %s, does not exist (renamed?) → git branch %s HEAD && git switch %s; to publish under another name, run bin/aw push --as <name>",
+				strings.Join(refs, ", "), branch, branch, branch)
+		}
 	}
 	if slices.Contains(refs, "refs/stash") {
 		hint = "the stash is shared by every worktree, so commit to the lane's branch instead"
@@ -188,6 +194,15 @@ func unchangedByPacking(old, new, ref, common string) bool {
 var zeroOID = regexp.MustCompile(`^0+$`)
 
 func isZero(oid string) bool { return zeroOID.MatchString(oid) }
+
+// refExists reports whether a branch exists, loose or packed. A repository on the reftable backend
+// keeps neither file, so there it is assumed to exist.
+func refExists(common, ref string) bool {
+	if _, err := os.Stat(filepath.Join(common, "reftable")); err == nil {
+		return true
+	}
+	return looseRef(common, ref) != "" || packedRef(common, ref) != ""
+}
 
 func looseRef(common, ref string) string {
 	data, err := os.ReadFile(filepath.Join(common, filepath.FromSlash(ref)))

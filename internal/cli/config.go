@@ -277,8 +277,10 @@ its own, which is how the examples in the repository are checked.`,
 				if err != nil {
 					return err
 				}
-				c, err := config.Load(ws.Owner)
-				if err := check(filepath.Join(ws.Owner, config.TeamFile), c, err); err != nil {
+				// In a lane, the lane's copy is the change being proposed, so it is the one checked.
+				dir := ws.ConfigDir()
+				c, err := config.Load(dir)
+				if err := check(filepath.Join(dir, config.TeamFile), c, err); err != nil {
 					return err
 				}
 			}

@@ -1,0 +1,33 @@
+# A lane keeps its branch, which aw tracks its work by. Renaming it, or making another, is refused
+# before Git runs, with the push form that publishes under the team's name. A lane whose branch went
+# missing anyway (a rename the ref hook cannot see) is told how to get it back.
+# req: R58 R59
+# source: plans/agent-feedback.md, item 9
+# milestone: M12
+
+workspace shop --init
+exec aw setup
+owner-snapshot
+exec aw attach 'add feature flag'
+cd web/.worktrees/01
+
+! exec awtest-hook bash 'git branch -m connor/KEY-1'
+stderr 'a lane keeps its branch, aw/feature-flag'
+stderr 'bin/aw push --as <name>'
+! exec awtest-hook bash 'git branch connor/KEY-1'
+stderr 'would make a new branch'
+! exec awtest-hook bash 'git switch -c connor/KEY-1'
+stderr 'bin/aw push --as'
+exec awtest-hook bash 'git branch --show-current && git branch -vv'
+exec awtest-hook bash 'git switch -c aw/feature-flag'
+
+# Git lets the rename through, since its ref hook only sees the old name go. The next commit is
+# refused with the way back, and that way works.
+exec git branch -m connor/KEY-1
+exec sh -c 'echo x > f.txt && git add f.txt'
+! exec git commit -q -m 'lane work'
+stderr 'aw/feature-flag, does not exist \(renamed\?\)'
+stderr '→ git branch aw/feature-flag HEAD && git switch aw/feature-flag'
+exec git branch aw/feature-flag HEAD
+exec git switch -q aw/feature-flag
+exec git commit -q -m 'lane work'

@@ -31,6 +31,7 @@ The CLI is part of the design, not an afterthought. Most of the tool's value is 
 | `aw <team-command>` | both | Run a named team command, queueing for its resources |
 | `aw serve <resource>` / `aw stop <resource>` | both | Take or return a seat |
 | `aw queue` | both | Who holds and who waits for each resource |
+| `aw push [--as <name>] [project…]` | both | Push the lane's branch to origin, under the team's branch name if it differs, and remember that name for recap, finish and sweep |
 | `aw finish --summary "…"` | agent | Hand off as ready for review |
 | `aw park` / `aw unpark` / `aw discard` | human | Shelve, restore or abandon work |
 | `aw sweep [--apply]` | human | Recycle lanes proven merged |
@@ -45,7 +46,8 @@ The CLI is part of the design, not an afterthought. Most of the tool's value is 
 | `aw webhook <provider>` | both | Send a provider's sandbox webhooks to this lane |
 | `aw plan new\|list\|promote` / `aw check-docs` | both | Plans and their conventions |
 | `aw inspect` / `aw doctor --projects` | both | Facts about the projects, and the deterministic readiness audit |
-| `aw onboard [--review]` / `aw add project <alias> [url]` | human | Agent-proposed configuration in a lane; adding a repository |
+| `aw onboard [--review]` | human | Agent-proposed configuration in a lane |
+| `aw add project <alias> [url]` | human in the owner checkout; both in a lane | Adding a repository: in the owner checkout it also clones it; in a lane it changes the lane's `workspace.toml` and `.gitignore` for review, and `aw setup` clones it after the merge |
 | `aw delegate` | human | Expiring, scoped maintenance authority ([owner-checkout.md](owner-checkout.md#delegation)) |
 | `aw changeset --title t` | both | Open this lane's linked merge requests in merge order; the publication policy applies |
 | `aw upgrade` | human | Change the pinned framework version |

@@ -47,7 +47,9 @@ This workspace runs several agents in parallel, each in its own lane.
 - The checkout you start in belongs to the human. Reading needs nothing, here or from a lane. Before changing anything, run ` + "`bin/aw attach \"<what you are working on>\"`" + ` and work in the lane root it prints.
 - If your working directory stays where it was, start each shell command with ` + "`cd <lane root> &&`" + ` and use absolute paths inside the lane for file tools.
 - ` + "`bin/aw lanes`" + ` lists the lanes, and ` + "`bin/aw whoami`" + ` shows where you are. ` + "`bin/aw run <project> <command>`" + ` runs a command with the lane's environment.
-- When you stop, run ` + "`bin/aw finish`" + ` so that the next session can pick up the work.
+- Once you are in a lane, paths these instructions name, such as a ` + "`scratch/`" + ` directory, mean your lane root's copy, not the owner checkout's.
+- A repository that is not a project of this workspace can be cloned into your lane, for example under its ` + "`scratch/`" + `; aw's guards and hooks do not cover it, and its own conventions apply.
+- When you stop, or hand the work off for review with merge requests still open, run ` + "`bin/aw finish`" + ` so that the next session can pick up the work.
 - When aw refuses something, its message says what to do instead.`
 
 // publishing is added when the publication safeguard is on, and carefully is added with any safeguard:
@@ -357,17 +359,15 @@ var Skills = []string{"workspace-design", "readiness-audit"}
 
 // ApplySkills composes the skills into each harness's own format. Grok reads Claude Code's. A file
 // edited by hand is left alone, and listed.
-func ApplySkills(owner string) (changed []string, edited []string, err error) {
+// take lists files to replace even though they differ from aw's record (aw upgrade --take), whether
+// they were edited or never recorded.
+func ApplySkills(owner string, take ...string) (changed []string, edited []string, err error) {
 	for _, name := range Skills {
 		data, err := skillFiles.ReadFile("skills/" + name + ".md")
 		if err != nil {
 			return nil, nil, err
 		}
-		for _, target := range []string{
-			".claude/skills/aw-" + name + "/SKILL.md",
-			".agents/skills/aw-" + name + "/SKILL.md",
-			".opencode/commands/aw-" + name + ".md",
-		} {
+		for _, target := range skillTargets(name) {
 			path := filepath.Join(owner, filepath.FromSlash(target))
 			sum := sha256.Sum256(data)
 			hash := hex.EncodeToString(sum[:])
@@ -378,7 +378,7 @@ func ApplySkills(owner string) (changed []string, edited []string, err error) {
 				if current == hash {
 					continue
 				}
-				if current != recordedHash(owner, target) {
+				if current != recordedHash(owner, target) && !slices.Contains(take, target) {
 					edited = append(edited, target)
 					continue
 				}
@@ -396,6 +396,23 @@ func ApplySkills(owner string) (changed []string, edited []string, err error) {
 		}
 	}
 	return changed, edited, nil
+}
+
+func skillTargets(name string) []string {
+	return []string{
+		".claude/skills/aw-" + name + "/SKILL.md",
+		".agents/skills/aw-" + name + "/SKILL.md",
+		".opencode/commands/aw-" + name + ".md",
+	}
+}
+
+// SkillPaths are the files ApplySkills writes, relative to the owner checkout.
+func SkillPaths() []string {
+	var out []string
+	for _, name := range Skills {
+		out = append(out, skillTargets(name)...)
+	}
+	return out
 }
 
 func recordedHash(owner, key string) string {

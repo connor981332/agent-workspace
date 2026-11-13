@@ -257,6 +257,17 @@ func migrateConfig(cmd *cobra.Command, owner string) error {
 
 // regenerate refreshes the managed files, and returns those left alone because of a hand edit.
 func regenerate(cmd *cobra.Command, owner string, c *config.Config, eject, take []string) ([]string, error) {
+	// A --take aw cannot act on says so, rather than being ignored.
+	generated, err := modules.Paths(owner, c.Workspace.Namespace, c.Workspace.Name)
+	if err != nil {
+		return nil, err
+	}
+	generated = append(append(generated, compose.SkillPaths()...), launcher.ScriptPath)
+	for _, f := range take {
+		if !slices.Contains(generated, f) {
+			return nil, fmt.Errorf("--take %s: aw does not generate that file, so there is no new version to take → name a file from the list of hand-edited files, as a path from the workspace root", f)
+		}
+	}
 	for _, f := range eject {
 		if f != launcher.ScriptPath {
 			if _, err := modules.Eject(owner, c.Workspace.Namespace, c.Workspace.Name, f); err != nil {
@@ -292,7 +303,7 @@ func regenerate(cmd *cobra.Command, owner string, c *config.Config, eject, take 
 			return nil, err
 		}
 	}
-	if _, skillEdits, err := compose.ApplySkills(owner); err != nil {
+	if _, skillEdits, err := compose.ApplySkills(owner, take...); err != nil {
 		return nil, err
 	} else {
 		edited = append(edited, skillEdits...)

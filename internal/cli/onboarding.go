@@ -66,8 +66,9 @@ func newInspectCmd() *cobra.Command {
 				return err
 			}
 			inspect.Preflight(cmd.Context(), ws.Owner, c, projects)
+			unconfigured := unconfiguredRepos(ws.Owner, c)
 			if asJSON {
-				return writeJSON(cmd.OutOrStdout(), map[string]any{"projects": projects, "other_hooks": sandbox.OtherHooks(ws.Owner)})
+				return writeJSON(cmd.OutOrStdout(), map[string]any{"projects": projects, "other_hooks": sandbox.OtherHooks(ws.Owner), "unconfigured": unconfigured})
 			}
 			for _, h := range sandbox.OtherHooks(ws.Owner) {
 				fmt.Fprintf(cmd.OutOrStdout(), "! a hook that is not aw's, which also runs in lanes: %s\n", ui.Clean(h))
@@ -78,11 +79,38 @@ func newInspectCmd() *cobra.Command {
 					fmt.Fprintf(cmd.OutOrStdout(), "  ! %s\n", ui.Clean(line))
 				}
 			}
+			for _, name := range unconfigured {
+				fmt.Fprintf(cmd.OutOrStdout(), "%s: a Git repository that is not a project yet → aw add project %s\n", ui.Clean(name), ui.Clean(name))
+			}
 			return nil
 		}),
 	}
 	cmd.Flags().BoolVar(&asJSON, "json", false, "print the facts as JSON")
 	return cmd
+}
+
+// unconfiguredRepos are the Git repositories directly in the workspace root that no project names,
+// such as one cloned there before it was added.
+func unconfiguredRepos(owner string, c *config.Config) []string {
+	entries, err := os.ReadDir(owner)
+	if err != nil {
+		return nil
+	}
+	used := map[string]bool{}
+	for _, p := range c.Projects {
+		used[filepath.Clean(p.Directory)] = true
+	}
+	out := []string{}
+	for _, e := range entries {
+		name := e.Name()
+		if !e.IsDir() || strings.HasPrefix(name, ".") || used[name] {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(owner, name, ".git")); err == nil {
+			out = append(out, name)
+		}
+	}
+	return out
 }
 
 func doctorProjects(cmd *cobra.Command, asJSON bool) error {
@@ -277,17 +305,28 @@ func newAddProjectCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "project <alias> [repo-url]",
 		Short: "Add a project repository to this workspace",
-		Args:  cobra.RangeArgs(1, 2),
+		Long: `Add a project repository to this workspace: a [projects.<alias>] table in workspace.toml, its
+directory in .gitignore, and, in the owner checkout, the clone and its Git hooks.
+
+In a lane, it changes the lane's own workspace.toml and .gitignore, for a merge request like any
+other change to the workspace; an agent may do this. The clone and hooks follow when the human runs
+aw setup after the merge.`,
+		Args: cobra.RangeArgs(1, 2),
 		RunE: run(func(cmd *cobra.Command, args []string) error {
-			if why := unguardedAgent(); why != "" {
-				return &commandError{fmt.Errorf("aw add is only for the human, and this looks like an agent session (%s) → ask the human to run it in their own terminal", why)}
-			}
 			ws, c, err := loadConfig()
 			if err != nil {
 				return err
 			}
-			if ws.LaneRoot != "" {
-				return fmt.Errorf("projects are added in the owner checkout → run this in %s", ui.Clean(ws.Owner))
+			inLane := ws.LaneRoot != ""
+			if why := unguardedAgent(); why != "" && !inLane {
+				return &commandError{fmt.Errorf("aw add project is only for the human in the owner checkout, and this looks like an agent session (%s) → run it from your lane, which changes the lane's workspace.toml for review, or ask the human", why)}
+			}
+			root := ws.Owner
+			if inLane {
+				root = ws.ConfigDir()
+				if c, err = config.Load(root); err != nil {
+					return fmt.Errorf("this lane's workspace.toml is invalid, so nothing was changed: %w", err)
+				}
 			}
 			alias := args[0]
 			if _, exists := c.Projects[alias]; exists {
@@ -304,7 +343,7 @@ func newAddProjectCmd() *cobra.Command {
 			if !noClone && url == "" {
 				return &usageError{fmt.Errorf("give the repository's URL, or pass --no-clone")}
 			}
-			path := filepath.Join(ws.Owner, config.TeamFile)
+			path := filepath.Join(root, config.TeamFile)
 			before, err := os.ReadFile(path)
 			if err != nil {
 				return err
@@ -319,17 +358,21 @@ func newAddProjectCmd() *cobra.Command {
 			if err := os.WriteFile(path, append(bytes.Clone(before), text...), 0o644); err != nil {
 				return err
 			}
-			c2, err := config.Load(ws.Owner)
+			c2, err := config.Load(root)
 			if err != nil {
 				os.WriteFile(path, before, 0o644)
 				return fmt.Errorf("%q cannot be a project name, so nothing was changed: %w", alias, err)
 			}
 			if dir != "." {
-				if _, err := app.EnsureIgnored(filepath.Join(ws.Owner, ".gitignore"), []string{"/" + dir}); err != nil {
+				if _, err := app.EnsureIgnored(filepath.Join(root, ".gitignore"), []string{"/" + dir}); err != nil {
 					return err
 				}
 			}
 			out := cmd.OutOrStdout()
+			if inLane {
+				fmt.Fprintf(out, "Added project %s to this lane's workspace.toml and .gitignore. Next: fill in its servers and install, commit, and open a merge request; after it is merged, the human runs aw setup, which clones it and installs its Git hooks.\n", alias)
+				return nil
+			}
 			if !noClone {
 				if err := cloneProjects(cmd.Context(), ws.Owner, c2, out, cmd.ErrOrStderr()); err != nil {
 					return err

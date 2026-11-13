@@ -1,0 +1,22 @@
+# --take replaces a hand-edited generated file even when .aw/managed has no record of it, such as a
+# skill whose record was lost, and a --take aw cannot act on says why instead of being ignored.
+# req: R18
+# source: 0.1.5 change requests, B3
+# milestone: M12
+
+owner-may-change
+workspace solo --single --init
+exec aw setup
+exec sh -c 'echo "# my note" >> .claude/skills/aw-workspace-design/SKILL.md'
+exec sh -c 'grep -v "aw-workspace-design/SKILL.md" .aw/managed > m && mv m .aw/managed'
+env AW_MIRROR=$AW_NEW_MIRROR
+! exec aw upgrade --to $AW_NEW_VERSION
+stderr '.claude/skills/aw-workspace-design/SKILL.md was edited by hand'
+
+! exec aw upgrade --to $AW_NEW_VERSION --take no/such/file.md
+stderr 'aw does not generate that file'
+
+exec aw upgrade --to $AW_NEW_VERSION --take .claude/skills/aw-workspace-design/SKILL.md
+stdout 'Next: commit this'
+! grep '# my note' .claude/skills/aw-workspace-design/SKILL.md
+grep 'aw-workspace-design/SKILL.md' .aw/managed
