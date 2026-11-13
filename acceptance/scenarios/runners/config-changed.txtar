@@ -34,6 +34,12 @@ exec sh -c 'echo "# changed again" >> .devcontainer/compose.yaml'
 ! exec aw run solo true
 stderr 'holds a seat on stack'
 grep -count=1 'docker rm -f' $STUB_LOG
+# Removing a leased resource from config must not make its holder invisible.
+exec sh $WORK/remove-resource.sh
+! exec aw run solo true
+stderr 'configuration no longer defines leased resource stack → restore its configuration'
+grep -count=1 'docker rm -f' $STUB_LOG
+exec sh -c 'cp $WORK/original-config workspace.toml'
 exec aw stop stack
 exec aw containers up
 grep -count=2 'docker rm -f' $STUB_LOG
@@ -49,6 +55,11 @@ exec sh -c 'rm $STUB_STATE/top-fails; touch $STUB_STATE/top-missing-main'
 stderr 'cannot identify the main process .*→ check docker inspect and docker top'
 grep -count=2 'docker rm -f' $STUB_LOG
 
+-- remove-resource.sh --
+set -eu
+cp workspace.toml "$WORK/original-config"
+awk '/^\[resources.stack\]/{exit} {print}' workspace.toml > "$WORK/no-stack"
+cp "$WORK/no-stack" workspace.toml
 -- workspace.toml --
 [workspace]
 name = "Solo"

@@ -184,7 +184,10 @@ func inUse(ctx context.Context, cfg *config.Config, q state.Querier, d *runners.
 	}
 	for _, l := range leases {
 		r, err := b.Lookup(l.Resource)
-		if err != nil || !slices.ContainsFunc(r.Servers, func(s string) bool { return strings.HasPrefix(s, d.Project+".") }) {
+		if err != nil {
+			return nil, fmt.Errorf("the configuration no longer defines leased resource %s → restore its configuration, stop its holder with aw stop %s, then retry", ui.Clean(l.Resource), ui.Clean(l.Resource))
+		}
+		if !slices.ContainsFunc(r.Servers, func(s string) bool { return strings.HasPrefix(s, d.Project+".") }) {
 			continue
 		}
 		who := "the owner"

@@ -630,7 +630,7 @@ func (d *Devcontainer) reconcile(ctx context.Context, id string, c inspected, ou
 	}
 	used, err := d.InUse(ctx, checkID)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("cannot establish whether the %s container is idle: %w → resolve the usage-check error before retrying aw containers recreate %s", d.Project, err, d.Project)
 	}
 	if len(used) > 0 {
 		return false, fmt.Errorf("the %s container was built from a different configuration and is in use: %s → %s", d.Project, strings.Join(used, "; "), fix)
