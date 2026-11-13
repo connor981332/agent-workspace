@@ -345,7 +345,7 @@ func NewDevcontainer(c *config.Config, owner, project, stateDir string) (*Devcon
 	}
 	return &Devcontainer{Project: project, Dir: dir, Compose: compose, Service: j.Service, User: user,
 		Ports: SeatPorts(c, project), cliEnv: env,
-		cli:  strings.Fields(strings.ReplaceAll(c.Devcontainer.Command, "{version}", c.Devcontainer.Version)),
+		cli:      strings.Fields(strings.ReplaceAll(c.Devcontainer.Command, "{version}", c.Devcontainer.Version)),
 		lock:     filepath.Join(stateDir, "containers", project+".lock"),
 		fragment: cmpOr(p.LocalCompose, Fragment)}, nil
 }
