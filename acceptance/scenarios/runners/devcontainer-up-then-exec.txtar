@@ -41,7 +41,7 @@ servers = ["solo.app"]
   // the team's file
   "dockerComposeFile": ["compose.yaml", "aw.compose.yaml"],
   "service": "app",
-  "workspaceFolder": "${localWorkspaceFolder}",
+  "workspaceFolder": "/workspaces/solo",
   "remoteUser": "dev",
   "initializeCommand": "bin/aw containers claim solo",
 }

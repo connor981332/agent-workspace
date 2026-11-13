@@ -325,3 +325,26 @@ generated = ["node_modules"]
 		t.Fatalf("got: %v", err)
 	}
 }
+
+func TestLocalCompose(t *testing.T) {
+	for _, tc := range []struct{ runner, path, want string }{
+		{"host", "compose.local.yaml", "requires runner"},
+		{"devcontainer", "/tmp/compose.yaml", "not a clean path"},
+		{"devcontainer", "../compose.yaml", "not a clean path"},
+		{"devcontainer", "nested/../compose.yaml", "not a clean path"},
+		{"devcontainer", ".", "not a clean path"},
+		{"devcontainer", "compose.local.yaml", ""},
+		{"devcontainer", "local/compose.yaml", ""},
+	} {
+		t.Run(tc.runner+"/"+tc.path, func(t *testing.T) {
+			_, err := loadString(t, minimal+"runner = \""+tc.runner+"\"\nlocal_compose = \""+tc.path+"\"\n")
+			if tc.want == "" {
+				if err != nil {
+					t.Fatal(err)
+				}
+			} else if err == nil || !strings.Contains(err.Error(), "projects.web.local_compose:") || !strings.Contains(err.Error(), tc.want) || !strings.Contains(err.Error(), "→") {
+				t.Fatalf("got %v; want local_compose error with %q and a fix", err, tc.want)
+			}
+		})
+	}
+}

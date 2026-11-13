@@ -311,3 +311,50 @@ its base. Claims now read origin's default branch and how the owner checkout dif
 ### Apple Silicon laptop
 
 Not yet measured: pending, for a maintainer with a Mac.
+
+### Linux laptop, 2026-11-12, devcontainer Mode B
+
+Measured on `connor-fw13`, Linux amd64, branch `feedback/7-devcontainer` at `14b4e35`.
+The machine was not quiet (load averaged roughly 2–5 during the run); these are diagnostic
+measurements, not a quiet-machine milestone certification. Config adds a cached string and load-time
+path validation; guard decisions add no runner work.
+
+Full absolute run: `TMPDIR=~/.cache/aw-tmp GOTMPDIR=~/.cache/aw-tmp go run ./bench`.
+Seven operations exceeded their absolute budgets, including hook and ref-hook, after the harness's
+built-in retries. A subsequent interleaved comparison against master (`715df80`), built with the same
+`CGO_ENABLED=0`, trimpath and benchmark version flags, passed every relative regression check at
+`-mode relative -scale 0.1`. The reduced comparison sample does not certify absolute budgets.
+
+| Operation | n | p50 ms | p95 ms | p99 ms | max ms | limit ms | result |
+|---|---|---|---|---|---|---|---|
+| hook | 1000 | 12.46 | 13.63 | 14.24 | 15.03 | 8.00 | fail |
+| whoami | 500 | 9.76 | 10.64 | 11.02 | 11.53 | 10.00 | fail |
+| config-get | 500 | 9.75 | 10.82 | 11.66 | 12.67 | 10.00 | fail |
+| attach-from-pool | 100 | 134.81 | 144.48 | 153.19 | 154.66 | 100.00 | fail |
+| new-until-harness | 100 | 141.58 | 155.65 | 165.31 | 179.02 | 150.00 | fail |
+| dashboard | 200 | 85.15 | 93.61 | 98.22 | 104.23 | 100.00 | pass |
+| ref-hook | 1000 | 11.62 | 12.94 | 13.69 | 14.62 | 8.00 | fail |
+| serve-free-seat | 100 | 23.63 | 27.27 | 28.86 | 49.35 | 50.00 | pass |
+| grant-next | 100 | 42.35 | 59.00 | 61.72 | 63.25 | 50.00 | fail |
+| preempt | 100 | 20.63 | 24.69 | 30.00 | 42.24 | 50.00 | pass |
+
+Interleaved comparison (p50, at most 25% above master):
+
+| Operation | n | branch ms | master ms | result |
+|---|---|---|---|---|
+| hook | 100 | 12.78 | 12.87 | pass |
+| whoami | 50 | 10.13 | 9.98 | pass |
+| config-get | 50 | 10.09 | 10.20 | pass |
+| attach-from-pool | 10 | 122.86 | 125.39 | pass |
+| new-until-harness | 10 | 137.68 | 141.10 | pass |
+| dashboard | 20 | 86.96 | 86.95 | pass |
+| ref-hook | 100 | 13.77 | 13.83 | pass |
+| serve-free-seat | 10 | 21.83 | 22.43 | pass |
+| grant-next | 10 | 47.30 | 50.29 | pass |
+| preempt | 10 | 17.86 | 17.73 | pass |
+
+The completed shared F5 groundwork (`5945b15`, including config-hash replacement and process
+inspection) was compared again with the same master baseline at `-mode relative -scale 0.1`:
+all ten regression checks passed. Hook p50 was 12.91 ms versus master's 12.91 ms; ref-hook was
+13.97 ms versus 13.83 ms. These remain non-quiet, reduced-sample relative results; the absolute
+failures above are not cleared by them.

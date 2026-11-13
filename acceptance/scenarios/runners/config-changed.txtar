@@ -1,0 +1,97 @@
+# req: R48 R49 R50
+# source: agent feedback plan 5.2 (F5)
+# milestone: M6
+# Changed configuration replaces an idle container, preserves attached containers and seats,
+# and never feeds its old generated hash back into a new one.
+
+owner-may-change
+stubs docker devcontainer npx
+workspace solo --single --init
+exec sh -c 'cp -R $WORK/.devcontainer . && git add .devcontainer && git -c user.name=t -c user.email=t@t commit -q -m devcontainer && git push -q origin HEAD:main'
+exec aw containers up
+grep 'dev.aw.config-hash: "[0-9a-f]{64}"' .devcontainer/aw.compose.yaml
+exec aw run solo true
+grep -count=1 'devcontainer up' $STUB_LOG
+
+# An editor attached to the old config prevents both run and VS Code's claim step from replacing it.
+exec sh -c 'echo "# changed" >> .devcontainer/compose.yaml; mkdir -p $STUB_STATE/top; echo "200 50 node .vscode-server/server.js" > $STUB_STATE/top/c-$(basename "$PWD")'
+! exec aw run solo true
+stderr 'different configuration and is in use: attached: node .vscode-server'
+stderr '→ .*aw containers recreate solo'
+! exec aw containers claim solo
+stderr 'different configuration and is in use'
+! grep 'docker rm' $STUB_LOG
+exec sh -c 'rm $STUB_STATE/top/*'
+exec aw run solo true
+grep -count=1 'docker rm -f' $STUB_LOG
+grep -count=2 'devcontainer up' $STUB_LOG
+exec aw run solo true
+grep -count=2 'devcontainer up' $STUB_LOG
+
+# A held seat protects the container even when it has no editor session.
+exec aw serve stack --json
+exec sh -c 'echo "# changed again" >> .devcontainer/compose.yaml'
+! exec aw run solo true
+stderr 'holds a seat on stack'
+grep -count=1 'docker rm -f' $STUB_LOG
+# Removing a leased resource from config must not make its holder invisible.
+exec sh $WORK/remove-resource.sh
+! exec aw run solo true
+stderr 'configuration no longer defines leased resource stack → restore its configuration'
+grep -count=1 'docker rm -f' $STUB_LOG
+exec sh -c 'cp $WORK/original-config workspace.toml'
+exec aw stop stack
+exec aw containers up
+grep -count=2 'docker rm -f' $STUB_LOG
+grep -count=3 'devcontainer up' $STUB_LOG
+
+# Failure to inspect attached processes must not turn into permission to remove a container.
+exec sh -c 'echo "# third change" >> .devcontainer/compose.yaml; touch $STUB_STATE/top-fails'
+! exec aw run solo true
+stderr 'docker top: .*→ check that Docker is running'
+grep -count=2 'docker rm -f' $STUB_LOG
+exec sh -c 'rm $STUB_STATE/top-fails; touch $STUB_STATE/top-missing-main'
+! exec aw run solo true
+stderr 'cannot identify the main process .*→ check docker inspect and docker top'
+grep -count=2 'docker rm -f' $STUB_LOG
+
+-- remove-resource.sh --
+set -eu
+cp workspace.toml "$WORK/original-config"
+awk '/^\[resources.stack\]/{exit} {print}' workspace.toml > "$WORK/no-stack"
+cp "$WORK/no-stack" workspace.toml
+-- workspace.toml --
+[workspace]
+name = "Solo"
+namespace = "solo"
+schema = 1
+
+[lanes]
+pool = 0
+port_stride = 100
+
+[projects.solo]
+directory = "."
+runner = "devcontainer"
+
+[projects.solo.servers.app]
+command = "echo $$ > $WORK/server.pid; exec sleep 60 # {port}"
+port = 3000
+
+[resources.stack]
+kind = "process"
+capacity = 2
+servers = ["solo.app"]
+-- .devcontainer/devcontainer.json --
+{
+  // the team's file
+  "dockerComposeFile": ["compose.yaml", "aw.compose.yaml"],
+  "service": "app",
+  "workspaceFolder": "/workspaces/solo",
+  "remoteUser": "dev",
+  "initializeCommand": "bin/aw containers claim solo",
+}
+-- .devcontainer/compose.yaml --
+services:
+  app:
+    image: stub
