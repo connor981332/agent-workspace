@@ -21,6 +21,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/connor981332/agent-workspace/internal/app"
+	"github.com/connor981332/agent-workspace/internal/audit"
 	"github.com/connor981332/agent-workspace/internal/compose"
 	"github.com/connor981332/agent-workspace/internal/config"
 	gitrun "github.com/connor981332/agent-workspace/internal/gitx/run"
@@ -68,7 +69,12 @@ func newInspectCmd() *cobra.Command {
 			inspect.Preflight(cmd.Context(), ws.Owner, c, projects)
 			unconfigured := unconfiguredRepos(ws.Owner, c)
 			if asJSON {
-				return writeJSON(cmd.OutOrStdout(), map[string]any{"projects": projects, "other_hooks": sandbox.OtherHooks(ws.Owner), "unconfigured": unconfigured})
+				return writeJSON(cmd.OutOrStdout(), map[string]any{"projects": projects, "other_hooks": sandbox.OtherHooks(ws.Owner), "unconfigured": unconfigured,
+					// What the workspace audit starts from: the configuration's last audit, what a program
+					// can suggest, and what changed in aw since.
+					"audited_with":    c.Workspace.AuditedWith,
+					"suggestions":     audit.Suggest(cmd.Context(), ws.Owner, c, frameworkVersion()),
+					"changelog_since": audit.Changelog(c.Workspace.AuditedWith)})
 			}
 			for _, h := range sandbox.OtherHooks(ws.Owner) {
 				fmt.Fprintf(cmd.OutOrStdout(), "! a hook that is not aw's, which also runs in lanes: %s\n", ui.Clean(h))

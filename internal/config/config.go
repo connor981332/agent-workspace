@@ -42,6 +42,7 @@ type Config struct {
 	LaneEnv  map[string]map[string]string `json:"lane_env"`
 	Webhooks map[string]*Webhook          `json:"webhooks"`
 	Plans    Plans                        `json:"plans"`
+	Audit    Audit                        `json:"audit"`
 	// Harnesses are declarative adapters: another hooked harness, added without a release.
 	Harnesses map[string]*Harness `json:"harnesses"`
 	// Options are the alternative setups the team supports, and Choose the individual's picks.
@@ -74,6 +75,14 @@ type Workspace struct {
 	Forge     string `json:"forge"`
 	// Generated are the workspace repository's own generated paths.
 	Generated []string `json:"generated"`
+	// AuditedWith is the aw version that last designed or audited this configuration.
+	AuditedWith string `json:"audited_with"`
+}
+
+// Audit is what the workspace audit should not suggest again.
+type Audit struct {
+	// Declined are suggestions the team declined, by id, with the reason.
+	Declined map[string]string `json:"declined"`
 }
 
 type Lanes struct {

@@ -303,6 +303,9 @@ func Validate(dir, local string) (devcontainerJSON, error) {
 	return d, nil
 }
 
+// ComposeFiles are the Compose files a devcontainer.json lists, as it writes them.
+func ComposeFiles(d devcontainerJSON) []string { return d.composeFiles() }
+
 // ClaimWired reports whether the devcontainer.json runs aw's claim step, which is what makes VS Code
 // behave like aw on a moved checkout.
 func ClaimWired(d devcontainerJSON, project string) bool {

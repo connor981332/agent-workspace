@@ -132,6 +132,14 @@ var schema = table("",
 			oneOf("auto", "github", "gitlab", "none").withDefault("auto"),
 		"generated", strList("Ignored paths (Git pathspecs) in the workspace repository itself that builds create and that do "+
 			"not block recycling a lane, such as *.pyc or tools/cache. Each project declares its own under [projects.<name>]."),
+		"audited_with", str("The aw version that last designed or audited this configuration, such as \"0.2.1\". The workspace-design "+
+			"and workspace-audit skills set it. aw changelog starts from it, and aw doctor notes when it is missing or a minor version behind.").teamOnly().
+			checked(func(v any) (string, string) {
+				if !VersionRE.MatchString(v.(string)) {
+					return "is not a version", "write the aw version without a leading v, e.g. \"0.2.1\""
+				}
+				return "", ""
+			}),
 	),
 	"lanes", table("Lanes: the numbered, stable directories agents work in.",
 		"max", integer("Most lanes that may exist at once.").between(1, 999).withDefault(int64(10)),
@@ -345,6 +353,11 @@ var schema = table("",
 	"plans", table("The plan mechanism.",
 		"enabled", boolean("Set false to opt out: aw plan refuses and aw check-docs skips the plan rules.").withDefault(true),
 	),
+	"audit", table("What the workspace audit should not suggest again. Team layer only.",
+		"declined", mapOf("Suggestions the team declined, by id as aw doctor --json lists them, with the reason. A declined "+
+			"suggestion comes back only when a newer aw changes it: when its since version is newer than audited_with.",
+			suggestionRE, "use the suggestion's id as aw doctor --json lists it, e.g. \"devcontainer-local-slot\"", str("")).teamOnly(),
+	),
 	"devcontainer", table("The devcontainer CLI, for projects whose runner is devcontainer. Pin it: a CLI that drifts breaks builds.",
 		"command", str("Runs the CLI. {version} is replaced by version. aw doctor warns when the command names no version.").
 			withDefault("npx -y @devcontainers/cli@{version}"),
@@ -354,8 +367,11 @@ var schema = table("",
 )
 
 var (
-	envRE  = regexp.MustCompile(`^[A-Z_][A-Z0-9_]*$`)
-	envFix = "use an environment variable name: uppercase letters, digits and underscores"
+	// VersionRE is an exact aw version, as .aw/version pins it: no leading v.
+	VersionRE    = regexp.MustCompile(`^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$`)
+	suggestionRE = regexp.MustCompile(`^[a-z][a-z0-9-]{0,63}$`)
+	envRE        = regexp.MustCompile(`^[A-Z_][A-Z0-9_]*$`)
+	envFix       = "use an environment variable name: uppercase letters, digits and underscores"
 )
 
 // ParseDuration accepts Go durations ("15s", "1h30m") and days ("14d"). Negative durations are
@@ -665,4 +681,44 @@ func lookupSchema(p Path) *node {
 		}
 	}
 	return n
+}
+
+// KnownKey reports whether a dotted key, written as the documentation writes it, names a key of the
+// schema: workspace.forge, projects.<name>.local_compose. A segment in angle brackets stands for any
+// name.
+func KnownKey(s string) bool {
+	var p Path
+	for _, seg := range strings.Split(s, ".") {
+		if strings.HasPrefix(seg, "<") && strings.HasSuffix(seg, ">") && len(seg) > 2 {
+			seg = "x"
+		}
+		if !bareKey(seg) {
+			return false
+		}
+		p = append(p, seg)
+	}
+	return len(p) > 0 && lookupSchema(p) != nil
+}
+
+// KeysNamed returns the keys of the schema whose last segment is leaf, as the documentation writes
+// them, with <name> for a map's keys: local_compose is projects.<name>.local_compose.
+func KeysNamed(leaf string) []string {
+	var out []string
+	var walk func(n *node, p []string)
+	walk = func(n *node, p []string) {
+		switch n.kind {
+		case kTable:
+			for _, k := range n.order {
+				q := append(slices.Clone(p), k)
+				if k == leaf {
+					out = append(out, strings.Join(q, "."))
+				}
+				walk(n.fields[k], q)
+			}
+		case kMap:
+			walk(n.elem, append(slices.Clone(p), "<name>"))
+		}
+	}
+	walk(schema, nil)
+	return out
 }

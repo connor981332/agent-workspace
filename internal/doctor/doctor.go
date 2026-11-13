@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/connor981332/agent-workspace/internal/audit"
 	"github.com/connor981332/agent-workspace/internal/compose"
 	"github.com/connor981332/agent-workspace/internal/config"
 	"github.com/connor981332/agent-workspace/internal/lanes"
@@ -50,10 +51,12 @@ type Check struct {
 
 // Report is every check, in order.
 type Report struct {
-	OK      bool           `json:"ok"`
-	Owner   string         `json:"owner,omitempty"`
-	Checks  []Check        `json:"checks"`
-	Timings []timing.Phase `json:"timings,omitempty"`
+	OK     bool    `json:"ok"`
+	Owner  string  `json:"owner,omitempty"`
+	Checks []Check `json:"checks"`
+	// Suggestions are advisory: they never fail the report. aw audit walks through them.
+	Suggestions []audit.Suggestion `json:"suggestions"`
+	Timings     []timing.Phase     `json:"timings,omitempty"`
 }
 
 // MinGit is the oldest Git aw supports (plan §9, confirmed by the ref-hook spike).
@@ -61,7 +64,7 @@ var MinGit = [3]int{2, 34, 0}
 
 // Run checks the workspace that contains dir. version is the running binary's.
 func Run(dir, version string, withTimings bool) *Report {
-	r := &Report{}
+	r := &Report{Suggestions: []audit.Suggestion{}}
 	add := func(c Check) { r.Checks = append(r.Checks, c) }
 	defer func() {
 		r.OK = true
@@ -153,6 +156,18 @@ func Run(dir, version string, withTimings bool) *Report {
 	checkInstructions(ws.Owner, add)
 	checkMachine(ws.Owner, c, add)
 	checkDevcontainers(ws.Owner, c, add)
+	if c != nil {
+		r.Suggestions = audit.Suggest(context.Background(), ws.Owner, c, version)
+		t.Mark("suggestions")
+		if n := len(r.Suggestions); n > 0 {
+			ids := make([]string, n)
+			for i, s := range r.Suggestions {
+				ids[i] = s.ID
+			}
+			add(Check{Name: "suggestions", Status: Info, Message: fmt.Sprintf("%d for this configuration: %s", n, strings.Join(ids, ", ")),
+				Fix: "aw doctor --json explains each; aw audit walks through them with you"})
+		}
+	}
 	checkSandboxes(ws.Owner, c, add)
 	checkOwnerCheckout(ws, c, add)
 	checkLanes(ws, c, stateDir, add)

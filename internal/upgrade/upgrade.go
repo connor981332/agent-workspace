@@ -86,6 +86,56 @@ func Between(text, from, to string) (notes string, breaking []string) {
 // Changes is this release's changelog between two versions.
 func Changes(from, to string) (string, []string) { return Between(changelog, from, to) }
 
+// Entry is one item of the changelog.
+type Entry struct {
+	Version  string `json:"version"`
+	Breaking bool   `json:"breaking"`
+	Text     string `json:"text"`
+}
+
+// EntriesBetween returns the changelog's items for versions after from, up to and including to,
+// newest first, as the changelog lists them. An item is a "- " line and the lines that continue it.
+// An empty from starts at the oldest version, and an empty to ends at the newest.
+func EntriesBetween(text, from, to string) []Entry {
+	var out []Entry
+	version, on, open := "", false, false
+	for _, line := range strings.Split(text, "\n") {
+		trimmed := strings.TrimSpace(line)
+		switch {
+		case strings.HasPrefix(line, "## "):
+			version = strings.TrimSpace(strings.TrimPrefix(line, "## "))
+			on = (from == "" || Compare(version, from) > 0) && (to == "" || Compare(version, to) <= 0)
+			open = false
+		case strings.HasPrefix(line, "# "):
+			on, open = false, false
+		case !on:
+		case trimmed == "":
+			open = false
+		case strings.HasPrefix(line, "- "):
+			item := strings.TrimSpace(strings.TrimPrefix(line, "- "))
+			b, breaking := strings.CutPrefix(item, "**Breaking:**")
+			out = append(out, Entry{Version: version, Breaking: breaking, Text: strings.TrimSpace(b)})
+			open = true
+		case open:
+			out[len(out)-1].Text += " " + trimmed
+		}
+	}
+	return out
+}
+
+// Entries is this release's changelog items between two versions.
+func Entries(from, to string) []Entry { return EntriesBetween(changelog, from, to) }
+
+// Latest is the newest version the changelog describes.
+func Latest() string {
+	for _, line := range strings.Split(changelog, "\n") {
+		if v, ok := strings.CutPrefix(line, "## "); ok {
+			return strings.TrimSpace(v)
+		}
+	}
+	return ""
+}
+
 // Migration takes workspace.toml's text from one schema to the next.
 type Migration func(text string) (string, error)
 

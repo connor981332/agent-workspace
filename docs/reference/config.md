@@ -31,6 +31,7 @@ The workspace itself. Team layer only.
 | `schema` | integer | — | Configuration schema version. This release reads schema 1. *Team only.* |
 | `forge` | one of `"auto"`, `"github"`, `"gitlab"`, `"none"` | `"auto"` | Where merge requests live: auto (from each remote's host), github, gitlab or none. |
 | `generated` | array of strings | — | Ignored paths (Git pathspecs) in the workspace repository itself that builds create and that do not block recycling a lane, such as *.pyc or tools/cache. Each project declares its own under [projects.<name>]. |
+| `audited_with` | string | — | The aw version that last designed or audited this configuration, such as "0.2.1". The workspace-design and workspace-audit skills set it. aw changelog starts from it, and aw doctor notes when it is missing or a minor version behind. *Team only.* |
 
 ## `[lanes]`
 
@@ -314,6 +315,14 @@ The plan mechanism.
 | Key | Type | Default | Meaning |
 |---|---|---|---|
 | `enabled` | boolean | `true` | Set false to opt out: aw plan refuses and aw check-docs skips the plan rules. |
+
+## `[audit]`
+
+What the workspace audit should not suggest again. Team layer only.
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `declined` | table of string | — | Suggestions the team declined, by id as aw doctor --json lists them, with the reason. A declined suggestion comes back only when a newer aw changes it: when its since version is newer than audited_with. *Team only.* |
 
 ## `[devcontainer]`
 
