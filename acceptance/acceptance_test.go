@@ -7,6 +7,8 @@
 //	                                    run against published release assets: dir holds the
 //	                                    downloaded release (its binaries and checksums.txt)
 //	go test -run 'TestScenarios/cli/'   run one area
+//	go test -count=1 ./...              after changing aw: the test cache does not see aw's
+//	                                    sources, since the suite builds aw while it runs
 //	AW_ACCEPT_MILESTONE=M1 go test ./...  also run the scenarios of a later milestone
 package acceptance_test
 
@@ -17,11 +19,14 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 
 	"github.com/rogpeppe/go-internal/testscript"
 
@@ -31,30 +36,79 @@ import (
 
 var cfg cmds.Config
 
-// tempDir holds the run's binaries and mirror.
+// tempDir holds the run's binaries and mirror, and the scenarios' work directories.
 var tempDir string
 
+// runPrefix names a run's directory in the system's temporary directory.
+const runPrefix = "aw-acceptance-"
+
+// keptFor is how long a failed run's directory is kept for inspection. Each run removes older
+// ones, including those of runs that were killed before they could clean up.
+const keptFor = time.Hour
+
 func TestMain(m *testing.M) {
+	removeStaleRuns(os.TempDir(), time.Now().Add(-keptFor))
+	// A run stopped by Ctrl-C or a timeout's SIGTERM still removes its directory. A closed output
+	// pipe (go test … | head) would kill it with SIGPIPE before it could; ignored, the run finishes,
+	// and cleans up.
+	signal.Ignore(syscall.SIGPIPE)
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-stop
+		// Scenarios still running may write as it goes, so once more after they have had a moment.
+		os.RemoveAll(tempDir)
+		time.Sleep(200 * time.Millisecond)
+		os.RemoveAll(tempDir)
+		os.Exit(130)
+	}()
 	code, err := setup()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "acceptance:", err)
+		os.RemoveAll(tempDir)
 		os.Exit(2)
 	}
 	if code == 0 {
 		code = m.Run()
 	}
 	if code == 0 {
-		os.RemoveAll(tempDir) // a failed run's directory is kept, to be inspected
+		os.RemoveAll(tempDir)
+	} else if tempDir != "" {
+		fmt.Fprintf(os.Stderr, "acceptance: kept %s for inspection; the next run removes it after %s\n", tempDir, keptFor)
 	}
 	os.Exit(code)
 }
 
+// removeStaleRuns removes the directories of earlier runs last changed before cutoff: failed runs
+// kept for inspection, and runs killed before they could clean up.
+func removeStaleRuns(dir string, cutoff time.Time) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if !e.IsDir() || !strings.HasPrefix(e.Name(), runPrefix) {
+			continue
+		}
+		if info, err := e.Info(); err == nil && info.ModTime().Before(cutoff) {
+			os.RemoveAll(filepath.Join(dir, e.Name()))
+		}
+	}
+}
+
 func setup() (int, error) {
-	tmp, err := os.MkdirTemp("", "aw-acceptance-")
+	tmp, err := os.MkdirTemp("", runPrefix)
 	if err != nil {
 		return 0, err
 	}
 	tempDir = tmp
+	// testscript makes each scenario's work directory under $GOTMPDIR. Under this run's directory,
+	// they go with it, even when the run is killed.
+	scripts := filepath.Join(tmp, "scripts")
+	if err := os.MkdirAll(scripts, 0o755); err != nil {
+		return 0, err
+	}
+	os.Setenv("GOTMPDIR", scripts)
 
 	awBin := os.Getenv("AW_BIN")
 	if awBin == "" {
