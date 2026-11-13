@@ -1,7 +1,7 @@
 # aw audit starts an agent in a lane of its own with the workspace-audit skill, the developer's
 # question, what changed in aw since the configuration was last audited, and aw's suggestions. Its
 # agent may rehearse its lane, as the onboarding agent may.
-# req: R85 R87 R88
+# req: R85 R87 R88 R95
 # source: plans/workspace-audit.md, Phase 2
 # milestone: M12
 

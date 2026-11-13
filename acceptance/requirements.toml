@@ -1,4 +1,4 @@
-# Requirements R1 to R94 with the milestone from which each must be covered, copied from
+# Requirements R1 to R95 with the milestone from which each must be covered, copied from
 # plans/release-candidate.md §2. A test (coverage/plan_test.go) fails if the two disagree.
 # The coverage check (§3.6) uses this file. See acceptance/README.md.
 
@@ -295,3 +295,6 @@ milestone = "M1"
 [req.R94] # Safety model stated plainly
 milestone = "M3"
 covered_by = "docs"
+
+[req.R95] # Workspace audit
+milestone = "M12"

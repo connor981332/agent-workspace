@@ -1,6 +1,6 @@
 # aw doctor and aw inspect --json list what the workspace audit can suggest, without failing; a
 # suggestion the team declines in [audit] declined is not repeated.
-# req: R14 R85
+# req: R14 R85 R95
 # source: plans/workspace-audit.md, Phase 1
 # milestone: M12
 

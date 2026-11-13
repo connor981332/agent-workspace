@@ -1,6 +1,6 @@
 # aw changelog shows what changed since a version, by default since the configuration's last audit,
 # and lists the configuration keys each item names.
-# req: R93
+# req: R93 R95
 # source: plans/workspace-audit.md, Phase 1
 # milestone: M12
 

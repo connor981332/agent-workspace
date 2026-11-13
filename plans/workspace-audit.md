@@ -8,23 +8,33 @@ review.
 
 ## Status
 
-**State:** PARTIALLY IMPLEMENTED
+**State:** FULLY IMPLEMENTED
 
 **Updated:** 2026-11-13
 
-**Branches / MRs:** `plan/workspace-audit` (the plan), `audit/1-facts` (Phase 1, branched from
-`plan/workspace-audit`; not pushed).
+**Branches / MRs:** `audit/workspace-audit` (the plan and Phases 1 to 3), rebased on master after
+#92 (v0.2.1).
 
-**Done:** Phase 1, built and tested locally on `audit/1-facts`:
-- 1.1 `[workspace] audited_with`, validated as a version. The design skill now sets it.
+**Done:** Phases 1 to 3, and Phase 4.1. Unit tests, vet, the full acceptance suite (with
+`-count=1`), the coverage check, `go mod tidy -diff` and the hot-path check pass locally.
+- 1.1 `[workspace] audited_with`, validated as a version. The design and audit skills set it.
 - 1.2 `aw changelog [--since] [--json]` (`internal/cli/changelog.go`), over a new
   `upgrade.EntriesBetween`.
 - 1.3 `internal/audit`: `Suggest` with the four rules, and `Changelog` with the keys each item
   names. `aw doctor` adds one info line and a `suggestions` array to its JSON.
 - 1.4 `[audit] declined`, with the "comes back when the rule is newer than `audited_with`" filter.
 - 1.5 `audited_with`, `suggestions` and `changelog_since` in `aw inspect --json`.
-- Scenarios `onboarding/audit-suggestions` and `cli/changelog`. Unit tests in `internal/audit`,
-  `internal/config` and `internal/upgrade`.
+- 2.1 to 2.4 `aw audit [--focus] [--harness] [--without-other-hooks]` (`internal/cli/audit.go`), the
+  `aw-workspace-audit` skill, and the `audit this workspace` lane purpose, which may rehearse as
+  onboarding lanes may. `aw onboard` and `aw audit` share `startConfigAgent`. `aw onboard --review`
+  is hidden and starts the audit.
+- 3.1 `aw upgrade` prints one line that points to `aw audit` (`audit.Touching`).
+- 3.2 and 3.3 Docs (`onboarding.md`, `ux.md`, `getting-started.md`, `upgrading.md`, the config
+  reference), the 0.3.0 changelog section, R95 in the spec, `requirements.toml` and the
+  release-candidate plan's §2, and R13 pointing to `aw audit`.
+- Scenarios `onboarding/audit-suggestions`, `onboarding/audit-starts-a-conversation` and
+  `cli/changelog`. `onboarding/onboard-in-a-lane` and `upgrade/edited-managed-file-reported` were
+  extended.
 
 Changes from the plan as written:
 - Suggestions live in a new `internal/audit` package, not `config.Suggest`. They read
@@ -39,12 +49,16 @@ Changes from the plan as written:
   `[table.<name>]`, dotted, `key = value`, a key's own name when only one key has it), so the
   changelog needs no new format.
 - `aw doctor`'s text output lists the suggestion ids rather than only a count.
-- `audit.Introduced` assumes the feature ships in 0.3.0. Change it if the version differs.
+- The audit's prompt carries the changelog since `audited_with`, up to 6 KiB, and aw's
+  suggestions. When the configuration was never audited it points to `bin/aw changelog --json`
+  instead of carrying the whole changelog.
+- `audit.Introduced` and the changelog section assume the feature ships in 0.3.0.
 
 **In progress:** Nothing.
 
-**Next step:** Phase 2, `aw audit` and the `aw-workspace-audit` skill. The changelog entry and
-R95 wait until the v0.2.1 release work has merged, since both touch files that work also changes.
+**Next step:** Phase 4.2, the owner's dogfood checks on RideTracker, recorded as pending: they need
+`~/.local/bin/aw-dev` rebuilt from this branch, which waits for the owner. Then CI on the merge
+request, and the 0.3.0 release.
 
 ## Decisions taken
 

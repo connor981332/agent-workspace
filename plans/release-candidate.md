@@ -159,7 +159,7 @@ docs/dev/benchmarks.md).
   check.
 - Before starting a milestone, get the spec owner's answer to every spec issue whose "Needed by"
   column names that milestone, and record it in the spec, not only here.
-- Requirement numbers (R1 to R94) refer to [requirements.md](../docs/spec/requirements.md). "C1"
+- Requirement numbers (R1 to R95) refer to [requirements.md](../docs/spec/requirements.md). "C1"
   means `workspace-candidate-1` (Python) and "C2" means `workspace-candidate-2` (shell). "F*n*"
   means finding *n* in C2's findings.md.
 - Acceptance scenarios are written **before or together with** the code they cover. A pull request
@@ -172,7 +172,7 @@ docs/dev/benchmarks.md).
 ## Contents
 
 1. [Milestones](#1-milestones)
-2. [Traceability: R1 to R94](#2-traceability-r1-to-r94)
+2. [Traceability: R1 to R95](#2-traceability-r1-to-r95)
 3. [Acceptance suite](#3-acceptance-suite)
 4. [Go module layout](#4-go-module-layout)
 5. [Latency benchmarks](#5-latency-benchmarks)
@@ -501,7 +501,7 @@ documented.
 
 ---
 
-## 2. Traceability: R1 to R94
+## 2. Traceability: R1 to R95
 
 Milestones M0 to M7 make up v0.1, so a requirement whose milestone is M7 or earlier is complete in
 v0.1. Where a requirement is split, the row names both milestones. The coverage check in §3.6 keeps this table and the scenarios' requirement tags in
@@ -603,6 +603,7 @@ agreement.
 | R92 | Black-box acceptance suite | M0 onward | §3. |
 | R93 | `--json` and stable exit codes | M1 onward | Each command lands with both. |
 | R94 | Safety model stated plainly | M3 (`docs/safety.md`), M12 (complete) | The README states it from v0.1. |
+| R95 | Workspace audit | M12 | Added after 0.2.1 ([workspace-audit.md](workspace-audit.md)). |
 
 ---
 

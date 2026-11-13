@@ -12,6 +12,10 @@ aw upgrade                 # to the latest; or: aw upgrade --to 0.5.0
 migrates `workspace.toml` and shows the diff, regenerates managed files, and runs `aw doctor`. If the
 new binary cannot be fetched and verified, the workspace stays where it was.
 
+When the versions it skipped touch keys your workspace sets, or `aw doctor` has suggestions for the
+configuration, `aw upgrade` says so. `aw audit` then walks through what is new with you, and
+`aw changelog` lists it, by default since `[workspace] audited_with`.
+
 Commit the result. Everyone else gets it with `git pull`: the next `bin/aw` fetches and verifies the
 new version once. Running sessions and existing lanes move to it at their next tool call. The first
 command of a new version backs up the state to `state.db.bak-<schema>` and migrates it.
