@@ -166,6 +166,7 @@ type Project struct {
 	Repo         string                `json:"repo"`
 	Lanes        string                `json:"lanes"`
 	Runner       string                `json:"runner"`
+	LocalCompose string                `json:"local_compose"`
 	Install      string                `json:"install"`
 	InstallStamp []string              `json:"install_stamp"`
 	Run          string                `json:"run"`

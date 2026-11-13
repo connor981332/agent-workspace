@@ -85,6 +85,7 @@ The project repositories. The key is the project's name.
 | `repo` | string | — | Clone URL. |
 | `lanes` | one of `"worktree"`, `"shared"` | `"worktree"` | worktree: every lane gets a worktree. shared: lanes run the owner checkout with lane settings. |
 | `runner` | one of `"host"`, `"devcontainer"` | `"host"` | Where commands run: host, or devcontainer (one container per project, shared with VS Code). |
+| `local_compose` | string | — | devcontainer runner: a gitignored Compose file, relative to .devcontainer, that the project's committed devcontainer.json lists in dockerComposeFile and its initializeCommand creates when missing. aw writes its same-path mount, the seat ports and the Compose name there, instead of aw.compose.yaml, so the committed configuration needs nothing of aw's and VS Code's Rebuild keeps the mount. |
 | `install` | string | — | Installs dependencies, in each lane's worktree. Rerun when its stamp changes. |
 | `install_stamp` | array of strings | — | Files, relative to the project, whose contents decide whether install reruns, e.g. package-lock.json. |
 | `run` | string | — | The default command for aw run <project> with no command. |

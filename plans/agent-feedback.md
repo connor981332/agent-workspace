@@ -11,35 +11,44 @@ harness). Not every suggestion is taken: each section says what is kept as it is
 
 **Updated:** 2026-11-12
 
-**Branches / MRs:** stacked, each on the one before:
-[#81](https://github.com/connor981332/agent-workspace/pull/81) `fix/lane-attribution` (B4, part of
-item 3), [#82](https://github.com/connor981332/agent-workspace/pull/82) `fix/acceptance-tmp`
-(acceptance runs leaking into `$TMPDIR`),
-[#83](https://github.com/connor981332/agent-workspace/pull/83) `feedback/1-guard` (Phase 1),
-[#84](https://github.com/connor981332/agent-workspace/pull/84) `feedback/2-branches` (Phase 2),
-[#85](https://github.com/connor981332/agent-workspace/pull/85) `feedback/3-owner` (Phase 3),
-[#86](https://github.com/connor981332/agent-workspace/pull/86) `feedback/4-recovery` (Phase 4),
-`feedback/5-containers` (Phase 5, in part).
+**Branches / MRs:** merged into master: #81 to #87 (Phases 1 to 4, and 5.1, 5.6, 5.7).
+[#88](https://github.com/connor981332/agent-workspace/pull/88) `feedback/6-options` (5.5, F3): open,
+CI was still running on macOS when this was written; merge it once every check passes (the owner
+approved merging it). `feedback/7-devcontainer` (5.2 to 5.4, F5): local only, not pushed, branched
+from master before #88 merged.
 
-**Done:** Phases 1 to 4, with scenarios for each item. 4.3 does not record a configuration hash
-per lane or mark old lanes in `aw lanes`: `aw setup <lane>` adds what is missing, and says which
-projects the lane lacks, which covered the reported case without a migration. 4.5 also keeps a
-lane with open notes from `aw sweep`, since recycling it would lose them. In 3.1, a pair session may also
-delete aw's own records (`.git/aw`), which the removed self-modification rule refused; flagged for
-review on its PR. Two changes from the plan as written:
-- 2.6, F4: rehearsal does not guess which Compose files a host project's scripts start; aw cannot
-  see into them, and a wrong guess would let a rehearsal reach real containers. A person's review
-  in `accepted_findings` decides instead, and an accepted file's Compose project name is still
+**Done:** Phases 1 to 4, 5.1, 5.5 (in #88), 5.6 as skill text, 5.7 as `on_acquire` only. Changes
+from the plan as written:
+- 2.6, F4: rehearsal does not guess which Compose files a host project's scripts start; a person's
+  review in `accepted_findings` decides, and an accepted file's Compose project name is still
   refused beside a container command. The runtime refusal of an accepted file is not built.
-- 2.2: `aw push` also records the remote name for recap and sweep's forge lookups, which by the
-  lane's own branch name would never find the merge request.
+- 2.2: `aw push` also records the remote name for recap and sweep's forge lookups.
+- 3.1: a pair session may also delete aw's own records under `.git/aw` (flagged in #85, merged).
+- 4.3: no per-lane configuration hash; `aw setup <lane>` adds what is missing and names projects the
+  lane lacks. 4.5: `aw sweep` keeps a lane with open notes.
+- 5.5: choices live under `[options.<name>.choices.<choice>]`; `aw rehearse --choose` is not built;
+  `{lane}` and `{namespace}` are now expanded in `projects.<name>.env` too.
+- 5.6: detecting alternatives in `aw inspect` is not built. 5.7: no `on_release`.
 
-**In progress:** Phase 5. Done: 5.1 (B2, reproduced with `docker compose config`, then fixed), 5.6
-as skill text (detecting alternatives in `aw inspect` is not built), and 5.7 as `on_acquire` only
-(no `on_release`: a seat is given up in many ways, and the handoff asked for is the new holder's).
+**In progress:** F5 on `feedback/7-devcontainer`. Committed there: the Compose name resolved exactly
+as the devcontainer CLI 0.89.0 does (read from its source), and the F5 checks recorded in
+`docs/dev/spikes.md` (checks 1 to 3 answered; check 4, VS Code's picker and Rebuild with two
+configurations, needs the owner in VS Code). Committed as work in progress, unit tests passing,
+acceptance suite not yet run: 5.2 and 5.3 started:
+- `projects.<name>.local_compose` (Mode B): aw writes its fragment (same-path mount, seat ports,
+  Compose name) into the project's own gitignored local Compose file, which its committed
+  devcontainer.json lists, instead of `aw.compose.yaml`. `runners.Validate(dir, local)` checks the
+  right file is listed; doctor reports Mode B as OK without requiring aw's claim step.
+- The `workspaceFolder = ${localWorkspaceFolder}` requirement is dropped in every mode: aw's mount
+  is an extra mount, and aw runs commands at lane paths.
 
-**Next step:** 5.5 (F3, team options with a choice per developer), then 5.2 to 5.4 (F5). 5.2 starts
-with the change requests' four checks, two of which need VS Code by hand.
+**Next step:** on `feedback/7-devcontainer`: (1) in `config.check`, refuse `local_compose` unless
+the runner is devcontainer, and refuse an absolute path or `..`; (2) fix any acceptance scenarios that
+expected the workspaceFolder refusal (`acceptance/scenarios/runners/`, `doctor/`), and add a
+scenario for `local_compose`, with stubbed docker/devcontainer as the existing runner scenarios do;
+(3) changelog, `docs/spec/architecture.md` (Runners) and `docs/reference/config.md` (regenerate);
+(4) then 5.4, Mode A (aw generates `.devcontainer/aw/devcontainer.json`), once the owner has run
+check 4 in VS Code.
 
 ## Decisions taken
 

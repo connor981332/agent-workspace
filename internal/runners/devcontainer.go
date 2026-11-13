@@ -41,6 +41,9 @@ type Devcontainer struct {
 	cli     []string // the devcontainer CLI
 	cliEnv  []string
 	lock    string // serializes starting the container
+	// fragment is the Compose file aw writes, relative to .devcontainer: aw.compose.yaml, or the
+	// project's own local slot (local_compose), which its committed configuration already lists.
+	fragment string
 	// BeforeStart brings up what the projects share. It also runs for VS Code, in the claim step.
 	BeforeStart func(context.Context, io.Writer) error
 }
@@ -116,12 +119,12 @@ var composeUnsafe = regexp.MustCompile(`[^-_a-z0-9]`)
 // (0.1.5 change requests, B2). aw's fragment is left out, since it repeats this name. Adopting it
 // keeps aw on the developer's existing stack, and its named volumes, instead of starting a second,
 // empty one beside it.
-func ProjectComposeName(dir string, files []string) string {
+func ProjectComposeName(dir string, files []string, own ...string) string {
 	devcontainer := filepath.Join(dir, ".devcontainer")
 	var paths []string
 	for _, f := range files {
-		if filepath.Base(f) == Fragment {
-			continue
+		if filepath.Base(f) == Fragment || slices.Contains(own, f) {
+			continue // what aw writes repeats the name; reading it back would keep an old one
 		}
 		if !filepath.IsAbs(f) {
 			f = filepath.Join(devcontainer, f)
@@ -152,6 +155,13 @@ func ProjectComposeName(dir string, files []string) string {
 		return composeSafe(name)
 	}
 	return ComposeName(dir)
+}
+
+func cmpOr(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
 }
 
 // composeSafe is a name as the devcontainer CLI passes it to --project-name: lowercase, with only
@@ -254,19 +264,27 @@ func (d devcontainerJSON) composeFiles() []string {
 
 // Validate checks a devcontainer.json against what the runner needs: Compose, the fragment, and the
 // same path inside and outside (S7). Each error names the fix. It only reads the file.
-func Validate(dir string) (devcontainerJSON, error) {
+//
+// local is the project's local Compose slot (local_compose), or "" for aw.compose.yaml. Either must
+// be listed. workspaceFolder may be anything: aw's mount puts the checkout at its own path beside
+// the project's, and aw runs every command at a lane's path, wherever the editor opens.
+func Validate(dir, local string) (devcontainerJSON, error) {
 	d, name, err := readDevcontainerJSON(dir)
 	if err != nil {
 		return d, err
 	}
 	files := d.composeFiles()
+	want := Fragment
+	if local != "" {
+		want = local
+	}
 	switch {
 	case len(files) == 0 || d.Service == "":
 		return d, fmt.Errorf(`%s has no dockerComposeFile and service → aw runs one Compose service per project; set "dockerComposeFile" and "service"`, name)
-	case !slices.Contains(files, Fragment):
-		return d, fmt.Errorf(`%s does not list %s in dockerComposeFile → add it after the project's own Compose file: it publishes the seat ports and makes the same-path mount`, name, Fragment)
-	case d.WorkspaceFolder != "${localWorkspaceFolder}":
-		return d, fmt.Errorf(`%s sets workspaceFolder to %q → set it to "${localWorkspaceFolder}", so that paths mean the same inside and outside the container`, name, d.WorkspaceFolder)
+	case !slices.Contains(files, want) && local != "":
+		return d, fmt.Errorf(`%s does not list %s, the local Compose file local_compose names, in dockerComposeFile → add it after the project's own Compose files, and have initializeCommand create it when it is missing`, name, local)
+	case !slices.Contains(files, want):
+		return d, fmt.Errorf(`%s does not list %s in dockerComposeFile → add it after the project's own Compose file: it publishes the seat ports and makes the same-path mount; or name a local Compose file the project already lists with local_compose`, name, Fragment)
 	}
 	return d, nil
 }
@@ -294,7 +312,7 @@ func NewDevcontainer(c *config.Config, owner, project, stateDir string) (*Devcon
 	if resolved, err := filepath.EvalSymlinks(dir); err == nil {
 		dir = resolved
 	}
-	j, err := Validate(dir)
+	j, err := Validate(dir, p.LocalCompose)
 	if err != nil {
 		return nil, err
 	}
@@ -320,7 +338,7 @@ func NewDevcontainer(c *config.Config, owner, project, stateDir string) (*Devcon
 		rehearsal = c.Workspace.Namespace
 	}
 	env = append(env, ComposeEnv(files, c.Ports.Offset, rehearsal)...)
-	compose := ProjectComposeName(dir, j.composeFiles())
+	compose := ProjectComposeName(dir, j.composeFiles(), p.LocalCompose)
 	if workspace.IsRehearsal(owner) {
 		// The folder has the owner's name, so its container must not take the owner's Compose name.
 		compose += "_" + c.Workspace.Namespace
@@ -328,7 +346,8 @@ func NewDevcontainer(c *config.Config, owner, project, stateDir string) (*Devcon
 	return &Devcontainer{Project: project, Dir: dir, Compose: compose, Service: j.Service, User: user,
 		Ports: SeatPorts(c, project), cliEnv: env,
 		cli:  strings.Fields(strings.ReplaceAll(c.Devcontainer.Command, "{version}", c.Devcontainer.Version)),
-		lock: filepath.Join(stateDir, "containers", project+".lock")}, nil
+		lock:     filepath.Join(stateDir, "containers", project+".lock"),
+		fragment: cmpOr(p.LocalCompose, Fragment)}, nil
 }
 
 // fragmentText is the fragment. The name pins the Compose project (F1), and the file is rewritten
@@ -349,7 +368,8 @@ func (d *Devcontainer) fragmentText() string {
 // WriteFragment writes the fragment if it changed, and keeps it out of Git through the clone's own
 // exclude file, which no commit carries.
 func (d *Devcontainer) WriteFragment() error {
-	name := filepath.Join(d.Dir, ".devcontainer", Fragment)
+	frag := cmpOr(d.fragment, Fragment)
+	name := filepath.Join(d.Dir, ".devcontainer", filepath.FromSlash(frag))
 	text := d.fragmentText()
 	if old, err := os.ReadFile(name); err != nil || string(old) != text {
 		if err := os.WriteFile(name, []byte(text), 0o644); err != nil {
@@ -357,7 +377,7 @@ func (d *Devcontainer) WriteFragment() error {
 		}
 	}
 	exclude := filepath.Join(d.Dir, ".git", "info", "exclude")
-	line := ".devcontainer/" + Fragment
+	line := ".devcontainer/" + frag
 	old, err := os.ReadFile(exclude)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
