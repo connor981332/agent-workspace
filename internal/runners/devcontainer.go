@@ -109,11 +109,13 @@ func ComposeName(dir string) string {
 var composeUnsafe = regexp.MustCompile(`[^-_a-z0-9]`)
 
 // ProjectComposeName is the Compose project name the project's own devcontainer configuration
-// resolves to, as the devcontainer CLI and VS Code find it: COMPOSE_PROJECT_NAME, from the
-// environment or the .env file beside the first Compose file, else the last top-level name: in the
-// listed Compose files, else ComposeName's default (0.1.5 change requests, B2). aw's fragment is
-// left out, since it repeats this name. Adopting it keeps aw on the developer's existing stack, and
-// its named volumes, instead of starting a second, empty one beside it.
+// resolves to, in the order the devcontainer CLI (0.89.0, read from its source) finds it:
+// COMPOSE_PROJECT_NAME from the environment, else from the .env file in the directory the CLI runs
+// in (the checkout, where aw runs it), else the last top-level name: in the listed Compose files,
+// interpolated from the .env beside the first of them as Compose does, else ComposeName's default
+// (0.1.5 change requests, B2). aw's fragment is left out, since it repeats this name. Adopting it
+// keeps aw on the developer's existing stack, and its named volumes, instead of starting a second,
+// empty one beside it.
 func ProjectComposeName(dir string, files []string) string {
 	devcontainer := filepath.Join(dir, ".devcontainer")
 	var paths []string
@@ -126,15 +128,15 @@ func ProjectComposeName(dir string, files []string) string {
 		}
 		paths = append(paths, f)
 	}
+	if v := os.Getenv("COMPOSE_PROJECT_NAME"); v != "" {
+		return composeSafe(v)
+	}
+	if v := readDotEnv(filepath.Join(dir, ".env"))["COMPOSE_PROJECT_NAME"]; v != "" {
+		return composeSafe(v)
+	}
 	env := map[string]string{}
 	if len(paths) > 0 {
 		env = readDotEnv(filepath.Join(filepath.Dir(paths[0]), ".env"))
-	}
-	if v := os.Getenv("COMPOSE_PROJECT_NAME"); v != "" {
-		env["COMPOSE_PROJECT_NAME"] = v
-	}
-	if v := env["COMPOSE_PROJECT_NAME"]; v != "" {
-		return strings.ToLower(v)
 	}
 	name := ""
 	for _, p := range paths {
@@ -146,10 +148,16 @@ func ProjectComposeName(dir string, files []string) string {
 			name = interpolate(strings.Trim(strings.TrimSpace(string(m[1])), `"'`), env)
 		}
 	}
-	if name != "" && !strings.Contains(name, "$") {
-		return strings.ToLower(name)
+	if name != "" && !strings.Contains(name, "$") && name != "devcontainer" {
+		return composeSafe(name)
 	}
 	return ComposeName(dir)
+}
+
+// composeSafe is a name as the devcontainer CLI passes it to --project-name: lowercase, with only
+// letters, digits, hyphens and underscores.
+func composeSafe(s string) string {
+	return composeUnsafe.ReplaceAllString(strings.ToLower(s), "")
 }
 
 var (

@@ -75,10 +75,18 @@ func TestProjectComposeName(t *testing.T) {
 	if got := ProjectComposeName(named, files); got != "mine" {
 		t.Errorf("a name from .env: %q", got)
 	}
-	write(named, ".env", "COMPOSE_PROJECT_NAME=fromenv\n")
-	if got := ProjectComposeName(named, files); got != "fromenv" {
-		t.Errorf("COMPOSE_PROJECT_NAME in .env: %q", got)
+	// COMPOSE_PROJECT_NAME counts from the .env where the CLI runs, the checkout, not .devcontainer.
+	write(named, ".env", "STACK=mine\nCOMPOSE_PROJECT_NAME=ignored\n")
+	if got := ProjectComposeName(named, files); got != "mine" {
+		t.Errorf("COMPOSE_PROJECT_NAME in .devcontainer/.env: %q", got)
 	}
+	if err := os.WriteFile(filepath.Join(named, ".env"), []byte("COMPOSE_PROJECT_NAME=From.Env\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := ProjectComposeName(named, files); got != "fromenv" {
+		t.Errorf("COMPOSE_PROJECT_NAME in the checkout's .env: %q", got)
+	}
+	os.Remove(filepath.Join(named, ".env"))
 	write(named, ".env", "")
 	write(named, "compose.kafka.yaml", "name: ${UNSET_STACK_NAME}\n")
 	if got := ProjectComposeName(named, files); got != "checkout_devcontainer" {
