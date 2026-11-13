@@ -152,15 +152,16 @@ expected but can follow.
 - **R59.** Ref protection is enforced inside Git by a `reference-transaction` hook as well as by the
   guards.
 - **R60.** The human can grant a pair session in the owner checkout. Only the human can grant it.
-- **R61.** A pair session acts with the owner's seat for resources, and still needs approval for
-  changes to the workspace's own configuration. Enabled safeguards apply to it as well.
+- **R61.** A pair session acts with the owner's seat for resources, and aw's own rules do not apply
+  to it: it may change the workspace's own configuration and run the human's commands. The team's
+  guards and enabled safeguards apply to it as well.
 - **R62.** Work can move from the owner checkout to a lane (`aw move-to-lane`) and a lane's head can be
   tried in the owner checkout (`aw try`).
 
 ## Self-modification, delegation and roles (wishlist 10, 23)
 
 - **R63.** Changes to the workspace's own instructions, hooks, guards and configuration need human
-  approval.
+  approval: a merge request from a lane, or a pair session the human started.
 - **R64.** The owner can grant an expiring, scoped delegation (for example routine maintenance for one
   hour). Agents cannot grant or edit delegations.
 - **R65.** The team can define roles, such as owner, implementer (never pushes or merges) and

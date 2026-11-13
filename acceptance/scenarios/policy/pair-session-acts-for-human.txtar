@@ -1,5 +1,8 @@
-# A pair session may edit the owner checkout, but the workspace's own instructions, hooks and configuration need the human, and destructive Git stays refused.
-# req: R63
+# A pair session (here, by owner_sessions = "pair") acts for the human: it may edit the owner
+# checkout, including the workspace's own instructions, hooks and configuration. The safeguards the
+# team turned on still apply, so destructive Git stays refused.
+# req: R61 R63
+# changed: the workspace's own configuration was asked before (plans/agent-feedback.md, 3.1).
 # source: spec (no candidate source)
 # milestone: M3
 
@@ -12,13 +15,13 @@ exec awtest-hook write web/src/app.ts
 ! stdout .
 exec awtest-hook bash 'echo hi > notes.txt'
 exec awtest-hook write workspace.toml
-stdout '"permissionDecision":"ask"'
-stdout 'needs|reviews'
+! stdout .
 exec awtest-hook write AGENTS.md
-stdout '"permissionDecision":"ask"'
+! stdout .
 exec awtest-hook write .claude/settings.json
-stdout '"permissionDecision":"ask"'
-! exec awtest-hook -harness codex write workspace.toml
+! stdout .
+exec awtest-hook bash 'bin/aw discard old-lane --yes'
+! stdout .
 ! exec awtest-hook bash 'git branch -D main'
 stderr 'deletes a branch'
 ! exec awtest-hook bash 'git reset --hard'

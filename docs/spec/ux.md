@@ -22,9 +22,9 @@ The CLI is part of the design, not an afterthought. Most of the tool's value is 
 | Command | Who | Does |
 |---|---|---|
 | `aw` | human | Dashboard: needs you, running, parked, cleanable |
-| `aw new "<purpose>" [--harness h] [--mux] [--branch b]` | human | Claim a lane and launch a harness in it |
+| `aw new "<purpose>" [--harness h \| --shell] [--mux] [--branch b]` | human | Claim a lane and launch a harness in it, or with `--shell` your own shell, with the lane's environment |
 | `aw attach "<purpose>" [--branch b]` | agent | Claim a lane for the current session |
-| `aw resume [name] [--all] [--mux]` | human | Reopen sessions where they left off |
+| `aw resume [name] [--all] [--mux] [--shell]` | human | Reopen sessions where they left off, or with `--shell` open your own shell in the lane |
 | `aw open <name>` | human | Start a fresh session on existing work, with the handoff injected |
 | `aw recap [--remote]` | human | Full status, for after a reboot or a weekend |
 | `aw run <project> <cmd…>` | both | Run a command in the right place with the lane's environment |

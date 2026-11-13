@@ -68,13 +68,15 @@ session**.
   receives spells out that command for it. Only the human can grant pairing: as with delegations, hooks refuse an agent that tries to
   grant pairing or edit its record. `owner_sessions = "pair"` in the individual layer makes every
   directly started session in the owner checkout a pair session. `aw new` still gives lanes.
-- **Writes** in the owner checkout are allowed. No lane is claimed.
+- **aw's own rules do not apply.** A pair session acts for the human: it may write anywhere in the
+  owner checkout and in the lanes, change the workspace's own instructions, hooks and configuration,
+  run the human's `aw` commands (`aw upgrade`, `aw discard`, `aw sweep --apply`, granting another
+  pair session) and start servers directly. That lets the human hand an agent routine maintenance,
+  such as upgrading aw or reviewing and cleaning up lanes, and is the base for a session that
+  coordinates other lanes. No lane is claimed.
 - **Resources.** A pair session acts for the owner: its `aw serve` uses seat 0 and preempts agents.
-- **Still refused:** whatever the enabled safeguards refuse, and changes to the
-  workspace's own instructions, hooks, guards and configuration, which still need review. Pairing
-  grants the checkout, not ownership of the workspace. This covers file tools, shell redirects and
-  the common file commands. Writing inside a Git directory is refused, not asked, because `aw`'s
-  record of the session is there.
+- **Still refused:** what the team chose: its guards, and the safeguards it turned on. Those are the
+  team's rules, not aw's, and the harness's own permission prompts still apply.
 - **Several pair sessions** are allowed, with a warning, because two agents editing one tree is the
   collision lanes exist to prevent.
 - Pair sessions appear in `aw`, `recap` and `resume`. `aw finish` writes a handoff but protects

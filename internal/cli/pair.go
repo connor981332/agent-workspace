@@ -31,8 +31,8 @@ func agentContext() string {
 	if inRehearsal() {
 		return "" // a throwaway copy, where aw rehearse runs the human's commands against nothing real
 	}
-	if os.Getenv("AW_SESSION") != "" {
-		return "AW_SESSION is set"
+	if s := os.Getenv("AW_SESSION"); s != "" && !strings.HasPrefix(s, shellHarness+":") {
+		return "AW_SESSION is set" // aw new --shell sets it for a person's shell, which is no agent
 	}
 	for _, e := range harnessEnv {
 		if os.Getenv(e.env) != "" {

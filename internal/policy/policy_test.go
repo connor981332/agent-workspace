@@ -3,6 +3,7 @@ package policy
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -245,6 +246,21 @@ func TestUnattached(t *testing.T) {
 	}
 }
 
+// forRole adapts the lane's expectations to a pair session, which aw's own rules (owner-only
+// commands, direct server starts) do not apply to.
+func forRole(role Role, cases []tcase) []tcase {
+	if role != Pair {
+		return cases
+	}
+	out := slices.Clone(cases)
+	for i, tc := range out {
+		if tc.rule == "owner-only" || tc.rule == "servers" {
+			out[i].want, out[i].rule = Allow, ""
+		}
+	}
+	return out
+}
+
 func TestCommandRules(t *testing.T) {
 	f := newFixture(t)
 	for _, role := range []Role{Lane, Pair} {
@@ -253,7 +269,7 @@ func TestCommandRules(t *testing.T) {
 		if role == Pair {
 			cwd = f.owner
 		}
-		run(t, s, cwd, []tcase{
+		run(t, s, cwd, forRole(role, []tcase{
 			// Owner-only aw commands, wherever they appear.
 			{"bin/aw discard checkout-tax", Deny, "owner-only"},
 			{"echo $(bin/aw pair)", Deny, "owner-only"},
@@ -320,7 +336,7 @@ func TestCommandRules(t *testing.T) {
 			{"glab mr merge 3", Deny, "publication"},
 			{"npm publish", Deny, "publication"},
 			{"gh pr view 3", Allow, ""},
-		})
+		}))
 	}
 	s := f.scope(Lane)
 	run(t, s, f.lane, []tcase{
@@ -334,23 +350,38 @@ func TestCommandRules(t *testing.T) {
 	run(t, s, f.lane, []tcase{{"git push origin aw/x", Ask, "publication"}})
 }
 
-func TestPairSelfModification(t *testing.T) {
+// A pair session is one the human invited, so aw's own rules do not apply to it: it may change the
+// workspace's configuration, run the human's aw commands and start servers directly. What the team
+// chose still applies: its guards and the safeguards it turned on (plans/agent-feedback.md, 3.1).
+func TestPairBypassesAwsOwnRules(t *testing.T) {
 	f := newFixture(t)
 	s := f.scope(Pair)
 	s.AskSupported = true
-	for path, want := range map[string]Verdict{
-		"workspace.toml":        Ask,
-		"AGENTS.md":             Ask,
-		".claude/settings.json": Ask,
-		"web/src/app.ts":        Allow,
-	} {
-		if d := Decide(s, Call{Tool: Write, Cwd: f.owner, Paths: []string{path}}); d.Verdict != want {
-			t.Errorf("pair write %s: %v, want %v", path, d, want)
+	s.Safeguards = nil
+	for _, path := range []string{"workspace.toml", "AGENTS.md", ".claude/settings.json", "web/src/app.ts", "bin/aw"} {
+		if d := Decide(s, Call{Tool: Write, Cwd: f.owner, Paths: []string{path}}); d.Verdict != Allow {
+			t.Errorf("pair write %s: %v", path, d)
 		}
 	}
-	if d := Decide(s, Call{Tool: Shell, Cwd: f.owner, Command: "echo hi > notes.txt"}); d.Verdict != Allow {
-		t.Errorf("a pair session writes in the owner checkout: %v", d)
-	}
+	run(t, s, f.owner, []tcase{
+		{"echo hi > notes.txt", Allow, ""},
+		{"echo x >> workspace.toml && bin/aw upgrade --to 0.2.0", Allow, ""},
+		{"bin/aw discard old-lane --yes && bin/aw sweep --apply", Allow, ""},
+		{"npm run dev -- --port 3000", Allow, ""},
+		{"cat " + quote(f.lane) + "/AGENTS.md && touch " + quote(f.lane) + "/x", Allow, ""},
+		{"touch \"$X\"", Allow, ""},
+	})
+	// What the team turned on still applies.
+	s.Safeguards = allSafeguards
+	s.Guards = []TeamGuard{{Name: "schema", Paths: []string{"api/schema.graphql"}, Message: "generated"}}
+	run(t, s, f.owner, []tcase{
+		{"git push --force origin main", Deny, "git"},
+		{"pkill node", Deny, "processes"},
+		{"cat api/.env", Deny, "secrets"},
+		{"echo x > api/schema.graphql", Deny, "team-guard"},
+		{"git push origin main", Ask, "publication"},
+		{"echo x > workspace.toml", Allow, ""},
+	})
 }
 
 func TestDenyMessagesQuotePaths(t *testing.T) {
@@ -383,40 +414,6 @@ func BenchmarkDecideShell(b *testing.B) {
 	cmd := `cd web && npm run test -- --grep "checkout tax" 2>&1 | tee /tmp/out.log; git status --porcelain`
 	for b.Loop() {
 		Decide(s, Call{Tool: Shell, Cwd: f.lane, Command: cmd})
-	}
-}
-
-func TestPairShellSelfModification(t *testing.T) {
-	f := newFixture(t)
-	s := Scope{Role: Pair, Owner: f.owner, Home: f.home, AskSupported: true}
-	for cmd, want := range map[string]Verdict{
-		"echo hi > notes.txt":             Allow,
-		"cp a.txt b.txt":                  Allow,
-		"cp AGENTS.md /tmp/x":             Allow,
-		"rm -rf build":                    Allow,
-		"cat workspace.toml":              Allow,
-		"sed s/a/b/ workspace.toml":       Allow,
-		"echo x 2>&1":                     Allow,
-		"echo x > /dev/null":              Allow,
-		"echo x > workspace.toml":         Ask,
-		"echo x >> CLAUDE.md":             Ask,
-		"cp a.txt AGENTS.md":              Ask,
-		"cp -t .aw a.txt":                 Ask,
-		"mv AGENTS.md old":                Ask,
-		"rm bin/aw":                       Ask,
-		"sed -i s/a/b/ workspace.toml":    Ask,
-		"dd if=x of=.claude/settings":     Ask,
-		"ln -s x .githooks/pre-push":      Ask,
-		"touch \"$X\"":                    Deny,
-		"cd api && echo x > ../AGENTS.md": Ask,
-		"echo x > .git/config":            Deny,
-		"rm -rf .git/aw":                  Deny,
-		"echo x > api/.git/config":        Deny,
-		"sqlite3 .git/aw/state.db x":      Deny,
-	} {
-		if d := Decide(s, Call{Tool: Shell, Cwd: f.owner, Command: cmd}); d.Verdict != want {
-			t.Errorf("%s: got %v (%s), want %v", cmd, d.Verdict, d.Message, want)
-		}
 	}
 }
 
