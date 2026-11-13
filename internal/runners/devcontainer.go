@@ -108,6 +108,94 @@ func ComposeName(dir string) string {
 
 var composeUnsafe = regexp.MustCompile(`[^-_a-z0-9]`)
 
+// ProjectComposeName is the Compose project name the project's own devcontainer configuration
+// resolves to, as the devcontainer CLI and VS Code find it: COMPOSE_PROJECT_NAME, from the
+// environment or the .env file beside the first Compose file, else the last top-level name: in the
+// listed Compose files, else ComposeName's default (0.1.5 change requests, B2). aw's fragment is
+// left out, since it repeats this name. Adopting it keeps aw on the developer's existing stack, and
+// its named volumes, instead of starting a second, empty one beside it.
+func ProjectComposeName(dir string, files []string) string {
+	devcontainer := filepath.Join(dir, ".devcontainer")
+	var paths []string
+	for _, f := range files {
+		if filepath.Base(f) == Fragment {
+			continue
+		}
+		if !filepath.IsAbs(f) {
+			f = filepath.Join(devcontainer, f)
+		}
+		paths = append(paths, f)
+	}
+	env := map[string]string{}
+	if len(paths) > 0 {
+		env = readDotEnv(filepath.Join(filepath.Dir(paths[0]), ".env"))
+	}
+	if v := os.Getenv("COMPOSE_PROJECT_NAME"); v != "" {
+		env["COMPOSE_PROJECT_NAME"] = v
+	}
+	if v := env["COMPOSE_PROJECT_NAME"]; v != "" {
+		return strings.ToLower(v)
+	}
+	name := ""
+	for _, p := range paths {
+		data, err := os.ReadFile(p)
+		if err != nil {
+			continue
+		}
+		if m := topLevelName.FindSubmatch(data); m != nil {
+			name = interpolate(strings.Trim(strings.TrimSpace(string(m[1])), `"'`), env)
+		}
+	}
+	if name != "" && !strings.Contains(name, "$") {
+		return strings.ToLower(name)
+	}
+	return ComposeName(dir)
+}
+
+var (
+	topLevelName = regexp.MustCompile(`(?m)^name:[ \t]*([^#\n]+)`)
+	composeVar   = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)(:?-([^}]*))?\}`)
+)
+
+// interpolate resolves ${NAME}, ${NAME:-default} and ${NAME-default} as Compose does, from the
+// environment and the .env file. What it cannot resolve stays, and the caller falls back.
+func interpolate(s string, env map[string]string) string {
+	return composeVar.ReplaceAllStringFunc(s, func(m string) string {
+		parts := composeVar.FindStringSubmatch(m)
+		v, set := env[parts[1]]
+		if !set {
+			v, set = os.LookupEnv(parts[1])
+		}
+		switch {
+		case set && (v != "" || !strings.HasPrefix(parts[2], ":")):
+			return v
+		case parts[2] != "":
+			return parts[3]
+		}
+		return m
+	})
+}
+
+// readDotEnv reads KEY=VALUE lines, as Compose's .env file has them.
+func readDotEnv(path string) map[string]string {
+	out := map[string]string{}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return out
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		k, v, ok := strings.Cut(strings.TrimPrefix(line, "export "), "=")
+		if ok {
+			out[strings.TrimSpace(k)] = strings.Trim(strings.TrimSpace(v), `"'`)
+		}
+	}
+	return out
+}
+
 // SeatPorts are the ports a project's servers may use: seat 0 to capacity of each.
 func SeatPorts(c *config.Config, project string) []int {
 	capacity := map[string]int{}
@@ -224,7 +312,7 @@ func NewDevcontainer(c *config.Config, owner, project, stateDir string) (*Devcon
 		rehearsal = c.Workspace.Namespace
 	}
 	env = append(env, ComposeEnv(files, c.Ports.Offset, rehearsal)...)
-	compose := ComposeName(dir)
+	compose := ProjectComposeName(dir, j.composeFiles())
 	if workspace.IsRehearsal(owner) {
 		// The folder has the owner's name, so its container must not take the owner's Compose name.
 		compose += "_" + c.Workspace.Namespace
