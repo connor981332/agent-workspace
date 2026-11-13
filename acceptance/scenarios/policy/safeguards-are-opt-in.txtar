@@ -29,7 +29,7 @@ exec awtest-hook bash 'cat web/.env'
 ! stdout 'ask|deny'
 
 # The lane is still aw's.
-! exec awtest-hook bash 'cat ../../README.md'
+! exec awtest-hook bash 'touch ../../README.md'
 stderr 'outside lane'
 ! exec awtest-hook bash 'git worktree prune'
 stderr 'aw manages'

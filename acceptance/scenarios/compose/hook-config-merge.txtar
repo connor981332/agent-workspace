@@ -50,5 +50,5 @@ lane="$OWNER/.worktrees/01"
 mkdir -p "$lane/sub"
 cd "$lane/sub"
 command=$(sed -n 's/.*"command": "\(d=.*hook claude pre-tool-use.*\)".*/\1/p' "$OWNER/.claude/settings.json" | sed 's/\\"/"/g')
-printf '{"session_id":"s","cwd":"%s","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"cat ../../../README.md"}}' "$lane/sub" | sh -c "$command"
+printf '{"session_id":"s","cwd":"%s","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"touch ../../../README.md"}}' "$lane/sub" | sh -c "$command"
 echo "status=$?"

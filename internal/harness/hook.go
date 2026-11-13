@@ -97,15 +97,20 @@ func hook(args []string, version string, stdin io.Reader, stdout, stderr io.Writ
 	d := policy.Decide(*scope, p.Call)
 	t.Mark("decide")
 	code := a.reply(p, d, stdout, stderr)
-	if d.Verdict == policy.Allow && a.notify != nil && len(notes.pending) > 0 {
+	if d.Verdict == policy.Allow && a.notify != nil && (len(notes.pending) > 0 || d.Note != "") {
 		var text []string
+		if d.Note != "" {
+			text = append(text, d.Note)
+		}
 		ids := make([]int, 0, len(notes.pending))
 		for _, n := range notes.pending {
 			text = append(text, fmt.Sprintf("[aw notification %d] %s", n.ID, n.Message))
 			ids = append(ids, n.ID)
 		}
 		a.notify(strings.Join(text, "\n"), stdout)
-		_ = state.MarkDelivered(notes.stateDir, ids) // an undelivered message is sent again (S6)
+		if len(ids) > 0 {
+			_ = state.MarkDelivered(notes.stateDir, ids) // an undelivered message is sent again (S6)
+		}
 	}
 	if notes.touch > 0 {
 		_ = state.TouchLeases(notes.stateDir, notes.touch) // best effort: the next call tries again
@@ -443,7 +448,7 @@ func startContext(s policy.Scope) string {
 func startText(s policy.Scope) string {
 	switch s.Role {
 	case policy.Lane:
-		return fmt.Sprintf("You are working in lane %s, at %s. Stay inside it. If your working directory is elsewhere (your original harness cwd), start every shell command with cd %s && and use absolute paths inside the lane for file tools. Run bin/aw whoami if you are unsure.",
+		return fmt.Sprintf("You are working in lane %s, at %s. Change files only inside it; you may read anywhere. If your working directory is elsewhere (your original harness cwd), start every shell command with cd %s && and use absolute paths inside the lane for file tools. Run bin/aw whoami if you are unsure.",
 			s.LaneName, policy.Quote(s.LaneRoot), policy.Quote(s.LaneRoot))
 	case policy.Pair:
 		return "This is a pair session in the owner checkout, granted by the human. You may edit here. Destructive Git, unapproved publication and changes to the workspace's own configuration are still refused."

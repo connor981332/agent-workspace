@@ -15,7 +15,7 @@ env LANE=$OWNER/.worktrees/01
 ! exec awtest-hook -harness grok -session grok-one bash 'git status'
 stderr 'this session belongs to lane feature-flag'
 exec awtest-hook -harness grok -session grok-one read $LANE/README.md
-! exec awtest-hook -harness grok -session grok-one read $OWNER/README.md
+! exec awtest-hook -harness grok -session grok-one write $OWNER/README.md
 exec awtest-hook -harness grok -session grok-one edit $LANE/web/x.ts
 ! exec awtest-hook -harness grok -session grok-one write $OWNER/x
 exec sh $WORK/cd.sh
@@ -24,4 +24,4 @@ exec awtest-hook -harness grok -session someone-else bash 'git status'
 -- cd.sh --
 set -e
 awtest-hook -harness grok -session grok-one bash "cd \"$LANE\" && git status"
-if awtest-hook -harness grok -session grok-one bash "cd \"$LANE\" && cat \"$OWNER/README.md\"" 2>/dev/null; then exit 1; fi
+if awtest-hook -harness grok -session grok-one bash "cd \"$LANE\" && touch \"$OWNER/README.md\"" 2>/dev/null; then exit 1; fi

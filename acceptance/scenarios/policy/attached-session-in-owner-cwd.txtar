@@ -45,6 +45,6 @@ exec awtest-hook -session s-1 bash 'git status'
 -- in-lane.sh --
 set -e
 awtest-hook -session s-1 bash "cd \"$LANE\" && git status"
-if awtest-hook -session s-1 bash "cd \"$LANE\" && cat ../../AGENTS.md" 2>/dev/null; then exit 1; fi
+if awtest-hook -session s-1 bash "cd \"$LANE\" && rm ../../AGENTS.md" 2>/dev/null; then exit 1; fi
 if awtest-hook -session s-1 bash "cd \"$LANE\" && pkill node" 2>/dev/null; then exit 1; fi
 if awtest-hook -session s-1 bash "cd \"$OWNER\" && git status" 2>/dev/null; then exit 1; fi

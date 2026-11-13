@@ -9,7 +9,7 @@ exec aw attach 'one'
 cd .worktrees/01
 exec sh $WORK/try.sh before run ls
 stdout 'status=0'
-exec sh $WORK/try.sh before run 'cat ../../README.md'
+exec sh $WORK/try.sh before run 'touch ../../README.md'
 stdout 'status=2'
 stderr 'outside lane one'
 exec sh $WORK/try.sh before mystery ''

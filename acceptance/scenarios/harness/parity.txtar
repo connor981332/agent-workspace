@@ -24,8 +24,8 @@ check() {
 }
 check 0 bash 'ls -la && git status'
 check 0 bash 'cat web/README.md'
-check 2 bash 'cat ../../README.md'
-check 2 bash 'cd ../.. && ls'
+check 2 bash 'touch ../../README.md'
+check 2 bash 'cd ../.. && touch x'
 check 2 bash 'cat "$(git rev-parse --show-toplevel)/x"'
 check 2 bash 'git push --force origin x'
 check 2 bash 'git branch -D main'
@@ -34,7 +34,7 @@ check 2 bash 'pkill node'
 check 2 bash 'printenv'
 check 2 bash 'echo unterminated "'
 check 0 read web/README.md
-check 2 read ../../README.md
+check 0 read ../../README.md
 check 0 edit web/README.md
 check 2 write ../../x
 check 2 edit "$OWNER/README.md"
