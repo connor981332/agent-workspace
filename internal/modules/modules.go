@@ -208,15 +208,16 @@ func Refresh(owner, namespace, title string, take []string) (edited []string, er
 		}
 		for _, f := range files {
 			recorded := upgrade.Recorded(owner, f.path)
-			if recorded == "" {
-				continue
+			taken := slices.Contains(take, f.path)
+			if recorded == "" && !taken {
+				continue // ejected, or never recorded: the team's, unless --take says otherwise
 			}
 			path := filepath.Join(owner, f.path)
 			have, err := os.ReadFile(path)
 			if err != nil && !os.IsNotExist(err) {
 				return nil, err
 			}
-			if err == nil && upgrade.Hash(have) != recorded && !slices.Contains(take, f.path) {
+			if err == nil && upgrade.Hash(have) != recorded && !taken {
 				edited = append(edited, f.path)
 				continue
 			}
@@ -229,6 +230,21 @@ func Refresh(owner, namespace, title string, take []string) (edited []string, er
 		}
 	}
 	return edited, nil
+}
+
+// Paths are the files the installed modules generate, relative to the owner checkout.
+func Paths(owner, namespace, title string) ([]string, error) {
+	var out []string
+	for _, name := range Installed(owner) {
+		files, err := walk(name, namespace, title)
+		if err != nil {
+			return nil, err
+		}
+		for _, f := range files {
+			out = append(out, f.path)
+		}
+	}
+	return out, nil
 }
 
 // Eject stops managing a module's files, or one file. It returns the paths released.

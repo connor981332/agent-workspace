@@ -357,17 +357,15 @@ var Skills = []string{"workspace-design", "readiness-audit"}
 
 // ApplySkills composes the skills into each harness's own format. Grok reads Claude Code's. A file
 // edited by hand is left alone, and listed.
-func ApplySkills(owner string) (changed []string, edited []string, err error) {
+// take lists files to replace even though they differ from aw's record (aw upgrade --take), whether
+// they were edited or never recorded.
+func ApplySkills(owner string, take ...string) (changed []string, edited []string, err error) {
 	for _, name := range Skills {
 		data, err := skillFiles.ReadFile("skills/" + name + ".md")
 		if err != nil {
 			return nil, nil, err
 		}
-		for _, target := range []string{
-			".claude/skills/aw-" + name + "/SKILL.md",
-			".agents/skills/aw-" + name + "/SKILL.md",
-			".opencode/commands/aw-" + name + ".md",
-		} {
+		for _, target := range skillTargets(name) {
 			path := filepath.Join(owner, filepath.FromSlash(target))
 			sum := sha256.Sum256(data)
 			hash := hex.EncodeToString(sum[:])
@@ -378,7 +376,7 @@ func ApplySkills(owner string) (changed []string, edited []string, err error) {
 				if current == hash {
 					continue
 				}
-				if current != recordedHash(owner, target) {
+				if current != recordedHash(owner, target) && !slices.Contains(take, target) {
 					edited = append(edited, target)
 					continue
 				}
@@ -396,6 +394,23 @@ func ApplySkills(owner string) (changed []string, edited []string, err error) {
 		}
 	}
 	return changed, edited, nil
+}
+
+func skillTargets(name string) []string {
+	return []string{
+		".claude/skills/aw-" + name + "/SKILL.md",
+		".agents/skills/aw-" + name + "/SKILL.md",
+		".opencode/commands/aw-" + name + ".md",
+	}
+}
+
+// SkillPaths are the files ApplySkills writes, relative to the owner checkout.
+func SkillPaths() []string {
+	var out []string
+	for _, name := range Skills {
+		out = append(out, skillTargets(name)...)
+	}
+	return out
 }
 
 func recordedHash(owner, key string) string {
