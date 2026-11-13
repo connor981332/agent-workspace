@@ -12,9 +12,8 @@ harness). Not every suggestion is taken: each section says what is kept as it is
 **Updated:** 2026-11-12
 
 **Branches / MRs:** merged into master: #81 to #87 (Phases 1 to 4, and 5.1, 5.6, 5.7).
-[#88](https://github.com/connor981332/agent-workspace/pull/88) `feedback/6-options` (5.5, F3): open,
-CI was still running on macOS when this was written; merge it once every check passes (the owner
-approved merging it). `feedback/7-devcontainer` (5.2 to 5.4, F5): local only, not pushed, branched
+[#88](https://github.com/connor981332/agent-workspace/pull/88) `feedback/6-options` (5.5, F3): merged
+on 2026-11-12, after every check passed. `feedback/7-devcontainer` (5.2 to 5.4, F5): local only, not pushed, branched
 from master before #88 merged.
 
 **Done:** Phases 1 to 4, 5.1, 5.5 (in #88), 5.6 as skill text, 5.7 as `on_acquire` only. Changes
