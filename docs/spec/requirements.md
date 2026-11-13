@@ -121,7 +121,7 @@ expected but can follow.
   An unwired Compose project gets an ignored generated configuration; its initialization and settings
   are preserved, and VS Code Rebuild keeps the selected aw configuration.
 - **R49.** The tool never starts or stops a container unexpectedly. A changed devcontainer
-  configuration may replace its idle container before reuse, with progress shown and volumes kept.
+  configuration may replace its idle container before reuse, with progress shown and named volumes kept.
   Recreating or stopping a container is refused while a lane or the owner is using it; inability to
   establish that it is idle refuses replacement too.
 - **R50.** Ports a lane may need are published when the container is created.

@@ -2,15 +2,20 @@
 
 Newest first. A line starting with **Breaking:** is called out by `aw upgrade`.
 
+## 0.2.1
+
+- The 0.2.0 notes said a replaced devcontainer keeps its volumes; only named volumes are kept. The replacement message now says so, and the 0.2.0 notes now call out that devcontainers built by an earlier aw are replaced once, when idle, after upgrading.
+
 ## 0.2.0
 
+- **Breaking:** devcontainers built by an earlier aw have no configuration hash, so each is replaced once, when idle, on first use. Named volumes are kept; anonymous volumes and changes made inside the container are not.
 - Concurrent lane setup preserves additions to the shared Git exclude file, preventing local aw files from becoming tracked and blocking rehearsal cleanup.
 
 - Host servers started outside aw are detected at their literal `owner_port`, even with a workspace port offset, so they still count toward resource capacity. Devcontainer detection keeps the offset used by aw's published ports.
 
 - Compose devcontainers no longer need committed aw wiring. aw generates an ignored `.devcontainer/aw/devcontainer.json`, preserves the project's initialization and settings, and starts that configuration. Choose its `(aw)` entry in VS Code; Rebuild keeps the choice. aw-published ports are removed from forwarding, and existing local Compose slots and committed aw fragments stay supported.
 
-- Devcontainers carry a configuration hash. When the devcontainer configuration, Compose inputs or aw's mount/ports change, aw replaces an idle service container before reuse and keeps its volumes. Seats, setups, attached sessions or an unreadable usage check refuse replacement with the fix.
+- Devcontainers carry a configuration hash. When the devcontainer configuration, Compose inputs or aw's mount/ports change, aw replaces an idle service container before reuse. Named volumes are kept; its anonymous volumes and anything changed inside the container are not. Seats, setups, attached sessions or an unreadable usage check refuse replacement with the fix.
 
 - Devcontainer projects may set `local_compose = "compose.local.yaml"` to write aw's mount and seat ports into a local Compose file their committed configuration already lists. The editor's `workspaceFolder` may stay as it is, or be omitted: aw mounts the checkout at the same path separately and runs commands at lane paths.
 
