@@ -203,3 +203,41 @@ func sortedKeys[V any](m map[string]V) []string {
 	slices.Sort(keys)
 	return keys
 }
+
+// Touching returns the changes that name a key this configuration sets in its own files, rather
+// than leaving it to aw's default.
+func Touching(c *config.Config, changes []Change) []Change {
+	var set [][]string
+	for _, pr := range c.Provenance {
+		if !slices.ContainsFunc(pr.Settings, func(s config.Setting) bool { return s.Layer != config.LayerDefault }) {
+			continue
+		}
+		if p, err := config.ParsePath(pr.Key); err == nil {
+			set = append(set, p)
+		}
+	}
+	out := []Change{}
+	for _, ch := range changes {
+		if slices.ContainsFunc(ch.Keys, func(k string) bool {
+			pattern := strings.Split(k, ".")
+			return slices.ContainsFunc(set, func(p []string) bool { return matches(pattern, p) })
+		}) {
+			out = append(out, ch)
+		}
+	}
+	return out
+}
+
+// matches reports whether a key a workspace sets is the documented key pattern, or under it: <name>
+// stands for any one segment.
+func matches(pattern, key []string) bool {
+	if len(key) < len(pattern) {
+		return false
+	}
+	for i, seg := range pattern {
+		if seg != key[i] && !(strings.HasPrefix(seg, "<") && strings.HasSuffix(seg, ">")) {
+			return false
+		}
+	}
+	return true
+}

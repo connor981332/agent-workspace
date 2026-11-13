@@ -22,4 +22,6 @@ grep '# mine again' bin/aw
 ! grep 'bin/aw' .aw/managed
 exec aw upgrade --to $AW_NEW_VERSION
 stdout 'Next: commit this'
+# It points to aw audit, here for the stamp the configuration lacks, and starts nothing.
+stdout '^aw audit can walk through what is new for this workspace with you: .*1 suggestion\.$'
 grep '# mine again' bin/aw

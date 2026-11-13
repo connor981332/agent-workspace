@@ -137,3 +137,17 @@ func TestKeyIn(t *testing.T) {
 		}
 	}
 }
+
+func TestTouching(t *testing.T) {
+	c := load(t, "", "local_compose = \"compose.local.yaml\"\n")
+	changes := []Change{
+		{Keys: []string{"projects.<name>.local_compose"}},
+		{Keys: []string{"lanes.max"}},
+		{Keys: []string{"projects.<name>"}},
+		{},
+	}
+	got := Touching(c, changes)
+	if len(got) != 2 || got[0].Keys[0] != "projects.<name>.local_compose" || got[1].Keys[0] != "projects.<name>" {
+		t.Fatalf("got %+v", got)
+	}
+}

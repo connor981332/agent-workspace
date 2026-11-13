@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/connor981332/agent-workspace/internal/app"
+	"github.com/connor981332/agent-workspace/internal/audit"
 	"github.com/connor981332/agent-workspace/internal/compose"
 	"github.com/connor981332/agent-workspace/internal/config"
 	"github.com/connor981332/agent-workspace/internal/doctor"
@@ -219,6 +220,9 @@ func finishUpgrade(cmd *cobra.Command, from string, eject, take []string) error 
 			fmt.Fprintf(errOut, "doctor: %s: %s\n", check.Name, ui.Clean(check.Message))
 		}
 	}
+	if hint := auditHint(c, from, to, report.Suggestions); hint != "" {
+		fmt.Fprintln(out, hint)
+	}
 	if len(edited) > 0 {
 		for _, f := range edited {
 			fmt.Fprintf(errOut, "%s was edited by hand, so aw left it alone → keep the edit with aw upgrade --to %s --eject %s, or take the new version with --take %s\n", f, to, f, f)
@@ -324,4 +328,31 @@ func regenerate(cmd *cobra.Command, owner string, c *config.Config, eject, take 
 		}
 	}
 	return edited, nil
+}
+
+// auditHint points to aw audit when the upgrade brought changes that touch keys this workspace sets,
+// or aw has suggestions for its configuration. It only points: it starts nothing.
+func auditHint(c *config.Config, from, to string, suggestions []audit.Suggestion) string {
+	touching := 0
+	if from != to {
+		touching = len(audit.Touching(c, audit.Changelog(from)))
+	}
+	if touching+len(suggestions) == 0 {
+		return ""
+	}
+	var parts []string
+	if touching > 0 {
+		parts = append(parts, count(touching, "change that touches", "changes that touch")+" keys this workspace sets")
+	}
+	if len(suggestions) > 0 {
+		parts = append(parts, count(len(suggestions), "suggestion", "suggestions"))
+	}
+	return "aw audit can walk through what is new for this workspace with you: " + strings.Join(parts, " and ") + "."
+}
+
+func count(n int, one, many string) string {
+	if n == 1 {
+		return "1 " + one
+	}
+	return fmt.Sprintf("%d %s", n, many)
 }
