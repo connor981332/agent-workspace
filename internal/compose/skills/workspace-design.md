@@ -13,9 +13,11 @@ aw adapts to the projects as they are. A project change is an option you offer, 
 2. Find the alternatives the projects already offer, and stop to ask the human about each before you write any configuration. Existing tooling says what the team prefers, so read it as a statement, not as noise. Look for:
    - a devcontainer beside commands that also run on the host. If it lists a gitignored local Compose
      slot, offer `projects.<name>.local_compose` so aw can own that whole slot (mount, seat ports and
-     label); keep the editor's workspaceFolder. If there is no slot, offer a small optional project
-     MR that lists a local Compose file and creates it when missing in initializeCommand without
-     overwriting it. Explain that this keeps VS Code's Rebuild on the same configuration; ask before
+     label); keep the editor's workspaceFolder. With no slot or committed aw wiring, aw generates
+     `.devcontainer/aw/devcontainer.json` and the developer selects its `(aw)` choice in VS Code;
+     Rebuild keeps that choice. Offer a local slot as a small optional project MR if the developer
+     prefers one configuration: list it and create it when missing in initializeCommand without
+     overwriting it. Explain the picker versus single-configuration tradeoff; ask before
      changing the project, and do not replace a local file whose settings the developer needs;
    - an in-memory or mock switch beside the real service in Compose, such as an event bus that can run without Kafka;
    - a database in Compose and one on the host;
