@@ -114,7 +114,9 @@ Eviction stops processes only. It never touches the lane's files, branches or da
 The owner does not have to use `aw serve`. With `owner_counts = true`, a process listening on a
 server's `owner_port` occupies seat 0, so agents cannot overcommit the machine while the owner runs
 the app from an editor or terminal. Detection is a cheap local port check, done when the queue is
-consulted.
+consulted. For a host server started without aw, `owner_port` is the literal port; `ports.offset`
+does not shift it. A devcontainer's seat-zero publications are managed by aw and retain the
+workspace offset. Servers started through `aw serve` are counted by their lease instead.
 
 ## Time limits
 

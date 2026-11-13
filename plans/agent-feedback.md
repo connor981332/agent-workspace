@@ -7,17 +7,16 @@ harness). Not every suggestion is taken: each section says what is kept as it is
 
 ## Status
 
-**State:** PARTIALLY IMPLEMENTED
+**State:** FULLY IMPLEMENTED
 
-**Updated:** 2026-11-12
+**Updated:** 2026-11-13
 
-**Branches / MRs:** #81 to #89 are merged into master, including team options (#88) and F5
-Mode B/shared groundwork (#89). [#90](https://github.com/connor981332/agent-workspace/pull/90)
-`feedback/8-owner-port` fixes verified item 8 and passes every CI check; awaiting merge approval.
-`feedback/9-devcontainer-overlay` completes F5 Mode A (5.4), with local unit/vet/full acceptance
-checks and the reduced interleaved master benchmark comparison passing; being proposed for review.
+**Branches / MRs:** #81 to #89 and #91 are merged into master. #91 completes F5 Mode A after
+all 16 checks passed, including the corrected canonical-path test on both macOS architectures.
+[#90](https://github.com/connor981332/agent-workspace/pull/90) is the final owner-port integration;
+its merge is approved, master/#91 has been merged into it, and combined local unit/vet/acceptance checks plus every full absolute latency budget pass.
 
-**Done:** Phases 1 to 4, 5.1, 5.5 (in #88), 5.6 as skill text, 5.7 as `on_acquire` only. Changes
+**Done:** Phases 1 to 4, 5.1 to 5.3, 5.5, 5.6 as skill text, 5.7 as `on_acquire` only. Changes
 from the plan as written:
 - 2.6, F4: rehearsal does not guess which Compose files a host project's scripts start; a person's
   review in `accepted_findings` decides, and an accepted file's Compose project name is still
@@ -44,9 +43,16 @@ from the plan as written:
   covers generated CLI selection, the Compose name, seat ports, Git exclusion and refresh on reuse.
 - All four F5 prerequisite checks are now answered in `docs/dev/spikes.md`.
 
-**Next step:** Mode A PR review/CI, merge #90 when approved, and obtain approval for the
-Mode A PR once reviewable. After each merge, rebuild the owner's dev binary from updated master.
+**Release integration:** an ARM rehearsal failure exposed a shared Git exclude-file race during
+concurrent setup. Sandbox setup now appends missing patterns instead of rewriting a stale snapshot;
+a regression test reproduces lost user/materialization rules on the old code and passes under
+race detection with the fix. Unit/vet/full acceptance checks and all ten absolute laptop budgets pass on the corrected candidate.
+
+**Next step:** merge #90 after every combined CI check passes;
+rebuild the owner's dev binary, then prepare v0.2.0 at the protected release approval gate.
+The owner approved all remaining merges/builds and requested the release approval link.
 The explicitly deferred features above remain deferred; they are not part of this completion scope.
+Historical feedback investigations (items 2 and 10 below) are not required implementation work.
 
 ## Decisions taken
 

@@ -209,7 +209,18 @@ func Exclude(dir string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(path, append(old, add.String()...), 0o644)
+	// Lane claims share this file. Rewriting a stale snapshot can erase another claim's
+	// exclusions (and make aw's local records look like the lane's own tracked work).
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return err
+	}
+	_, writeErr := f.WriteString(add.String())
+	closeErr := f.Close()
+	if writeErr != nil {
+		return writeErr
+	}
+	return closeErr
 }
 
 // RehearseCommand is the one command aw onboard lets its lane's agent run without a prompt.

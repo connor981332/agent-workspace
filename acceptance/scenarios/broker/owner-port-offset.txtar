@@ -1,0 +1,68 @@
+# req: R38
+# source: agent feedback plan, item 8
+# milestone: M4
+# The literal owner_port still detects an external host server with ports.offset set.
+
+workspace shop --init
+exec aw attach one
+cd .worktrees/01
+exec sh $WORK/check.sh
+stderr 'position 1'
+stdout 'Holding seat 1'
+
+-- check.sh --
+set -eu
+awtest-server -port 41847 -started "$WORK/up" >/dev/null 2>&1 &
+server_pid=$!
+cleanup() {
+  kill "$server_pid" 2>/dev/null || :
+  aw stop stack >/dev/null 2>&1 || :
+}
+trap cleanup EXIT HUP INT TERM
+i=0
+while [ ! -f "$WORK/up" ] && [ "$i" -lt 100 ]; do
+  kill -0 "$server_pid"
+  sleep 0.05
+  i=$((i + 1))
+done
+[ -f "$WORK/up" ]
+if aw serve stack > "$WORK/first-out" 2> "$WORK/first-err"; then
+  cat "$WORK/first-out"
+  echo "the lane got a seat while the owner's server was running" >&2
+  exit 1
+fi
+cat "$WORK/first-err" >&2
+kill "$server_pid"
+wait "$server_pid" || :
+aw attach two
+aw serve stack
+aw stop stack
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[ports]
+offset = 1000
+
+[lanes]
+pool = 0
+
+[projects.web]
+directory = "web"
+
+[projects.api]
+directory = "api"
+
+[projects.web.servers.app]
+command = "echo $$ >> $WORK/pids; exec sleep 60 # {port}"
+port = 41847
+owner_port = 41847
+
+[resources.stack]
+kind = "process"
+capacity = 1
+servers = ["web.app"]
+owner_counts = true
