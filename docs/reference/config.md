@@ -97,7 +97,7 @@ The project repositories. The key is the project's name.
 | `local_files` | array of strings | — | Gitignored files that are not secrets, such as a local properties file or a large generated schema, copied into every new lane from the owner checkout, relative to the project. Only the files named here are copied, as a clone where the file system can. Use secrets for anything an agent should not read. |
 | `accepted_findings` | table of string | — | Readiness findings a person has reviewed, by file: the key is a path relative to the project (dir/** matches a directory), and the value says why it is fine. aw rehearse and aw doctor --projects skip them; rehearsal still refuses a script that names the Compose project of an accepted Compose file, since starting it would reach the real one. |
 | `post_checkout` | one of `"run"`, `"skip"` | `"run"` | run: the repository's own post-checkout hook runs as a setup step of each lane, which can be retried. skip: it does not run in lanes. |
-| `env` | table of string | — | Variables for this project's hooks and aw run commands, such as a switch one of its hooks reads. |
+| `env` | table of string | — | Variables for this project's hooks and aw run commands, such as a switch one of its hooks reads. {lane} and {namespace} are filled in, as in lane_env, so a value such as "lane-{lane}" differs per lane. |
 | `generated` | array of strings | — | Ignored paths (Git pathspecs) that builds create and that do not block recycling a lane, such as node_modules or tmp. Other ignored files may be someone's work, so they keep the lane. |
 
 ### `[projects."<name>".lane_guards.<name>]`
@@ -185,6 +185,24 @@ The team's own guards (R54), decided in-process on every tool call. The key name
 | `action` | one of `"deny"`, `"ask"` | `"deny"` | What happens to a matching call. |
 | `message` | string | — | Why it is refused, and what to do instead. |
 | `requires` | array of strings | — | Files that must exist, from the workspace root. While one is missing, everything the guard matches is refused. |
+
+## `[options.<name>]`
+
+Alternative setups the team supports, each a named option with choices, from which every developer picks one in [choose] of their individual file. Each choice is a table of ordinary configuration keys, laid over the team's: the merge order is defaults, the team, the chosen overlays, then the individual file. aw config validate checks every choice. AW_OPTION_<NAME> tells hooks and commands the choice.
+
+`<name>`: lowercase letters, digits and hyphens, starting with a letter.
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `default` | string | — | The choice of a developer who picks none. *Team only.* |
+| `description` | string | — | What the option decides, as aw options shows it. *Team only.* |
+| `choices` | table of table | — | The choices, each a table of configuration keys, such as projects.web.runner or projects.web.env. *Team only.* |
+
+## `[choose.<name>]`
+
+Your choice for each of the team's [options], in your individual file: the option's name, and the choice. A team can lock an option with locks.keys = ["choose.<name>"].
+
+Each value: string.
 
 ## `[locks]`
 

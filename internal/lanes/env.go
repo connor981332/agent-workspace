@@ -61,6 +61,10 @@ func (m *Manager) LocateIn(n int, project string) (*Where, error) {
 		"AW_NAMESPACE=" + m.Cfg.Workspace.Namespace,
 		"AW_TOOL=" + filepath.Join(m.WS.Owner, "bin", "aw"),
 	}
+	// Each team option's choice in effect, for hooks and commands: AW_OPTION_EVENT_BUS=real.
+	for _, name := range sortedKeys(m.Cfg.Chosen) {
+		env = append(env, "AW_OPTION_"+strings.ToUpper(strings.ReplaceAll(name, "-", "_"))+"="+m.Cfg.Chosen[name])
+	}
 	if workspace.IsRehearsal(m.WS.Owner) {
 		env = append(env, "AW_REHEARSAL=1", "AW_INFRA_PROJECT="+m.Cfg.Workspace.Namespace+"-infra")
 		if p != nil && p.Runner != "devcontainer" {
@@ -70,7 +74,7 @@ func (m *Manager) LocateIn(n int, project string) (*Where, error) {
 	if project != "" {
 		env = append(env, "AW_PROJECT="+project)
 		for _, name := range sortedKeys(p.Env) {
-			env = append(env, name+"="+p.Env[name])
+			env = append(env, name+"="+m.expandLaneEnv(p.Env[name], n))
 		}
 	}
 	for _, group := range sortedKeys(m.Cfg.LaneEnv) {

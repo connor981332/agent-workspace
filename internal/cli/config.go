@@ -283,6 +283,14 @@ its own, which is how the examples in the repository are checked.`,
 				if err := check(filepath.Join(dir, config.TeamFile), c, err); err != nil {
 					return err
 				}
+				// Every choice of every option, so one nobody picks today does not rot.
+				if err == nil {
+					for _, p := range config.CheckEveryChoice(dir, c) {
+						if err := check(fmt.Sprintf("%s, with option %s = %s", filepath.Join(dir, config.TeamFile), p.Option, p.Choice), nil, p.Err); err != nil {
+							return err
+						}
+					}
+				}
 			}
 			for _, f := range args {
 				data, err := os.ReadFile(f)
@@ -309,6 +317,8 @@ its own, which is how the examples in the repository are checked.`,
 				for _, r := range results {
 					if r.Valid {
 						fmt.Fprintf(out, "%s: valid\n", r.File)
+					} else if strings.Contains(r.File, ", with option ") {
+						fmt.Fprintf(out, "%s: invalid (a choice not in effect for you, which others may pick):\n", r.File)
 					}
 					for _, e := range r.Errors {
 						fmt.Fprintln(out, e.Error())

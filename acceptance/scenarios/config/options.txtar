@@ -1,0 +1,78 @@
+# The team declares alternative setups as options, and each developer picks a choice in their
+# individual file. aw options lists them, hooks and commands see AW_OPTION_<NAME>, and aw config
+# validate checks every choice, including the ones nobody picks today.
+# req: R6 R7
+# source: 0.1.5 change requests, F3
+# milestone: M12
+
+owner-may-change
+workspace shop --init
+exec aw options
+stdout '^event-bus: in-memory  \(Run the event bus in memory, or on real Kafka\)$'
+stdout '^  \* in-memory \(default\)$'
+stdout '^    real$'
+exec aw attach 'try kafka'
+cd .worktrees/01
+exec aw run web sh -c 'echo "$AW_OPTION_EVENT_BUS $EVENT_BUS_DEV_MODE $CONSUMER_GROUP"'
+stdout '^in-memory true shared$'
+
+# The developer picks real Kafka.
+exec sh $WORK/choose.sh real
+exec aw options
+stdout '^event-bus: real'
+stdout '^  \* real$'
+exec aw run web sh -c 'echo "$AW_OPTION_EVENT_BUS $EVENT_BUS_DEV_MODE $CONSUMER_GROUP"'
+stdout '^real false lane-01$'
+exec aw config explain projects.web.env.EVENT_BUS_DEV_MODE
+stdout 'option event-bus=real'
+
+# A choice that does not exist is refused, with the ones that do.
+exec sh $WORK/choose.sh kafka
+! exec aw options
+stderr '"kafka" is not a choice of option event-bus → choose one of in-memory, real'
+exec sh $WORK/choose.sh in-memory
+
+# A broken choice that nobody picks still fails validation.
+cd $OWNER
+exec sh -c 'cat $WORK/broken >> workspace.toml'
+! exec aw config validate
+stdout 'with option queue = broken'
+stdout 'there is no server named "web.nope"'
+
+-- choose.sh --
+mkdir -p "$XDG_CONFIG_HOME/agent-workspace"
+printf '[choose]\nevent-bus = "%s"\n' "$1" > "$XDG_CONFIG_HOME/agent-workspace/shop.toml"
+-- broken --
+
+[options.queue]
+default = "ok"
+[options.queue.choices.ok]
+[options.queue.choices.broken]
+resources.jobs = { kind = "process", capacity = 1, servers = ["web.nope"] }
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[projects.web]
+directory = "web"
+
+[projects.web.env]
+CONSUMER_GROUP = "shared"
+
+[projects.api]
+directory = "api"
+
+[options.event-bus]
+default = "in-memory"
+description = "Run the event bus in memory, or on real Kafka"
+
+[options.event-bus.choices.in-memory]
+projects.web.env = { EVENT_BUS_DEV_MODE = "true" }
+
+[options.event-bus.choices.real]
+projects.web.env = { EVENT_BUS_DEV_MODE = "false", CONSUMER_GROUP = "lane-{lane}" }
