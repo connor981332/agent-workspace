@@ -187,3 +187,61 @@ func TestInfraKeepsTheFilesName(t *testing.T) {
 		t.Errorf("a rehearsal: got project %s", got)
 	}
 }
+
+// A generated slot is output, not an input: otherwise each start would force another rebuild.
+func TestConfigHashInputs(t *testing.T) {
+	dir := t.TempDir()
+	dev := filepath.Join(dir, ".devcontainer")
+	if err := os.MkdirAll(dev, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write := func(name, content string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dev, name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("devcontainer.json", `{ "dockerComposeFile": ["compose.yaml", "compose.local.yaml"], "service": "app" }`)
+	write("compose.yaml", "services:\n  app:\n    image: ${AW_TEST_IMAGE}\n")
+	c, err := config.LoadBytes(filepath.Join(dir, "workspace.toml"), []byte(`[workspace]
+name = "Solo"
+namespace = "solo"
+schema = 1
+[projects.solo]
+directory = "."
+runner = "devcontainer"
+local_compose = "compose.local.yaml"
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	newHash := func() string {
+		t.Helper()
+		d, err := NewDevcontainer(c, dir, "solo", t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return d.hash
+	}
+	t.Setenv("AW_TEST_IMAGE", "first")
+	first := newHash()
+	write("compose.local.yaml", "old generated output")
+	if got := newHash(); got != first {
+		t.Fatalf("generated slot changed fingerprint: %s != %s", got, first)
+	}
+	t.Setenv("AW_TEST_IMAGE", "second")
+	second := newHash()
+	if second == first {
+		t.Fatal("changed Compose environment was ignored")
+	}
+	write("compose.yaml", "services:\n  app:\n    image: different\n")
+	if newHash() == second {
+		t.Fatal("changed Compose input was ignored")
+	}
+	if err := os.Remove(filepath.Join(dev, "compose.yaml")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewDevcontainer(c, dir, "solo", t.TempDir()); err == nil {
+		t.Fatal("missing configuration must fail closed")
+	}
+}

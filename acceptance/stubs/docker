@@ -52,8 +52,9 @@ rm)
   done
   ;;
 top)
+  [ ! -e "$STUB_STATE/top-fails" ] || exit 1
   echo "PID PPID COMMAND"
-  echo "100 50 sleep infinity"
+  [ -e "$STUB_STATE/top-missing-main" ] || echo "100 50 sleep infinity"
   cat "$STUB_STATE/top/$1" 2>/dev/null || true
   ;;
 network)

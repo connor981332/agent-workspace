@@ -4,6 +4,8 @@ Newest first. A line starting with **Breaking:** is called out by `aw upgrade`.
 
 ## 0.2.0
 
+- Devcontainers carry a configuration hash. When the devcontainer configuration, Compose inputs or aw's mount/ports change, aw replaces an idle service container before reuse and keeps its volumes. Seats, setups, attached sessions or an unreadable usage check refuse replacement with the fix.
+
 - Devcontainer projects may set `local_compose = "compose.local.yaml"` to write aw's mount and seat ports into a local Compose file their committed configuration already lists. The editor's `workspaceFolder` may stay as it is, or be omitted: aw mounts the checkout at the same path separately and runs commands at lane paths.
 
 - **Breaking:** a new lane starts from origin's default branch as last fetched, not from the owner checkout's branch, so a lane no longer carries the owner's unpushed commits or other branch. `aw new` says when the owner checkout differs, or when origin was last fetched over a day ago. A workspace repository with unpushed commits refuses to start a lane until they are pushed, or `--branch` names the branch to start from.

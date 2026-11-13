@@ -294,6 +294,15 @@ VS Code's Rebuild then keeps aw's fragment. aw writes it and runs the claim step
 A server listening only on the container's loopback is not reachable through a published port, so
 servers must bind `0.0.0.0`.
 
+The fragment also carries `dev.aw.config-hash`, fingerprinting the devcontainer configuration,
+listed project Compose files, checkout/Compose `.env` files, referenced host environment values,
+CLI settings, and aw's mount and ports. The generated fragment is excluded from the inputs, so
+writing it cannot cause a rebuild loop. Before reuse or a claim, a changed or missing label triggers
+an idle check: aw checks seats, active setups and attached processes, then replaces only that
+project's service container without deleting volumes. An in-use container, unreadable state, failed
+process inspection or an unidentifiable main process refuses replacement with the fix. Mount and
+port mismatches on a container carrying the current hash still require explicit recreation.
+
 The CLI itself is pinned under `[devcontainer]`: `command`, `version` and `env` (S16). `aw doctor`
 checks the wiring and the pin from the files alone, and asks no container engine (R2).
 

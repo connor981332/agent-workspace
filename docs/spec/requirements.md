@@ -115,8 +115,10 @@ expected but can follow.
   container.
 - **R48.** VS Code, the devcontainer CLI and the tool resolve to one container per project. A
   container left over from a moved checkout is claimed or refused, never reused with an empty mount.
-- **R49.** The tool never starts or stops a container unexpectedly. Recreating or stopping a
-  container is refused while a lane or the owner is using it.
+- **R49.** The tool never starts or stops a container unexpectedly. A changed devcontainer
+  configuration may replace its idle container before reuse, with progress shown and volumes kept.
+  Recreating or stopping a container is refused while a lane or the owner is using it; inability to
+  establish that it is idle refuses replacement too.
 - **R50.** Ports a lane may need are published when the container is created.
 
 ## Commands, instructions and guards (wishlist 7, 8, 9, 22)

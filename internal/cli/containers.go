@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -36,6 +37,20 @@ func devcontainerIn(ws *workspace.Workspace, c *config.Config, project string) (
 	}
 	// Whichever project starts first brings up what the projects share (F7).
 	d.BeforeStart = infraOf(ws, c).Up
+	d.InUse = func(ctx context.Context, id string) ([]string, error) {
+		store, err := state.Open(dir, state.ReadOnly)
+		if errors.Is(err, state.ErrNoState) {
+			if id == "" {
+				return nil, nil
+			}
+			return d.Sessions(ctx, id)
+		}
+		if err != nil {
+			return nil, err
+		}
+		defer store.Close()
+		return inUse(ctx, c, store.DB(), d, id)
+	}
 	return d, nil
 }
 
@@ -160,10 +175,10 @@ func newKeepCmd() *cobra.Command {
 
 // inUse says what is using a project's container (R49): lanes or the owner holding seats on its
 // servers, setups in progress, and anything attached to the container.
-func inUse(ctx context.Context, w *writeContext, d *runners.Devcontainer, id string) ([]string, error) {
+func inUse(ctx context.Context, cfg *config.Config, q state.Querier, d *runners.Devcontainer, id string) ([]string, error) {
 	var out []string
-	b := &broker.Broker{Cfg: w.cfg}
-	leases, err := state.Leases(w.store.DB())
+	b := &broker.Broker{Cfg: cfg}
+	leases, err := state.Leases(q)
 	if err != nil {
 		return nil, err
 	}
@@ -178,7 +193,7 @@ func inUse(ctx context.Context, w *writeContext, d *runners.Devcontainer, id str
 		}
 		out = append(out, fmt.Sprintf("%s holds a seat on %s", who, l.Resource))
 	}
-	setups, err := state.ActiveSetups(w.store.DB())
+	setups, err := state.ActiveSetups(q)
 	if err != nil {
 		return nil, err
 	}
@@ -244,7 +259,7 @@ func containersVerb(use, short string, remove, start bool) *cobra.Command {
 					if err != nil {
 						return err
 					}
-					used, err := inUse(ctx, w, d, id)
+					used, err := inUse(ctx, w.cfg, w.store.DB(), d, id)
 					if err != nil {
 						return err
 					}
