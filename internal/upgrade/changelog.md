@@ -12,6 +12,7 @@ Newest first. A line starting with **Breaking:** is called out by `aw upgrade`.
 - `aw new --shell` and `aw resume <lane> --shell` set up a lane and start your own shell in it, with the lane's environment, instead of a harness.
 - `aw doctor` warns when the owner checkout would configure lanes from something other than origin's default branch. In a lane, `aw config validate` and `aw doctor` check the lane's own `workspace.toml`. `aw recap <lane>` shows one lane, `aw discard` says what it would archive before asking for `--yes`, `aw inspect` lists repositories that are not projects yet, and `aw add project` in a lane proposes a project for review.
 - `aw attach --wait` waits for the lane's setup and ends with its result; `aw serve` says its place in line and each server it starts, with its port and log.
+- `aw setup <lane>` links the secret files and copies the local files the configuration declared since the lane was made, and says when a project is missing from the lane.
 - `aw reset-branch` starts a lane over from its base, archiving each tip first, and `aw attach` says when a session's lane still holds an earlier purpose's commits.
 - `aw note "<text>"` keeps a note on the lane of something left to do outside it, such as a temporary CI schedule. `aw recap` and a session starting in the lane show open notes, `aw finish` warns, and `aw sweep` keeps the lane until they are done.
 - `aw upgrade --take` replaces every file it reports, and rehearsal skips the Compose files listed in `accepted_findings`.

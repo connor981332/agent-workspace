@@ -149,6 +149,18 @@ func retrySetup(cmd *cobra.Command, ref string) error {
 	}
 	ctx, stop := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
 	defer stop()
+	// A lane made before the configuration declared a secret or local file gets it now: the step
+	// that fails for want of it is often two steps away from the cause.
+	added, notes, err := m.Reconcile(ctx, l)
+	if err != nil {
+		return err
+	}
+	for _, a := range added {
+		fmt.Fprintf(cmd.ErrOrStderr(), "aw: %s, which the configuration added since the lane was made\n", ui.Clean(a))
+	}
+	for _, n := range notes {
+		fmt.Fprintf(cmd.ErrOrStderr(), "aw: note: %s\n", ui.Clean(n))
+	}
 	err = runSetup(ctx, w, m, l, cmd.ErrOrStderr())
 	if errors.Is(err, lifecycle.ErrRunning) {
 		return fmt.Errorf("lane %s's setup is already running → wait for it; aw shows its progress", ui.Clean(l.Name))
