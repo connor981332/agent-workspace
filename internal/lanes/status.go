@@ -42,6 +42,7 @@ type LaneStatus struct {
 	Sessions []SessionStatus `json:"sessions,omitempty"`
 	Repos    []RepoStatus    `json:"repos,omitempty"`
 	Handoff  *HandoffStatus  `json:"handoff,omitempty"`
+	Notes    []state.Note    `json:"notes,omitempty"` // open notes (aw note)
 }
 
 // SessionStatus is a session as observed now: an active session whose process is gone shows as
@@ -392,6 +393,7 @@ func (m *Manager) classify(ls *LaneStatus, l state.Lane) {
 	} else if !errors.Is(err, state.ErrNotFound) {
 		ls.Handoff = &HandoffStatus{Invalid: true}
 	}
+	ls.Notes, _ = state.OpenNotes(m.Store.DB(), l.Number, l.Generation)
 	proven := len(ls.Repos) > 0
 	for _, r := range ls.Repos {
 		if !r.Proven {
@@ -411,6 +413,8 @@ func (m *Manager) classify(ls *LaneStatus, l state.Lane) {
 		ls.Section, ls.Why = Parked, "parked"
 	case running:
 		ls.Section, ls.Why = Running, "session running"
+	case proven && len(ls.Notes) > 0:
+		ls.Section, ls.Why = NeedsYou, fmt.Sprintf("merged, with %d open note%s", len(ls.Notes), plural(len(ls.Notes)))
 	case proven:
 		ls.Section, ls.Why = Cleanable, "proven merged"
 	case ls.State == state.LaneReady && ls.Handoff != nil && ls.Handoff.Stale:

@@ -32,6 +32,8 @@ The CLI is part of the design, not an afterthought. Most of the tool's value is 
 | `aw serve <resource>` / `aw stop <resource>` | both | Take or return a seat |
 | `aw queue` | both | Who holds and who waits for each resource |
 | `aw push [--as <name>] [project…]` | both | Push the lane's branch to origin, under the team's branch name if it differs, and remember that name for recap, finish and sweep |
+| `aw reset-branch [project…]` | both | Start the lane's branches over from their base, archiving each tip under `refs/aw/archive` first |
+| `aw note ["<text>"] [--done <n>]` | both | Keep a note on the lane of something left to do outside it; recap and a starting session show open notes, finish warns, and sweep keeps the lane |
 | `aw finish --summary "…"` | agent | Hand off as ready for review |
 | `aw park` / `aw unpark` / `aw discard` | human | Shelve, restore or abandon work |
 | `aw sweep [--apply]` | human | Recycle lanes proven merged |

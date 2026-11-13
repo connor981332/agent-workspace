@@ -90,7 +90,7 @@ func hook(args []string, version string, stdin io.Reader, stdout, stderr io.Writ
 		return Allow // not in a workspace: nothing here is aw's to protect
 	}
 	if p.Event == SessionStart {
-		fmt.Fprintln(stdout, startContext(*scope)+personalContext(p.Harness, scope.Namespace))
+		fmt.Fprintln(stdout, startContext(*scope)+notesContext(notes.open)+personalContext(p.Harness, scope.Namespace))
 		return Allow
 	}
 	scope.AskSupported = a.ask
@@ -122,7 +122,8 @@ func hook(args []string, version string, stdin io.Reader, stdout, stderr io.Writ
 type pendingNotes struct {
 	pending  []state.Notification
 	stateDir string
-	touch    int // the lane whose leases to mark active, or 0
+	touch    int          // the lane whose leases to mark active, or 0
+	open     []state.Note // the lane's open notes, read when a session starts
 }
 
 // activityEvery is how often a tool call records activity on the lane's leases.
@@ -288,6 +289,11 @@ func resolveScope(p Payload, version string, t *timing.Recorder) (*policy.Scope,
 	if notes.pending, err = state.PendingNotifications(s.DB(), n); err != nil {
 		return nil, pendingNotes{}, err
 	}
+	if p.Event == SessionStart {
+		// Only when a session starts or resumes, as after a compaction: the agent's memory of what
+		// it left to do may be gone, and the lane's notes are not.
+		notes.open, _ = state.OpenNotes(s.DB(), n, lane.Generation)
+	}
 	if oldest, err := state.OldestActivity(s.DB(), n); err == nil && oldest != "" {
 		if t, err := time.Parse(time.RFC3339Nano, oldest); err == nil && time.Since(t) > activityEvery {
 			notes.touch = n
@@ -432,6 +438,19 @@ func personalContext(harness, namespace string) string {
 }
 
 // startContext tells a new session where it is and how to work there. It changes nothing.
+// notesContext lists a lane's open notes for a session starting in it.
+func notesContext(open []state.Note) string {
+	if len(open) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("\n\nThis lane has open notes, things left to do before the work is done (bin/aw note --done <n> when one is):")
+	for _, n := range open {
+		fmt.Fprintf(&b, "\n%d. %s", n.ID, n.Text)
+	}
+	return b.String()
+}
+
 func startContext(s policy.Scope) string {
 	extra := ""
 	if s.RoleName != "" {

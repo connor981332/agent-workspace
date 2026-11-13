@@ -164,6 +164,9 @@ func printSections(out io.Writer, all []*lanes.LaneStatus, width int, detail boo
 				}
 				line("  " + strings.Repeat(" ", 17) + note)
 			}
+			for _, n := range ls.Notes {
+				line(fmt.Sprintf("  %17snote %d: %s", "", n.ID, ui.Clean(n.Text)))
+			}
 			var untouched []string
 			for _, r := range ls.Repos {
 				if r.Error != "" {

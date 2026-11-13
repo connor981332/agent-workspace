@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"io"
 	"os/signal"
 	"path/filepath"
 	"regexp"
@@ -165,7 +166,7 @@ func urlsOf(c *config.Config, r broker.Resource, l state.Lease) map[string]strin
 
 // startServers starts a process resource's servers for a lease. If one fails, those already started
 // are stopped, and the caller gives the seat back.
-func startServers(ctx context.Context, w *writeContext, m *lanes.Manager, r broker.Resource, l state.Lease) ([]state.LeaseProc, error) {
+func startServers(ctx context.Context, w *writeContext, m *lanes.Manager, r broker.Resource, l state.Lease, say io.Writer) ([]state.LeaseProc, error) {
 	seatEnv := []string{fmt.Sprintf("AW_SEAT_%s=%d", envName(r.Name), l.Seat)}
 	for _, full := range r.Servers {
 		if _, name, s := serverOf(w.cfg, full); s != nil {
@@ -207,10 +208,17 @@ func startServers(ctx context.Context, w *writeContext, m *lanes.Manager, r brok
 				return nil, fmt.Errorf("server %s did not start: %w", full, err)
 			}
 		}
+		if say != nil {
+			wait := ""
+			if spec.Ready != "" {
+				wait = ", waiting until it is ready"
+			}
+			fmt.Fprintf(say, "aw: starting %s on port %d (log %s)%s\n", full, p, log, wait)
+		}
 		proc, err := procs.Start(ctx, spec)
 		if err != nil {
 			undo()
-			return nil, fmt.Errorf("server %s did not start: %w", full, err)
+			return nil, fmt.Errorf("server %s did not start: %w → its log is %s", full, err, log)
 		}
 		started = append(started, state.LeaseProc{Server: full, PID: proc.PID, Start: proc.Start, Log: log})
 	}
@@ -219,13 +227,13 @@ func startServers(ctx context.Context, w *writeContext, m *lanes.Manager, r brok
 
 // provision makes a granted seat real: a process resource's servers, or a scripted token. On failure
 // the caller gives the seat back.
-func provision(ctx context.Context, w *writeContext, m *lanes.Manager, b *broker.Broker, r broker.Resource, l *state.Lease) error {
+func provision(ctx context.Context, w *writeContext, m *lanes.Manager, b *broker.Broker, r broker.Resource, l *state.Lease, say io.Writer) error {
 	if r.Kind == "process" {
 		running, err := state.LeaseProcs(w.store.DB(), l.ID)
 		if err != nil || len(running) > 0 {
 			return err
 		}
-		started, err := startServers(ctx, w, m, r, *l)
+		started, err := startServers(ctx, w, m, r, *l, say)
 		if err != nil {
 			return err
 		}
@@ -299,7 +307,12 @@ With --wait it waits in the foreground instead. The owner goes to the front of t
 			if err != nil {
 				return err
 			}
+			position := 0
 			for wait && !out.Granted {
+				if p := out.Positions[r.Name]; p != position {
+					position = p
+					fmt.Fprintf(cmd.ErrOrStderr(), "aw: waiting for a seat on %s: position %d in line\n", r.Name, p)
+				}
 				select {
 				case <-ctx.Done():
 					// Leaving the line is the human's choice: the place must not stay behind.
@@ -325,7 +338,7 @@ With --wait it waits in the foreground instead. The owner goes to the front of t
 				return &queuedError{msg}
 			}
 			l := out.Leases[0]
-			if err := provision(ctx, w, m, b, r, &l); err != nil {
+			if err := provision(ctx, w, m, b, r, &l, cmd.ErrOrStderr()); err != nil {
 				return giveBack(b, h.Lane, r.Name, err)
 			}
 			res := served{Resource: r.Name, Seat: l.Seat, Token: l.Token}
@@ -337,6 +350,9 @@ With --wait it waits in the foreground instead. The owner goes to the front of t
 				return writeJSON(stdout, res)
 			}
 			fmt.Fprintf(stdout, "Holding seat %d on %s.\n", l.Seat, r.Name)
+			if position > 0 {
+				fmt.Fprintf(cmd.ErrOrStderr(), "aw: a seat on %s is yours, after waiting at position %d\n", r.Name, position)
+			}
 			if res.Token != "" {
 				fmt.Fprintf(stdout, "  token %s (AW_TOKEN_%s)\n", ui.Clean(res.Token), envName(r.Name))
 			}

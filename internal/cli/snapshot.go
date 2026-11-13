@@ -66,7 +66,7 @@ func quiesce(ctx context.Context, w *writeContext, m *lanes.Manager, lane int) (
 			l := &stopped[i]
 			r, err := b.Lookup(l.Resource)
 			if err == nil {
-				err = provision(context.WithoutCancel(ctx), w, m, b, r, l)
+				err = provision(context.WithoutCancel(ctx), w, m, b, r, l, nil)
 			}
 			if err != nil {
 				failed = append(failed, fmt.Sprintf("%s (%v)", l.Resource, err))

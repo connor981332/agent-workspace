@@ -1,0 +1,31 @@
+# aw setup <lane> brings a lane made under an older configuration up to the current one where that
+# can be done at any time: secret files are linked and local files copied, as a new lane gets them.
+# What it cannot add, a project the lane has no worktree of, it says.
+# req: R31 R67
+# source: plans/agent-feedback.md, item 4
+# milestone: M12
+
+owner-may-change
+workspace shop --init
+exec aw attach 'old lane'
+! exists .worktrees/01/web/.env
+
+# The team declares a secret and a local file after the lane was made.
+exec sh -c 'printf "KEY=1\n" > web/.env && printf "x\n" > web/local.properties'
+exec sh $WORK/declare.sh
+exec git init -q jobs
+exec sh -c 'printf "\n[projects.jobs]\n" >> workspace.toml'
+exec aw setup old-lane
+stderr 'aw: web: linked the secret file .env, which the configuration added since the lane was made'
+stderr 'aw: web: copied the local file local.properties'
+stderr 'aw: note: project jobs was added after this lane was made'
+exists .worktrees/01/web/.env
+exists .worktrees/01/web/local.properties
+exec aw setup old-lane
+! stderr 'linked the secret file'
+
+-- declare.sh --
+# web already has a table: add the keys to it.
+awk '{ print } /^\[projects\.web\]$/ { print "secrets = [\".env\"]"; print "local_files = [\"local.properties\"]" }' workspace.toml > workspace.toml.new
+mv workspace.toml.new workspace.toml
+grep -q 'secrets = \[".env"\]' workspace.toml

@@ -1,0 +1,41 @@
+# aw note keeps, on the lane, what its agent left to do, such as a temporary change to undo, so that
+# it outlives the session's memory: recap shows open notes, a session starting in the lane is told
+# them, aw finish warns while any is open, and aw sweep keeps the lane, since no merge proves them
+# done.
+# req: R81
+# source: plans/agent-feedback.md, item 12
+# milestone: M12
+
+workspace shop --init
+exec aw attach 'add feature flag'
+cd .worktrees/01
+exec aw note
+stdout 'has no open notes'
+exec aw note 'delete the temporary CI schedule 123'
+stdout '^Noted on lane feature-flag as 1\. aw note --done 1 when it is done\.$'
+exec aw note 'remove the test branch on the forge'
+exec aw note
+stdout '^1\. delete the temporary CI schedule 123$'
+stdout '^2\. remove the test branch on the forge$'
+exec aw recap
+stdout 'merged, with 2 open notes'
+stdout 'note 1: delete the temporary CI schedule 123'
+cd ../..
+exec aw sweep
+stdout 'it has 2 open notes, such as "delete the temporary CI schedule 123"'
+cd .worktrees/01
+
+exec awtest-hook session-start x
+stdout 'This lane has open notes'
+stdout '1\. delete the temporary CI schedule 123'
+
+exec aw note --done 1
+stdout 'Note 1 is done'
+! exec aw note --done 1
+stderr 'has no open note 1'
+exec aw finish --summary 'flag added'
+stderr 'aw: warning: lane feature-flag has 1 open note'
+stderr '  2\. remove the test branch on the forge'
+exec aw note --done 2
+exec awtest-hook session-start x
+! stdout 'open notes'

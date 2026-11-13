@@ -430,3 +430,9 @@ func SaveSession(tx *sql.Tx, s Session) (int, error) {
 
 // Now is the time format stored in state: UTC, RFC 3339 with nanoseconds.
 func Now() string { return now() }
+
+// SetBaseSHA records where a lane's repository now starts, after aw reset-branch.
+func SetBaseSHA(tx *sql.Tx, lane int, project, sha string) error {
+	_, err := tx.Exec(`UPDATE lane_repos SET base_sha = ? WHERE lane = ? AND project = ?`, sha, lane, project)
+	return err
+}

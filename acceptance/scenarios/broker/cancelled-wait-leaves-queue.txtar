@@ -11,6 +11,7 @@ exec aw serve stack
 cd ../02
 exec sh $WORK/wait.sh
 stdout 'left the queue'
+stdout 'aw: waiting for a seat on stack: position 1 in line'
 exec aw queue --json
 ! stdout '"lane_name": "two"'
 cd ../01
