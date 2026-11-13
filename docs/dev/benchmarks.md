@@ -380,3 +380,24 @@ These reduced-sample results do not certify the absolute budgets.
 | serve-free-seat | 10 | 21.00 | 21.96 | pass |
 | grant-next | 10 | 53.90 | 53.88 | pass |
 | preempt | 10 | 15.54 | 17.36 | pass |
+
+### Linux laptop, 2026-11-12, generated devcontainer configuration
+
+`feedback/9-devcontainer-overlay` (Mode A), compared interleaved with the owner's `aw-dev`
+built from merged master `21b2e79`, on `connor-fw13` (Linux amd64). Command:
+`TMPDIR=~/.cache/aw-tmp GOTMPDIR=~/.cache/aw-tmp go run ./bench -mode relative -scale 0.1 -baseline-aw ~/.local/bin/aw-dev`.
+All relative regression checks passed. Guard decisions add no runner work; config changes only its
+runner description. Reduced-sample comparisons do not certify quiet-machine absolute budgets.
+
+| Operation | n | branch p50 ms | master p50 ms | result |
+|---|---|---|---|---|
+| hook | 100 | 5.46 | 5.92 | pass |
+| whoami | 50 | 4.52 | 4.87 | pass |
+| config-get | 50 | 4.53 | 4.85 | pass |
+| attach-from-pool | 10 | 71.04 | 71.72 | pass |
+| new-until-harness | 10 | 78.97 | 80.11 | pass |
+| dashboard | 20 | 56.18 | 57.26 | pass |
+| ref-hook | 100 | 5.98 | 6.42 | pass |
+| serve-free-seat | 10 | 9.39 | 10.01 | pass |
+| grant-next | 10 | 29.02 | 29.30 | pass |
+| preempt | 10 | 6.93 | 7.74 | pass |

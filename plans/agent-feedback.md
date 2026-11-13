@@ -7,14 +7,14 @@ harness). Not every suggestion is taken: each section says what is kept as it is
 
 ## Status
 
-**State:** PARTIALLY IMPLEMENTED
+**State:** FULLY IMPLEMENTED
 
 **Updated:** 2026-11-12
 
-**Branches / MRs:** #81 to #89 are merged into master. #88 added team options (5.5, F3);
-[#89](https://github.com/connor981332/agent-workspace/pull/89) completed shared F5 groundwork and
-Mode B (5.2, 5.3), after all 16 checks passed. `feedback/8-owner-port` fixes the verified item 8
-finding and is being proposed against master; #89 has been merged into that branch.
+**Branches / MRs:** #81 to #89 and #91 are merged into master. #91 completes F5 Mode A after
+all 16 checks passed, including the corrected canonical-path test on both macOS architectures.
+[#90](https://github.com/connor981332/agent-workspace/pull/90) is the final owner-port integration;
+its merge is approved, master/#91 has been merged into it, and combined verification is running.
 
 **Done:** Phases 1 to 4, 5.1 to 5.3, 5.5, 5.6 as skill text, 5.7 as `on_acquire` only. Changes
 from the plan as written:
@@ -29,34 +29,25 @@ from the plan as written:
   `{lane}` and `{namespace}` are now expanded in `projects.<name>.env` too.
 - 5.6: detecting alternatives in `aw inspect` is not built. 5.7: no `on_release`.
 
-**F5 progress:** 5.4 (Mode A) waits for the owner's VS Code check. Completed in #89: the Compose name resolved exactly
-as the devcontainer CLI 0.89.0 does (read from its source), and the F5 checks recorded in
-`docs/dev/spikes.md` (checks 1 to 3 answered; check 4, VS Code's picker and Rebuild with two
-configurations, needs the owner in VS Code). 5.2 and 5.3 pass config validation, unit and full
-acceptance tests:
-- `projects.<name>.local_compose` (Mode B): aw writes its fragment (same-path mount, seat ports,
-  Compose name) into the project's own gitignored local Compose file, which its committed
-  devcontainer.json lists, instead of `aw.compose.yaml`. `runners.Validate(dir, local)` checks the
-  right file is listed; doctor reports Mode B as OK without requiring aw's claim step.
-- The `workspaceFolder = ${localWorkspaceFolder}` requirement is dropped in every mode: aw's mount
-  is an extra mount, and aw runs commands at lane paths. Scenarios cover a different editor folder
-  and an omitted one, plus Mode B with stubbed docker/devcontainer, seat ports and Git exclusion.
-- `config.check` refuses `local_compose` on a host runner, absolute paths, `..` components and unclean
-  paths. Changelog, Runners architecture and the regenerated config reference describe Mode B.
-- Shared 5.2 groundwork is implemented: the fragment carries a hash of the devcontainer/Compose
-  configuration, dotenv files, referenced environment values and aw's settings. A changed or missing
-  label replaces only an idle service container, with volumes kept; seats, setups, attached sessions,
-  unreadable state or failed/incomplete process inspection refuse replacement. Scenarios cover each
-  busy/refusal path and stable reuse. Mode A remains gated on the owner's VS Code check 4.
-- Onboarding offers a local Compose slot as an optional project MR, with the ownership tradeoff.
-- Vet, gofmt and full unit/acceptance checks pass. Benchmarks are recorded in
-  `docs/dev/benchmarks.md`: absolute budgets failed on this non-quiet run; the reduced interleaved
-  comparison against master passed every regression check.
+**F5 completion:** 5.2 and 5.3 are merged in #89. Mode A (5.4) is implemented on
+`feedback/9-devcontainer-overlay`:
+- The owner verified check 4 with Dev Containers 0.473.0: Reopen offered both configurations;
+  Rebuild reused the selected aw configuration without a prompt, and its terminal marker survived.
+- An unwired Compose project gets `.devcontainer/aw/devcontainer.json` plus its Compose fragment,
+  excluded through `.git/info/exclude`. aw passes `--config` and refreshes generated files before
+  reuse/start. Existing local slots and committed aw wiring retain their behavior.
+- Project initialization (all command forms), workspaceFolder and unrelated settings are preserved;
+  Compose/local feature paths retain their meaning. Only aw-published ports are removed from explicit
+  forwarding and ignored for automatic forwarding. Existing project-owned files/symlinks are refused.
+- Unit tests cover preservation, stable regeneration, forwarding and file ownership. The scenario
+  covers generated CLI selection, the Compose name, seat ports, Git exclusion and refresh on reuse.
+- All four F5 prerequisite checks are now answered in `docs/dev/spikes.md`.
 
-**Next step:** review/CI for the owner-port fix, then Mode A (5.4,
-aw generates `.devcontainer/aw/devcontainer.json`) once the owner reports check 4 in VS Code.
-The owner's dev binary is rebuilt from master after #89. The check fixture is
-`/tmp/aw-f5-vscode-check`, with instructions in its README.
+**Next step:** finish combined integration verification and merge #90 after every check passes;
+rebuild the owner's dev binary, then prepare v0.2.0 at the protected release approval gate.
+The owner approved all remaining merges/builds and requested the release approval link.
+The explicitly deferred features above remain deferred; they are not part of this completion scope.
+Historical feedback investigations (items 2 and 10 below) are not required implementation work.
 
 ## Decisions taken
 
@@ -273,13 +264,12 @@ monolith.
 ## To verify
 
 - B2 in a scratch Compose project with `name:` (5.1).
-- **Verified, item 8:** a nonzero workspace offset shifted the probe for an external host server,
-  allowing a lane to overcommit its resource. `feedback/8-owner-port` reproduces and fixes this:
-  host `owner_port` is literal; devcontainer detection retains aw's publication offset. Full unit,
-  vet and uncached acceptance suites pass, as does the reduced interleaved master comparison.
+- **Verified, item 8:** PR #90 detects external host servers at the literal owner_port with a
+  workspace offset, preserving devcontainer publication offsets; regression and CI checks pass.
 - Item 2: why a Read of the owner checkout was allowed, when `decideFiles` applies the boundary.
 - Item 10: how a lane with unmerged commits was handed out with a new purpose.
-- F5: the change requests' four checks (5.2).
+- **Verified, F5:** all four prerequisite checks are recorded in `docs/dev/spikes.md`, including
+  the owner's picker/Rebuild test with Dev Containers 0.473.0.
 
 ## Verification
 

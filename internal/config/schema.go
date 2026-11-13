@@ -184,7 +184,7 @@ var schema = table("",
 			"repo", str("Clone URL."),
 			"lanes", str("worktree: every lane gets a worktree. shared: lanes run the owner checkout with lane settings.").
 				oneOf("worktree", "shared").withDefault("worktree"),
-			"runner", str("Where commands run: host, or devcontainer (one container per project, shared with VS Code).").
+			"runner", str("Where commands run: host, or devcontainer (one container per project, shared with VS Code). Unwired Compose projects use a generated .devcontainer/aw/devcontainer.json; select its aw configuration in VS Code.").
 				oneOf("host", "devcontainer").withDefault("host"),
 			"local_compose", str("Devcontainer runner only: a gitignored Compose file, relative to .devcontainer (no absolute path or .. component), that the project's "+
 				"committed devcontainer.json lists in dockerComposeFile and its initializeCommand creates when missing. aw writes its "+

@@ -27,6 +27,9 @@ import (
 // seat ports (S7). It is local to the clone, because it names this checkout's path.
 const Fragment = "aw.compose.yaml"
 
+// GeneratedConfig is the optional configuration VS Code offers for an unwired project.
+const GeneratedConfig = ".devcontainer/aw/devcontainer.json"
+
 const configHashLabel = "dev.aw.config-hash"
 
 // defaultCLIEnv is what the devcontainer CLI needs by default: Compose 5 builds through buildx bake,
@@ -48,6 +51,7 @@ type Devcontainer struct {
 	// project's own local slot (local_compose), which its committed configuration already lists.
 	fragment string
 	hash     string
+	overlay  []byte // generated configuration, or nil for committed wiring / Mode B
 	// BeforeStart brings up what the projects share. It also runs for VS Code, in the claim step.
 	BeforeStart func(context.Context, io.Writer) error
 	// InUse must account for seats, setups and attached processes before replacing a container.
@@ -56,6 +60,7 @@ type Devcontainer struct {
 
 // devcontainerJSON is what aw reads of devcontainer.json.
 type devcontainerJSON struct {
+	raw             map[string]json.RawMessage
 	ComposeFile     json.RawMessage `json:"dockerComposeFile"`
 	Service         string          `json:"service"`
 	WorkspaceFolder string          `json:"workspaceFolder"`
@@ -249,8 +254,12 @@ func readDevcontainerJSON(dir string) (devcontainerJSON, string, error) {
 	if err != nil {
 		return d, name, fmt.Errorf("%s: %w → add the project's devcontainer.json, or set its runner to host", name, err)
 	}
-	if err := json.Unmarshal(stripJSONC(data), &d); err != nil {
+	data = stripJSONC(data)
+	if err := json.Unmarshal(data, &d); err != nil {
 		return d, name, fmt.Errorf("%s is not valid: %w → fix the file", name, err)
+	}
+	if err := json.Unmarshal(data, &d.raw); err != nil {
+		return d, name, fmt.Errorf("%s: %w → fix the file", name, err)
 	}
 	return d, name, nil
 }
@@ -271,8 +280,9 @@ func (d devcontainerJSON) composeFiles() []string {
 // Validate checks a devcontainer.json against what the runner needs: Compose, the fragment, and the
 // same path inside and outside (S7). Each error names the fix. It only reads the file.
 //
-// local is the project's local Compose slot (local_compose), or "" for aw.compose.yaml. Either must
-// be listed. workspaceFolder may be anything: aw's mount puts the checkout at its own path beside
+// local names the project's local Compose slot (Mode B), which must be listed. Otherwise a listed
+// aw.compose.yaml keeps the committed wiring; an unwired Compose project gets a generated config.
+// workspaceFolder may be anything: aw's mount puts the checkout at its own path beside
 // the project's, and aw runs every command at a lane's path, wherever the editor opens.
 func Validate(dir, local string) (devcontainerJSON, error) {
 	d, name, err := readDevcontainerJSON(dir)
@@ -289,8 +299,6 @@ func Validate(dir, local string) (devcontainerJSON, error) {
 		return d, fmt.Errorf(`%s has no dockerComposeFile and service → aw runs one Compose service per project; set "dockerComposeFile" and "service"`, name)
 	case !slices.Contains(files, want) && local != "":
 		return d, fmt.Errorf(`%s does not list %s, the local Compose file local_compose names, in dockerComposeFile → add it after the project's own Compose files, and have initializeCommand create it when it is missing`, name, local)
-	case !slices.Contains(files, want):
-		return d, fmt.Errorf(`%s does not list %s in dockerComposeFile → add it after the project's own Compose file: it publishes the seat ports and makes the same-path mount; or name a local Compose file the project already lists with local_compose`, name, Fragment)
 	}
 	return d, nil
 }
@@ -322,6 +330,15 @@ func NewDevcontainer(c *config.Config, owner, project, stateDir string) (*Devcon
 	if err != nil {
 		return nil, err
 	}
+	inputs := j.composeFiles()
+	if UsesGeneratedConfig(j, p.LocalCompose) {
+		for i, file := range inputs {
+			inputs[i] = strings.ReplaceAll(file, "${localWorkspaceFolder}", dir)
+			if strings.Contains(inputs[i], "${") {
+				return nil, fmt.Errorf("cannot resolve dockerComposeFile %q → use literal paths or ${localWorkspaceFolder}", file)
+			}
+		}
+	}
 	user := j.RemoteUser
 	if user == "" {
 		user = j.ContainerUser
@@ -344,7 +361,7 @@ func NewDevcontainer(c *config.Config, owner, project, stateDir string) (*Devcon
 		rehearsal = c.Workspace.Namespace
 	}
 	env = append(env, ComposeEnv(files, c.Ports.Offset, rehearsal)...)
-	compose := ProjectComposeName(dir, j.composeFiles(), p.LocalCompose)
+	compose := ProjectComposeName(dir, inputs, p.LocalCompose)
 	if workspace.IsRehearsal(owner) {
 		// The folder has the owner's name, so its container must not take the owner's Compose name.
 		compose += "_" + c.Workspace.Namespace
@@ -354,7 +371,14 @@ func NewDevcontainer(c *config.Config, owner, project, stateDir string) (*Devcon
 		cli:      strings.Fields(strings.ReplaceAll(c.Devcontainer.Command, "{version}", c.Devcontainer.Version)),
 		lock:     filepath.Join(stateDir, "containers", project+".lock"),
 		fragment: cmpOr(p.LocalCompose, Fragment)}
-	if err := d.configHash(j.composeFiles()); err != nil {
+	if UsesGeneratedConfig(j, p.LocalCompose) {
+		d.fragment = "aw/" + Fragment
+		d.overlay, err = d.generateOverlay(j)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if err := d.configHash(inputs); err != nil {
 		return nil, err
 	}
 	return d, nil
@@ -435,6 +459,14 @@ func (d *Devcontainer) fragmentText() string {
 // WriteFragment writes the fragment if it changed, and keeps it out of Git through the clone's own
 // exclude file, which no commit carries.
 func (d *Devcontainer) WriteFragment() error {
+	if d.overlay != nil {
+		if err := d.checkGeneratedFiles(); err != nil {
+			return err
+		}
+		if err := writeOverlay(filepath.Join(d.Dir, GeneratedConfig), d.overlay); err != nil {
+			return err
+		}
+	}
 	frag := cmpOr(d.fragment, Fragment)
 	name := filepath.Join(d.Dir, ".devcontainer", filepath.FromSlash(frag))
 	text := d.fragmentText()
@@ -448,6 +480,9 @@ func (d *Devcontainer) WriteFragment() error {
 	}
 	exclude := filepath.Join(d.Dir, ".git", "info", "exclude")
 	line := ".devcontainer/" + frag
+	if d.overlay != nil {
+		line = ".devcontainer/aw/"
+	}
 	old, err := os.ReadFile(exclude)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
@@ -710,6 +745,12 @@ func (d *Devcontainer) Up(ctx context.Context, out io.Writer) (string, error) {
 		return "", err
 	}
 	defer unlock()
+	// Refresh the generated choice even when an existing matching container can be reused.
+	if d.overlay != nil {
+		if err := d.WriteFragment(); err != nil {
+			return "", err
+		}
+	}
 	id, err := d.Running(ctx)
 	if err != nil {
 		return "", err
@@ -734,7 +775,11 @@ func (d *Devcontainer) Up(ctx context.Context, out io.Writer) (string, error) {
 		if len(d.cli) == 0 {
 			return "", errors.New("[devcontainer] command is empty → set the devcontainer CLI's command")
 		}
-		c := exec.CommandContext(ctx, d.cli[0], append(d.cli[1:], "up", "--workspace-folder", d.Dir)...)
+		args := append(append([]string{}, d.cli[1:]...), "up", "--workspace-folder", d.Dir)
+		if d.overlay != nil {
+			args = append(args, "--config", filepath.Join(d.Dir, GeneratedConfig))
+		}
+		c := exec.CommandContext(ctx, d.cli[0], args...)
 		c.Dir, c.Stdout, c.Stderr = d.Dir, out, out
 		c.Env = append(os.Environ(), d.cliEnv...)
 		fmt.Fprintf(out, "Starting the %s container with devcontainer up…\n", d.Project)

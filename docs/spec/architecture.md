@@ -260,7 +260,24 @@ Built-in providers implement the same interface in Go, so a team can replace one
   only through `devcontainer up`, and a claim step handles containers left over from a moved checkout. The runner compares a running container's mounts and published ports with what the
   configuration requires and refuses a mismatch with the fix.
 
-A project's devcontainer must be a Compose one, and its `devcontainer.json` must say:
+A project's devcontainer must name `dockerComposeFile` and `service`. With no aw fragment or
+`local_compose` slot already listed, aw uses **Mode A**, a generated configuration at
+`.devcontainer/aw/devcontainer.json`. The whole generated directory is excluded through the clone's
+`.git/info/exclude`. aw regenerates this choice before reuse/start and passes it to the CLI with
+`--config`, after running its own claim step. The project configuration is left byte-for-byte intact.
+In VS Code, choose the configuration whose name ends in `(aw)`; Rebuild reuses that choice
+([verified with Dev Containers 0.473.0](../dev/spikes.md#devcontainer-cli-behavior-for-f5)).
+
+The generated choice keeps the project's initializeCommand (string, array or object), workspace
+folder, user and unrelated settings. Compose files remain at their original absolute locations;
+local feature references are rebased. aw adds its generated Compose fragment last, preserving the
+project's Compose name. Forwarded ports already published by aw are removed, and their automatic
+forwarding is ignored; other forwarded ports and port labels stay. Compose file references may be
+literal or use `${localWorkspaceFolder}`. An existing unrelated file or symlink at the generated
+paths is refused with a recovery, so automatic generation cannot overwrite a project configuration.
+
+**Existing committed wiring** remains supported as a third mode. It lists aw's fragment and runs
+its claim step in the project's committed `devcontainer.json`:
 
 ```jsonc
 {
