@@ -422,3 +422,23 @@ candidate result supersedes the earlier diagnostic absolute failures for release
 | serve-free-seat | 100 | 9.45 | 10.98 | 32.35 | 40.14 | 50.00 | pass |
 | grant-next | 100 | 28.61 | 44.72 | 45.74 | 51.64 | 50.00 | pass |
 | preempt | 100 | 8.09 | 9.52 | 11.26 | 27.85 | 50.00 | pass |
+
+### Linux laptop, 2026-11-13, final v0.2.0 candidate after concurrent-exclude fix
+
+The same laptop, candidate code at `15fb966`, including append-only shared Git excludes.
+Full absolute run with `TMPDIR=~/.cache/aw-tmp GOTMPDIR=~/.cache/aw-tmp go run ./bench`;
+no other aw tests/builds ran concurrently. Every absolute budget passes. The shared-exclude
+regression also passes under `go test -race ./internal/sandbox`; full unit/vet/acceptance pass.
+
+| Operation | n | p50 ms | p95 ms | p99 ms | max ms | limit ms | result |
+|---|---|---|---|---|---|---|---|
+| hook | 1000 | 4.72 | 5.54 | 6.07 | 7.05 | 8.00 | pass |
+| whoami | 500 | 3.98 | 4.48 | 4.71 | 5.08 | 10.00 | pass |
+| config-get | 500 | 3.98 | 4.68 | 5.10 | 5.51 | 10.00 | pass |
+| attach-from-pool | 100 | 61.79 | 76.36 | 82.10 | 114.20 | 100.00 | pass |
+| new-until-harness | 100 | 67.78 | 83.18 | 87.66 | 93.47 | 150.00 | pass |
+| dashboard | 200 | 53.01 | 56.65 | 57.85 | 60.24 | 100.00 | pass |
+| ref-hook | 1000 | 5.42 | 6.22 | 6.63 | 7.82 | 8.00 | pass |
+| serve-free-seat | 100 | 8.98 | 10.13 | 29.86 | 42.80 | 50.00 | pass |
+| grant-next | 100 | 27.82 | 35.01 | 44.85 | 45.03 | 50.00 | pass |
+| preempt | 100 | 7.90 | 9.21 | 9.61 | 36.14 | 50.00 | pass |

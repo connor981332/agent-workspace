@@ -9,7 +9,7 @@ harness). Not every suggestion is taken: each section says what is kept as it is
 
 **State:** FULLY IMPLEMENTED
 
-**Updated:** 2026-11-12
+**Updated:** 2026-11-13
 
 **Branches / MRs:** #81 to #89 and #91 are merged into master. #91 completes F5 Mode A after
 all 16 checks passed, including the corrected canonical-path test on both macOS architectures.
@@ -42,6 +42,11 @@ from the plan as written:
 - Unit tests cover preservation, stable regeneration, forwarding and file ownership. The scenario
   covers generated CLI selection, the Compose name, seat ports, Git exclusion and refresh on reuse.
 - All four F5 prerequisite checks are now answered in `docs/dev/spikes.md`.
+
+**Release integration:** an ARM rehearsal failure exposed a shared Git exclude-file race during
+concurrent setup. Sandbox setup now appends missing patterns instead of rewriting a stale snapshot;
+a regression test reproduces lost user/materialization rules on the old code and passes under
+race detection with the fix. Unit/vet/full acceptance checks and all ten absolute laptop budgets pass on the corrected candidate.
 
 **Next step:** merge #90 after every combined CI check passes;
 rebuild the owner's dev binary, then prepare v0.2.0 at the protected release approval gate.
