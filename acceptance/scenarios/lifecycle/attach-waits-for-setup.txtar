@@ -1,0 +1,41 @@
+# aw attach --wait waits for the lane's setup, printing each step, and ends with the result: on a
+# failure, the step, the end of its log and the command that retries it, so an agent need not poll.
+# req: R31
+# source: plans/agent-feedback.md, item 5
+# milestone: M12
+
+workspace shop --init
+! exec aw attach 'add feature flag' --wait
+stdout 'Claimed lane 01 feature-flag'
+stderr 'aw: setting up lane feature-flag: '
+stderr 'lane feature-flag: setup incomplete \(web\.setup failed: exit status 3, log .*web\.setup\.log\) → aw setup feature-flag'
+stderr 'The end of its log:'
+stderr 'not fixed yet'
+
+exec touch .git/fixed
+exec aw setup feature-flag
+exec aw attach 'another one' --wait
+stderr '^aw: lane another-one is set up \([0-9]+ steps\)$'
+exec aw --json
+json stdout .lanes[1].state working
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[lifecycle]
+prepare = 'sleep 0.3'
+
+[projects.web]
+directory = "web"
+
+[projects.web.lifecycle]
+setup = 'test -e "$AW_OWNER/.git/fixed" || { echo not fixed yet; exit 3; }'
+
+[projects.api]
+directory = "api"

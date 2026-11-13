@@ -10,11 +10,13 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/connor981332/agent-workspace/internal/config"
 	"github.com/connor981332/agent-workspace/internal/lanes"
+	"github.com/connor981332/agent-workspace/internal/lifecycle"
 	"github.com/connor981332/agent-workspace/internal/platform"
 	"github.com/connor981332/agent-workspace/internal/state"
 	"github.com/connor981332/agent-workspace/internal/timing"
@@ -97,7 +99,7 @@ func sessionIdentity(harness, session string) (lanes.Identity, error) {
 }
 
 func newAttachCmd() *cobra.Command {
-	var asJSON bool
+	var asJSON, wait bool
 	var branch, harness, session, role string
 	cmd := &cobra.Command{
 		Use:   `attach "<purpose>"`,
@@ -107,7 +109,11 @@ a new one. The lane is named from the purpose (aw attach "fix checkout tax round
 checkout-tax), and has a worktree of every project on the lane's branch.
 
 The same session attaching again gets the same lane. Work in the lane root aw prints. aw lanes
-lists the lanes that exist.`,
+lists the lanes that exist.
+
+A new lane's setup runs in the background, and commands that need it wait for it. With --wait,
+attach waits too, printing each step as it starts, and ends with the result: on a failure, the
+end of the step's log and the command that retries it.`,
 		Args: cobra.ExactArgs(1),
 		RunE: run(func(cmd *cobra.Command, args []string) error {
 			who, err := sessionIdentity(harness, session)
@@ -142,11 +148,18 @@ lists the lanes that exist.`,
 			}
 			out := cmd.OutOrStdout()
 			if asJSON {
-				return writeJSON(out, map[string]any{
+				var setupErr error
+				if wait {
+					setupErr = waitForSetup(cmd, c.Lane.Number, io.Discard)
+				}
+				if err := writeJSON(out, map[string]any{
 					"number": c.Lane.Number, "lane": c.Dir, "name": c.Lane.Name, "purpose": c.Lane.Purpose,
 					"state": c.Lane.State, "root": c.Root, "repos": c.Repos, "reused": c.Reused, "returned": c.Returned, "joined": c.Joined, "from_pool": c.FromPool,
 					"notes": c.Notes,
-				})
+				}); err != nil {
+					return err
+				}
+				return setupErr
 			}
 			verb := "Claimed"
 			switch {
@@ -161,15 +174,69 @@ lists the lanes that exist.`,
 			fmt.Fprintf(out, "%s lane %s %s for %q.\n", verb, c.Dir, ui.Clean(c.Lane.Name), ui.Clean(c.Lane.Purpose))
 			fmt.Fprintf(out, "Work in the lane root: cd %s\n", shellQuote(c.Root))
 			printNotes(cmd.ErrOrStderr(), c.Notes)
+			if wait {
+				return waitForSetup(cmd, c.Lane.Number, cmd.ErrOrStderr())
+			}
 			return nil
 		}),
 	}
+	cmd.Flags().BoolVar(&wait, "wait", false, "wait for the lane's setup to finish, and print the result")
 	cmd.Flags().StringVar(&role, "role", "", "the team role this lane works under")
 	cmd.Flags().StringVar(&branch, "branch", "", "start on this existing branch (tracking origin's when it is only there) instead of a new one")
 	cmd.Flags().StringVar(&harness, "harness", "", "the harness of the attaching session (normally from AW_SESSION or the hook)")
 	cmd.Flags().StringVar(&session, "session", "", "the harness's session ID (normally from AW_SESSION or the hook)")
 	cmd.Flags().BoolVar(&asJSON, "json", false, "print the lane as JSON")
 	return cmd
+}
+
+// waitForSetup waits until a lane's setup has finished or failed, saying each step as it starts. A
+// setup whose process died is noticed (lifecycle.Recover), so this never waits forever on one.
+func waitForSetup(cmd *cobra.Command, lane int, say io.Writer) error {
+	w, err := openForWrite()
+	if err != nil {
+		return err
+	}
+	defer w.Close()
+	ctx := cmd.Context()
+	last := ""
+	for {
+		l, err := state.LaneByNumber(w.store.DB(), lane)
+		if err != nil {
+			return err
+		}
+		steps, err := state.Steps(w.store.DB(), l.Number, l.Generation)
+		if err != nil {
+			return err
+		}
+		switch l.State {
+		case state.LaneClaiming, state.LaneSettingUp:
+		case state.LaneIncomplete:
+			for _, s := range steps {
+				if s.Status == state.StepFailed {
+					return lifecycle.Incomplete(l.Name, s)
+				}
+			}
+			return fmt.Errorf("lane %s: setup incomplete → aw setup %s", l.Name, l.Name)
+		default:
+			fmt.Fprintf(say, "aw: lane %s is set up (%d steps)\n", ui.Clean(l.Name), len(steps))
+			return nil
+		}
+		for _, s := range steps {
+			if s.Status == state.StepRunning && s.Name != last {
+				last = s.Name
+				fmt.Fprintf(say, "aw: setting up lane %s: %s\n", ui.Clean(l.Name), s.Name)
+				break
+			}
+		}
+		if err := lifecycle.Recover(ctx, w.store); err != nil {
+			return err
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(150 * time.Millisecond):
+		}
+	}
 }
 
 func shellQuote(s string) string {
