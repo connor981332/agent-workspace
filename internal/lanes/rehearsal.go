@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -108,7 +109,11 @@ func (m *Manager) BuildRehearsal(ctx context.Context, l state.Lane, id string, s
 	if r.Cfg, err = config.Load(r.Owner); err != nil {
 		return r, fmt.Errorf("the lane's configuration is invalid: %w", err)
 	}
-	if problems := checkIsolated(r.Owner, m.Cfg.Workspace.Namespace, r.Cfg); len(problems) > 0 {
+	problems, skipped := checkIsolated(r.Owner, m.Cfg.Workspace.Namespace, r.Cfg)
+	for _, s := range skipped {
+		say("skipped, as an accepted finding: " + s)
+	}
+	if len(problems) > 0 {
 		return r, fmt.Errorf("this proposal is not isolated, so a rehearsal could reach your real containers and data, and nothing was started:\n  %s\n→ remove a devcontainer's port when a seat publishes it, and otherwise read host ports as ${AW_PORT_<n>:-<n>}, the shared network's name as ${AW_INFRA_NETWORK:-<name>}, and in scripts the infrastructure's Compose project as ${AW_INFRA_PROJECT:-<name>} (aw sets these in a rehearsal, and gives them to data providers too)", strings.Join(problems, "\n  "))
 	}
 	for _, name := range sortedKeys(r.Cfg.Projects) {
@@ -367,11 +372,38 @@ func providerProblems(owner, name string, d *config.Data, names map[string]bool)
 	return out
 }
 
+// acceptedFinding reports whether a file, in a project at dir, is listed in its accepted_findings,
+// and why. A pattern ending in /** matches a directory.
+func acceptedFinding(dir, file string, accepted map[string]string) (string, bool) {
+	rel := relTo(dir, file)
+	for pattern, why := range accepted {
+		if d, ok := strings.CutSuffix(pattern, "/**"); ok && strings.HasPrefix(rel, d+"/") {
+			return why, true
+		}
+		if ok, _ := path.Match(pattern, rel); ok {
+			return why, true
+		}
+	}
+	return "", false
+}
+
+func relTo(dir, file string) string {
+	r, err := filepath.Rel(dir, file)
+	if err != nil {
+		return file
+	}
+	return filepath.ToSlash(r)
+}
+
 // checkIsolated finds what would connect a rehearsal to the real workspace: aw can move what it names,
 // but not a port, network or Compose project written into a file. Guards fail closed, so any of
 // these stops the rehearsal before it starts anything.
-func checkIsolated(owner, realNamespace string, c *config.Config) []string {
-	var problems []string
+//
+// A host project's own Compose files that a person reviewed and listed in accepted_findings are
+// skipped, and returned as skipped, with the reason (0.1.5 change requests, B1): aw does not start
+// them, and cannot see whether the project's scripts do, so the person's review decides. What aw
+// itself starts, the infrastructure and devcontainers, is always checked.
+func checkIsolated(owner, realNamespace string, c *config.Config) (problems, skipped []string) {
 	var files []string
 	infra, _ := filepath.Glob(filepath.Join(owner, "infra", "*.y*ml"))
 	more, _ := filepath.Glob(filepath.Join(owner, "infra", "compose.d", "*.y*ml"))
@@ -380,6 +412,9 @@ func checkIsolated(owner, realNamespace string, c *config.Config) []string {
 	// A host project's Compose files are its own: their name is only a problem beside a container
 	// command, because the word is often just the product's name throughout its code.
 	ownFile := map[string]string{}
+	// accepted are the host projects' Compose files a person reviewed: their fixed ports and names
+	// are not reported, but their Compose project name still is, beside a container command.
+	accepted := map[string]string{}
 	notOwn := func(p string) bool { return isProjectDir(owner, p, c) }
 	for _, f := range composeFilesIn(owner, notOwn) {
 		if !slices.Contains(files, f) {
@@ -398,8 +433,21 @@ func checkIsolated(owner, realNamespace string, c *config.Config) []string {
 		}
 		if p.Directory != "." {
 			for _, f := range composeFilesIn(dir, nil) {
+				if why, ok := acceptedFinding(dir, f, p.Accepted); ok {
+					accepted[f] = fmt.Sprintf("%s: %s (%s)", name, relTo(dir, f), why)
+				}
 				files = append(files, f)
 				ownFile[f] = dir
+			}
+		}
+	}
+	// In a single-repository workspace, the project at "." owns the Compose files found at the root.
+	for _, name := range sortedKeys(c.Projects) {
+		if p := c.Projects[name]; p.Directory == "." && p.Runner != "devcontainer" {
+			for _, f := range files {
+				if why, ok := acceptedFinding(owner, f, p.Accepted); ok && ownFile[f] == owner {
+					accepted[f] = fmt.Sprintf("%s: %s (%s)", name, relTo(owner, f), why)
+				}
 			}
 		}
 	}
@@ -423,6 +471,10 @@ func checkIsolated(owner, realNamespace string, c *config.Config) []string {
 			} else {
 				names[string(m[1])] = true
 			}
+		}
+		if why, ok := accepted[f]; ok {
+			skipped = append(skipped, why)
+			continue
 		}
 		lines := strings.Split(string(data), "\n")
 		for i, line := range lines {
@@ -491,7 +543,8 @@ func checkIsolated(owner, realNamespace string, c *config.Config) []string {
 		})
 	}
 	slices.Sort(problems)
-	return slices.Compact(problems)
+	slices.Sort(skipped)
+	return slices.Compact(problems), skipped
 }
 
 // nearbyVariableName reports whether an external network's name, just above it, is a variable.

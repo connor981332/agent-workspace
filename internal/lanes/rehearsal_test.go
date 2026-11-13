@@ -27,7 +27,8 @@ func TestCheckIsolated(t *testing.T) {
 	write(bad, "api/.devcontainer/compose.yaml", "services:\n  api:\n    ports:\n      - 3050:3050\n")
 	write(bad, "bin/lane-bucket", "docker ps --filter project=rt-infra\n")
 	write(bad, "docs/notes.md", "rt-infra is mentioned here\n")
-	got := strings.Join(checkIsolated(bad, "", cfg), "\n")
+	problems, _ := checkIsolated(bad, "", cfg)
+	got := strings.Join(problems, "\n")
 	for _, want := range []string{"infra/compose.yaml:6: a fixed host port", "infra/compose.yaml:4: a fixed container name", "a fixed shared network", "api/.devcontainer/compose.yaml:4: a fixed host port", "bin/lane-bucket:1: names rt-infra"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q in:\n%s", want, got)
@@ -40,7 +41,7 @@ func TestCheckIsolated(t *testing.T) {
 	good := t.TempDir()
 	write(good, "infra/compose.yaml", "name: rt-infra\nservices:\n  db:\n    ports:\n      - \"${AW_PORT_5432:-5432}:5432\"\nnetworks:\n  default:\n    name: ${AW_INFRA_NETWORK:-rt-net}\n    external: true\n")
 	write(good, "bin/lane-bucket", "docker ps --filter project=\"${AW_INFRA_PROJECT:-rt-infra}\"\n")
-	if got := checkIsolated(good, "", cfg); len(got) != 0 {
+	if got, _ := checkIsolated(good, "", cfg); len(got) != 0 {
 		t.Errorf("an isolated proposal was refused: %v", got)
 	}
 }
@@ -69,7 +70,8 @@ func TestCheckIsolatedHostProjects(t *testing.T) {
 	write(bad, "web/src/app.txt", "welcome to shopfront\n")
 	write(bad, "web/testdata/compose.yaml", "services:\n  x:\n    ports:\n      - \"1:1\"\n")
 	write(bad, "scripts/files", "curl localhost:3900\ndocker ps --filter project=shop-infra\n")
-	got := strings.Join(checkIsolated(bad, "shop", cfg), "\n")
+	problems, _ := checkIsolated(bad, "shop", cfg)
+	got := strings.Join(problems, "\n")
 	for _, want := range []string{"web/docker-compose.yml:5: a fixed host port", "web/bin/dev:1: names shopfront", "scripts/files:1: a fixed address", "scripts/files:2: names shop-infra", "not a file in the workspace"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q in:\n%s", want, got)
@@ -84,8 +86,20 @@ func TestCheckIsolatedHostProjects(t *testing.T) {
 	good := t.TempDir()
 	write(good, "web/compose.yaml", "services:\n  db:\n    ports:\n      - \"${AW_PORT_5432:-5432}:5432\"\n")
 	write(good, "scripts/files", "docker ps --filter project=\"${AW_INFRA_PROJECT:-shop-infra}\"\n")
-	if got := checkIsolated(good, "shop", cfg); len(got) != 0 {
+	if got, _ := checkIsolated(good, "shop", cfg); len(got) != 0 {
 		t.Errorf("an isolated proposal was refused: %v", got)
+	}
+
+	// A reviewed file's fixed ports are skipped and listed; its Compose project's name is still
+	// refused beside a container command, since that would reach the real one.
+	cfg.Projects["web"].Accepted = map[string]string{"docker-compose.yml": "opt-in backing services, never started by a lane"}
+	problems, skipped := checkIsolated(bad, "shop", cfg)
+	got = strings.Join(problems, "\n")
+	if strings.Contains(got, "web/docker-compose.yml:5") || !strings.Contains(got, "web/bin/dev:1: names shopfront") {
+		t.Errorf("an accepted file:\n%s", got)
+	}
+	if len(skipped) != 1 || !strings.Contains(skipped[0], "web: docker-compose.yml (opt-in backing services") {
+		t.Errorf("skipped: %v", skipped)
 	}
 }
 
