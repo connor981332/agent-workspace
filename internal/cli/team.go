@@ -134,7 +134,7 @@ func holdSeats(ctx context.Context, w *writeContext, m *lanes.Manager, b *broker
 					release()
 					return nil, err
 				}
-				if err := provision(ctx, w, m, b, r, l); err != nil {
+				if err := provision(ctx, w, m, b, r, l, os.Stderr); err != nil {
 					release()
 					return nil, err
 				}

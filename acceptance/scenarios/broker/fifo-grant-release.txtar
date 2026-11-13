@@ -14,6 +14,8 @@ exec aw serve stack
 stdout 'Holding seat 1 on stack'
 stdout 'app http://lane-01.localhost:3100'
 stdout 'db http://lane-01.localhost:5100'
+# It says what it starts, where its log is, and when it waits for readiness.
+stderr '^aw: starting web\.app on port 3100 \(log .*web\.app\.log\)'
 
 cd ../02
 ! exec aw serve stack
