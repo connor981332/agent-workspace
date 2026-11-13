@@ -5,6 +5,14 @@ adopting either candidate. The framework ships agent skills that do most of that
 rule: **agents propose, the tool verifies, a human approves.** The binary stays deterministic and is
 the authority. Agents only author files that a person reviews.
 
+Approval is not only the review of the finished merge request. aw adapts to the projects as they
+are, so where a project already offers several setups (a devcontainer or the host, an in-memory
+event bus or real Kafka, opt-in Compose profiles), the design skill asks the human to choose among
+them, with the tradeoffs and a recommendation, before it writes any configuration, and records the
+choice. A project change is offered as an option with its tradeoff, never assumed: the readiness
+audit sorts each finding into what aw should handle, a real lane problem in the project, and what
+to accept with a reason, and only the second becomes a project change, if the human chooses it.
+
 ## Skills as framework content
 
 Skills are written once, in a harness-neutral form, and composed into each harness's skill or
