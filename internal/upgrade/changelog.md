@@ -15,6 +15,8 @@ Newest first. A line starting with **Breaking:** is called out by `aw upgrade`.
 - `aw setup <lane>` links the secret files and copies the local files the configuration declared since the lane was made, and says when a project is missing from the lane.
 - `aw reset-branch` starts a lane over from its base, archiving each tip first, and `aw attach` says when a session's lane still holds an earlier purpose's commits.
 - `aw note "<text>"` keeps a note on the lane of something left to do outside it, such as a temporary CI schedule. `aw recap` and a session starting in the lane show open notes, `aw finish` warns, and `aw sweep` keeps the lane until they are done.
+- The devcontainer runner uses the Compose project name the project's own configuration gives (`COMPOSE_PROJECT_NAME`, or a top-level `name:`), where it used `<folder>_devcontainer` regardless. With a project that sets its own name, aw now joins the developer's existing stack instead of starting a second, empty one beside it.
+- `[resources.<name>] on_acquire` runs a command each time a process resource's seat is handed to a lane, before its servers start, such as resetting a shared Kafka consumer group for a single app slot.
 - `aw upgrade --take` replaces every file it reports, and rehearsal skips the Compose files listed in `accepted_findings`.
 - `aw recap` shows only a lane's own work: repositories the lane has not changed collapse into one "no changes" line, a commit already on origin counts as pushed, and the workspace files aw copied into a lane are not counted as uncommitted work.
 - `aw upgrade`: moves a workspace to a release, shows this changelog, migrates configuration, and regenerates managed files. A managed file edited by hand is never overwritten.

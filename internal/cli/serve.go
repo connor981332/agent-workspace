@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"regexp"
@@ -20,6 +22,7 @@ import (
 	"github.com/connor981332/agent-workspace/internal/config"
 	"github.com/connor981332/agent-workspace/internal/extproto"
 	"github.com/connor981332/agent-workspace/internal/lanes"
+	"github.com/connor981332/agent-workspace/internal/lifecycle"
 	"github.com/connor981332/agent-workspace/internal/procs"
 	"github.com/connor981332/agent-workspace/internal/state"
 	"github.com/connor981332/agent-workspace/internal/timing"
@@ -181,6 +184,11 @@ func startServers(ctx context.Context, w *writeContext, m *lanes.Manager, r brok
 		}
 		logs = filepath.Join(dir, "logs")
 	}
+	if r.OnAcquire != "" {
+		if err := runOnAcquire(ctx, m, r, l, seatEnv, logs, say); err != nil {
+			return nil, err
+		}
+	}
 	var started []state.LeaseProc
 	undo := func() {
 		for _, p := range started {
@@ -223,6 +231,40 @@ func startServers(ctx context.Context, w *writeContext, m *lanes.Manager, r brok
 		started = append(started, state.LeaseProc{Server: full, PID: proc.PID, Start: proc.Start, Log: log})
 	}
 	return started, nil
+}
+
+// runOnAcquire runs a process resource's handoff hook for the lane taking a seat, in its root, with
+// its environment, before its servers start (0.1.5 change requests, F6). A failure stops the grant,
+// with the end of the hook's log.
+func runOnAcquire(ctx context.Context, m *lanes.Manager, r broker.Resource, l state.Lease, seatEnv []string, logs string, say io.Writer) error {
+	where, err := m.LocateIn(l.Lane, "")
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(logs, 0o755); err != nil {
+		return err
+	}
+	log := filepath.Join(logs, r.Name+".on_acquire.log")
+	f, err := os.Create(log)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	if say != nil {
+		fmt.Fprintf(say, "aw: running %s's on_acquire for seat %d (log %s)\n", r.Name, l.Seat, log)
+	}
+	c := exec.CommandContext(ctx, "sh", "-c", r.OnAcquire)
+	c.Dir = where.Dir
+	c.Env = append(append(append(os.Environ(), where.Env...), seatEnv...), "AW_RESOURCE="+r.Name)
+	c.Stdout, c.Stderr = f, f
+	if err := c.Run(); err != nil {
+		msg := fmt.Sprintf("%s's on_acquire failed (%v), so the seat was given back → fix it, and run aw serve %s again; its log is %s", r.Name, err, r.Name, log)
+		if t := lifecycle.Tail(log); t != "" {
+			msg += "\nThe end of its log:\n" + t
+		}
+		return errors.New(msg)
+	}
+	return nil
 }
 
 // provision makes a granted seat real: a process resource's servers, or a scripted token. On failure

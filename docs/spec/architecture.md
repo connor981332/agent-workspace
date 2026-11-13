@@ -273,8 +273,11 @@ A project's devcontainer must be a Compose one, and its `devcontainer.json` must
 
 `aw.compose.yaml` is written by `aw`, in the clone's `.devcontainer`, and kept out of Git through the
 clone's `.git/info/exclude`, because it names this checkout's path. It holds the same-path bind mount,
-every seat's port on loopback, and the Compose name. The team commits `devcontainer.json`, which lists
-it. `aw containers claim <project>` rewrites it, and removes a container left over from a moved
+every seat's port on loopback, and the Compose name: the one the project's own configuration resolves
+to (`COMPOSE_PROJECT_NAME`, from the environment or `.devcontainer/.env`, else the last top-level
+`name:` in its Compose files, else `<folder>_devcontainer`, as VS Code derives it), so that aw and VS
+Code share the developer's existing stack and its volumes. The team commits `devcontainer.json`, which
+lists it. `aw containers claim <project>` rewrites it, and removes a container left over from a moved
 checkout, or refuses when that other checkout is live and running there. The CLI runs
 `initializeCommand` before it reads the Compose files, so VS Code gets exactly what `aw` gets.
 A server listening only on the container's loopback is not reachable through a published port, so

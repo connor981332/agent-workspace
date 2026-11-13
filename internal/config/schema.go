@@ -234,6 +234,9 @@ var schema = table("",
 			"tokens", strList("token: the handles, e.g. emulator-5554."),
 			"acquire", str("token: extension-protocol command that returns a new token."),
 			"release", str("token: extension-protocol command that releases a token."),
+			"on_acquire", str("process: a shell command run each time a seat is handed to a lane (or the owner), in its root and with its "+
+				"environment and AW_SEAT_<RESOURCE>, before its servers start; for example resetting a shared Kafka consumer group or "+
+				"flushing a shared cache, so the new holder does not take over the previous one's state. A failure gives the seat back."),
 			"owner_counts", boolean("The owner's own copy uses a seat.").withDefault(true),
 			"owner_preempts", boolean("The owner cuts in line and evicts the longest holder.").withDefault(true),
 			"evict_grace", duration("SIGTERM to the process group, then SIGKILL after this.").withDefault("15s"),

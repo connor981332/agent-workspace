@@ -214,6 +214,7 @@ type Resource struct {
 	Tokens        []string `json:"tokens"`
 	Acquire       string   `json:"acquire"`
 	Release       string   `json:"release"`
+	OnAcquire     string   `json:"on_acquire"`
 	OwnerCounts   bool     `json:"owner_counts"`
 	OwnerPreempts bool     `json:"owner_preempts"`
 	EvictGrace    Duration `json:"evict_grace"`
@@ -885,6 +886,9 @@ func (c *Config) check(team *doc) Errors {
 				}
 			}
 		case "token":
+			if r.OnAcquire != "" {
+				fail(p.child("on_acquire"), "is for a process resource", "use acquire, which returns the token, for a token resource")
+			}
 			if len(r.Servers) > 0 {
 				fail(p.child("servers"), "a token resource owns no servers", "remove servers, or use kind = \"process\"")
 			}

@@ -41,6 +41,51 @@ func TestComposeName(t *testing.T) {
 	}
 }
 
+func TestProjectComposeName(t *testing.T) {
+	write := func(dir, name, text string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Join(dir, ".devcontainer"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, ".devcontainer", name), []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	files := []string{"compose.yaml", "compose.kafka.yaml", Fragment}
+	t.Setenv("COMPOSE_PROJECT_NAME", "")
+	os.Unsetenv("COMPOSE_PROJECT_NAME")
+
+	plain := filepath.Join(t.TempDir(), "Checkout")
+	write(plain, "compose.yaml", "services:\n  app: {}\n")
+	if got := ProjectComposeName(plain, files); got != "checkout_devcontainer" {
+		t.Errorf("no name: %q", got)
+	}
+
+	named := filepath.Join(t.TempDir(), "checkout")
+	write(named, "compose.yaml", "name: Monolith\nservices:\n  app: {}\n")
+	write(named, Fragment, "name: checkout_devcontainer\n")
+	if got := ProjectComposeName(named, files); got != "monolith" {
+		t.Errorf("a top-level name, with aw's fragment listed after it: %q", got)
+	}
+	write(named, "compose.kafka.yaml", "name: \"${STACK:-monolith-dev}\" # the last file wins\n")
+	if got := ProjectComposeName(named, files); got != "monolith-dev" {
+		t.Errorf("an interpolated name with a default: %q", got)
+	}
+	write(named, ".env", "STACK=mine\n")
+	if got := ProjectComposeName(named, files); got != "mine" {
+		t.Errorf("a name from .env: %q", got)
+	}
+	write(named, ".env", "COMPOSE_PROJECT_NAME=fromenv\n")
+	if got := ProjectComposeName(named, files); got != "fromenv" {
+		t.Errorf("COMPOSE_PROJECT_NAME in .env: %q", got)
+	}
+	write(named, ".env", "")
+	write(named, "compose.kafka.yaml", "name: ${UNSET_STACK_NAME}\n")
+	if got := ProjectComposeName(named, files); got != "checkout_devcontainer" {
+		t.Errorf("an unresolvable name falls back: %q", got)
+	}
+}
+
 func TestHostPathUndoesDockerDesktopPrefixes(t *testing.T) {
 	for in, want := range map[string]string{
 		"/host_mnt/Users/a/web":      "/Users/a/web",

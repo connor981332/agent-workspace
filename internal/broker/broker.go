@@ -58,6 +58,7 @@ type Resource struct {
 	IdleExpiry    time.Duration
 	Acquire       string
 	Release       string
+	OnAcquire     string // process: run when a seat is handed to a lane, before its servers start
 }
 
 // Resources are every resource, in the fixed order requests are evaluated in.
@@ -74,7 +75,7 @@ func (b *Broker) Resources() []Resource {
 		}
 		out = append(out, Resource{Name: name, Kind: r.Kind, Capacity: capacity, Servers: r.Servers, Tokens: r.Tokens,
 			OwnerCounts: r.OwnerCounts, OwnerPreempts: r.OwnerPreempts, EvictGrace: time.Duration(r.EvictGrace),
-			MaxHold: time.Duration(r.MaxHold), IdleExpiry: time.Duration(r.IdleExpiry), Acquire: r.Acquire, Release: r.Release})
+			MaxHold: time.Duration(r.MaxHold), IdleExpiry: time.Duration(r.IdleExpiry), Acquire: r.Acquire, Release: r.Release, OnAcquire: r.OnAcquire})
 	}
 	var implicit []string
 	for pname, p := range b.Cfg.Projects {
