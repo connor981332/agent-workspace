@@ -30,8 +30,9 @@ my-workspace/                  ← the workspace repository: workspace.toml, bin
 - **Workspace.** A Git repository holding `workspace.toml`, which lists your projects (each its own
   Git repository) and how to install, run and serve them. A single repository can also be its own
   workspace.
-- **Owner checkout.** Your normal clones of the projects. Agents may read here, but their first write
-  is refused and they are told to claim a lane. You can explicitly invite one to work alongside you
+- **Owner checkout.** Your normal clones of the projects. Agents may read here (reading a file their
+  lane also has comes with a note pointing to the lane's copy), but their first write is refused and
+  they are told to claim a lane. You can explicitly invite one to work alongside you
   with `aw pair`.
 - **Lane.** One piece of work across every project. It is named from the purpose you give it
   (`"fix checkout tax rounding"` becomes `checkout-tax`) and also has a number. Every command that
@@ -148,6 +149,9 @@ If you already started an agent in the owner checkout, it can claim a lane for i
 | `aw serve <resource>` | Take a seat and start the lane's servers on its own ports. Exits with status 3 and a queue position if every seat is taken. `--wait` waits instead. |
 | `aw stop <resource>` | Give the seat back. |
 | `aw snapshot <name>` / `aw restore <name>` | Save the lane's data, or replace it with a named snapshot. |
+| `aw push [--as <name>]` | Push the lane's branch to origin and set its upstream. `--as` pushes it under the branch name your team's conventions want, and aw remembers that name for recap, finish and sweep. |
+| `aw note "<text>"` | Keep a note on the lane of something left to do, such as a temporary change to undo. Recap shows open notes, a session starting in the lane is told them, and `aw finish` warns while any is open. `--done <n>` closes one. |
+| `aw reset-branch [project…]` | Start the lane's branches over from their base, archiving what they had under `refs/aw/archive/` first. |
 | `aw finish --summary "…"` | Hand off for review. Records the exact head of every repository and a note on what to verify. Refuses, listing every problem, if anything is uncommitted or off-branch. |
 
 ### Keeping track
@@ -182,19 +186,21 @@ All of these only read.
 
 ### Working alongside an agent
 
-- `aw pair` starts an agent in your owner checkout that may edit there. Destructive Git and changes
-  to the workspace's own configuration stay refused.
+- `aw pair` starts an agent in your owner checkout that acts for you: aw's own rules do not apply to
+  it, so it may edit there, change the workspace's configuration and run your `aw` commands. Your
+  team's guards and the safeguards you turned on still apply.
 - `aw move-to-lane "<purpose>"` moves your uncommitted work into a new lane.
 - `aw delegate` lets sessions in your checkout do routine maintenance (setup, sweep, park) for a
   limited time.
 
 ## Configuration
 
-Configuration has three layers, later ones overriding earlier ones:
+Configuration has four layers, later ones overriding earlier ones:
 
 1. Framework defaults.
 2. The team layer, `workspace.toml`, committed to the workspace repository.
-3. Your individual layer, `~/.config/agent-workspace/<namespace>.toml`. It holds personal choices
+3. The choices you made among the team's options (see below).
+4. Your individual layer, `~/.config/agent-workspace/<namespace>.toml`. It holds personal choices
    such as `[user] harness` and `[user] multiplexer`. The team can lock keys with `[locks]`.
 
 A minimal single-repository workspace:
@@ -227,6 +233,47 @@ aw config explain lanes.max    # and which layer set it
 ```
 
 The full reference is [`docs/reference/config.md`](docs/reference/config.md).
+
+### Team options
+
+When a team supports more than one way to run something, such as real Kafka or an in-memory event
+bus, it declares an option, and each developer picks a choice:
+
+```toml
+# workspace.toml
+[options.event-bus]
+description = "How the app reaches the event bus"
+default = "memory"
+
+[options.event-bus.choices.memory]
+projects.web.env = { EVENT_BUS = "memory" }
+
+[options.event-bus.choices.real]
+projects.web.runner = "devcontainer"
+```
+
+```toml
+# ~/.config/agent-workspace/<namespace>.toml
+[choose]
+event-bus = "real"
+```
+
+`aw options` lists each option, its choices and the one in effect for you. Hooks and commands see it
+as `AW_OPTION_<NAME>`, and `aw config validate` checks every choice.
+
+### Devcontainers
+
+A project with `runner = "devcontainer"` runs its commands in one Compose devcontainer that lanes
+and VS Code share. The project's own `devcontainer.json` needs nothing of aw's: aw generates an
+ignored `.devcontainer/aw/devcontainer.json` beside it, with the checkout mounted at the same path
+and every seat's port published. In VS Code, choose the configuration whose name ends in `(aw)`;
+Rebuild keeps that choice. If you would rather have a single configuration, list a gitignored local
+Compose file in the project's `devcontainer.json` and name it with `local_compose`; aw writes its
+mount and ports there.
+
+Starting, recreating and removing containers is yours: `aw containers up`, `recreate` and `down`,
+which refuse while a lane or you are using the container. When the configuration changes, aw
+replaces an idle container on its next use, keeping named volumes.
 
 ### Optional safeguards
 

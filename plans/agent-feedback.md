@@ -43,6 +43,8 @@ from the plan as written:
   covers generated CLI selection, the Compose name, seat ports, Git exclusion and refresh on reuse.
 - All four F5 prerequisite checks are now answered in `docs/dev/spikes.md`.
 
+**In progress:** nothing; released in v0.2.0, with notes corrected in v0.2.1.
+
 **Release integration:** an ARM rehearsal failure exposed a shared Git exclude-file race during
 concurrent setup. Sandbox setup now appends missing patterns instead of rewriting a stale snapshot;
 a regression test reproduces lost user/materialization rules on the old code and passes under
