@@ -7,7 +7,7 @@ workspace shop --init
 env CLAUDE_CODE_SESSION_ID=s-1
 exec aw attach 'first'
 env CLAUDE_CODE_SESSION_ID=s-2
-exec aw attach 'second'
+exec aw attach 'second' --wait
 env CLAUDE_CODE_SESSION_ID=s-1
 cd .worktrees/01
 exec aw setup first

@@ -139,6 +139,9 @@ end of the step's log and the command that retries it.`,
 				return err
 			}
 			t.Mark("claim")
+			if c.Reused && !c.Returned && !samePurpose(args[0], c.Lane.Purpose) {
+				leftoverNote(cmd, m, c.Lane)
+			}
 			startSetup(cmd.ErrOrStderr(), w, c)
 			t.Mark("setup")
 			w.Close()
@@ -237,6 +240,11 @@ func waitForSetup(cmd *cobra.Command, lane int, say io.Writer) error {
 		case <-time.After(150 * time.Millisecond):
 		}
 	}
+}
+
+// samePurpose compares two purposes as a person would: case and spacing aside.
+func samePurpose(a, b string) bool {
+	return strings.EqualFold(strings.Join(strings.Fields(a), " "), strings.Join(strings.Fields(b), " "))
 }
 
 func shellQuote(s string) string {

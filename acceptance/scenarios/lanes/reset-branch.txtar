@@ -1,0 +1,39 @@
+# A session that attaches again with another purpose keeps its lane, and is told the lane still has
+# the earlier purpose's commits. aw reset-branch starts the lane over from its base, archiving each
+# tip under refs/aw/archive first, so nothing committed is lost.
+# req: R27
+# source: plans/agent-feedback.md, item 10
+# milestone: M12
+
+workspace shop --init --repos web,api
+env CLAUDE_CODE_SESSION_ID=s-1
+exec aw attach 'first ticket'
+lane-commit 01 web/a.txt 'first ticket work'
+exec git -C web/.worktrees/01 rev-parse HEAD
+cp stdout $WORK/old-head
+
+exec aw attach 'second ticket'
+stdout 'Already attached to lane 01'
+stderr 'aw: note: this session''s lane first-ticket still has the commits of its earlier purpose, "first ticket":'
+stderr '  web: 1 commit, not pushed'
+stderr 'bin/aw reset-branch, which archives them first'
+exec aw attach 'First  ticket'
+! stderr 'earlier purpose'
+
+cd .worktrees/01
+exec sh -c 'echo wip > web/b.txt'
+! exec aw reset-branch
+stderr 'uncommitted work in web \(1\), which a reset would lose; nothing was changed'
+rm web/b.txt
+exec aw reset-branch
+stdout '^web: reset aw/first-ticket to origin/main \([0-9a-f]{7}\), after archiving its 1 commit at refs/aw/archive/first-ticket/[0-9-]+ → git branch <name> refs/aw/archive/first-ticket/'
+! stdout 'api:'
+exec git -C web rev-parse HEAD
+cp stdout $WORK/new-head
+exec git -C web rev-parse origin/main
+cmp stdout $WORK/new-head
+exec sh -c 'git -C web for-each-ref --format="%(objectname)" refs/aw/archive/first-ticket | cmp - "$WORK/old-head"'
+exec aw reset-branch
+stdout 'has no commits of its own to reset'
+exec aw recap --json
+json stdout .lanes[0].repos[2].ahead 0
