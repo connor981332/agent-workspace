@@ -4,6 +4,8 @@ Newest first. A line starting with **Breaking:** is called out by `aw upgrade`.
 
 ## 0.2.0
 
+- Concurrent lane setup preserves additions to the shared Git exclude file, preventing local aw files from becoming tracked and blocking rehearsal cleanup.
+
 - Host servers started outside aw are detected at their literal `owner_port`, even with a workspace port offset, so they still count toward resource capacity. Devcontainer detection keeps the offset used by aw's published ports.
 
 - Compose devcontainers no longer need committed aw wiring. aw generates an ignored `.devcontainer/aw/devcontainer.json`, preserves the project's initialization and settings, and starts that configuration. Choose its `(aw)` entry in VS Code; Rebuild keeps the choice. aw-published ports are removed from forwarding, and existing local Compose slots and committed aw fragments stay supported.
