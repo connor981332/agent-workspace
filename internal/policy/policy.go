@@ -219,9 +219,6 @@ func decideFiles(s Scope, c Call, cwd shell.Dir) Decision {
 			if d := s.unattachedWrite(abs); d.Verdict != Allow {
 				return d
 			}
-			if d := s.selfModification(abs, p); d.Verdict != Allow {
-				return d
-			}
 			if d := s.guardsOnPath(abs); d.Verdict != Allow {
 				return d
 			}
@@ -244,10 +241,14 @@ func decideShell(s Scope, src string, cwd shell.Dir) Decision {
 	s.start = cwd
 	var asks []Decision
 	var notes []string
+	rules := []func(Scope, shell.Command) Decision{
+		computedRule, pathsRule, ownerOnlyRule, gitRule, containerRule, killRule, serverRule, secretRule, muxRule, unattachedRule, publicationRule, teamGuardRule,
+	}
+	if s.Role == Pair {
+		rules = pairRules
+	}
 	for _, c := range p.Commands {
-		for _, rule := range []func(Scope, shell.Command) Decision{
-			computedRule, pathsRule, ownerOnlyRule, gitRule, containerRule, killRule, serverRule, secretRule, muxRule, selfModRule, unattachedRule, publicationRule, teamGuardRule,
-		} {
+		for _, rule := range rules {
 			switch d := rule(s, c); d.Verdict {
 			case Deny:
 				return d
@@ -264,6 +265,17 @@ func decideShell(s Scope, src string, cwd shell.Dir) Decision {
 		return asks[0]
 	}
 	return allowWith(strings.Join(notes, " "))
+}
+
+// pairRules are the rules for a pair session: only those the team chose, the opt-in safeguards and
+// its own guards. aw's own rules (the lane boundary, the owner-only commands, direct server starts,
+// changes to the workspace's own configuration) protect the human's checkout from agents the human
+// did not invite; a pair session is one the human invited, so they do not apply (R61, as decided
+// in plans/agent-feedback.md). gitRule, containerRule, killRule, secretRule and publicationRule act
+// only through their safeguards outside a lane, and computedRule only while a rule in force needs
+// to read the command.
+var pairRules = []func(Scope, shell.Command) Decision{
+	computedRule, gitRule, containerRule, killRule, secretRule, publicationRule, teamGuardRule,
 }
 
 // fromOutsideLane reports whether a lane session is working from elsewhere in the owner's
@@ -343,31 +355,6 @@ func (s Scope) unattachedWrite(abs string) Decision {
 		return allow()
 	}
 	return deny("attach", "this session is not attached to a lane, and the owner checkout belongs to the human %s", s.attachHint())
-}
-
-// selfModification asks before a pair session changes the workspace's own instructions, hooks,
-// guards or configuration (R63), and refuses a change inside a Git directory, where its own record
-// is: the human alone grants pairing (R60). In a lane such a change is on the lane's branch, and
-// merging it is the review.
-func (s Scope) selfModification(abs, given string) Decision {
-	if s.Role != Pair || !within(abs, s.Owner) {
-		return allow()
-	}
-	rel, err := filepath.Rel(s.Owner, abs)
-	if err != nil {
-		return allow()
-	}
-	parts := strings.Split(rel, string(filepath.Separator))
-	if slices.Contains(parts, ".git") || within(abs, filepath.Join(s.Owner, workspace.LocalStateDir)) {
-		return deny("self-modification", "%s is inside a Git directory or aw's state directory, which holds the workspace's hooks, shared configuration and aw's own records, including this session's → ask the human to change it", quote(given))
-	}
-	top := parts[0]
-	switch {
-	case rel == "workspace.toml", rel == "AGENTS.md", rel == "CLAUDE.md", top == ".aw", top == "bin",
-		top == ".claude", top == ".codex", top == ".grok", top == ".opencode", top == ".githooks":
-		return ask("self-modification", "%s is part of the workspace's own instructions, hooks or configuration, which the human reviews before it changes (R63)", quote(given))
-	}
-	return allow()
 }
 
 // Quote shows a path the way a shell would need it.

@@ -38,13 +38,9 @@ stdout 'PAIR SESSIONS'
 exec aw recap --json
 json stdout .pair_sessions[0].harness claude
 
-# Having been granted, it still cannot touch its record, or grant anyone else.
-! exec awtest-hook -session live-1 write .git/aw/state.db
-stderr 'inside a Git directory'
-! exec awtest-hook -session live-1 bash 'sqlite3 .git/aw/state.db "update sessions set pair = 1"'
-stderr 'own record'
-! exec awtest-hook -harness codex -session live-1 bash 'aw pair --session claude:someone-else'
-stderr 'only the human'
+# Once granted, it acts for the human, whose commands it may run, granting pairing among them.
+exec awtest-hook -session live-1 bash 'bin/aw pair --session claude:someone-else'
+! stdout .
 
 # A session working in a lane is not pulled out of it.
 session s-1 claude

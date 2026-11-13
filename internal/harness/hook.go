@@ -454,7 +454,7 @@ func startText(s policy.Scope) string {
 		return fmt.Sprintf("You are working in lane %s, at %s. Change files only inside it; you may read anywhere. If your working directory is elsewhere (your original harness cwd), start every shell command with cd %s && and use absolute paths inside the lane for file tools. Run bin/aw whoami if you are unsure.",
 			s.LaneName, policy.Quote(s.LaneRoot), policy.Quote(s.LaneRoot))
 	case policy.Pair:
-		return "This is a pair session in the owner checkout, granted by the human. You may edit here. Destructive Git, unapproved publication and changes to the workspace's own configuration are still refused."
+		return "This is a pair session in the owner checkout, granted by the human. You act for the human: you may edit here and in the lanes, change the workspace's own configuration, and run the human's aw commands, such as aw upgrade, aw discard and aw sweep --apply. The team's guards and the safeguards it turned on still apply."
 	}
 	pair := "aw pair"
 	if s.Session != "" {

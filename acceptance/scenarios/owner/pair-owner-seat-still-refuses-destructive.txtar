@@ -1,7 +1,10 @@
-# aw pair launches the harness in the owner checkout. Its session may edit there and no lane is
-# claimed; destructive Git, publication and the workspace's own configuration stay refused, through
-# the shell as well as the file tools. Several pair sessions are allowed, with a warning.
+# aw pair launches the harness in the owner checkout. Its session acts for the human: it may edit
+# there, including the workspace's own configuration, and no lane is claimed. What the team turned
+# on (here, every safeguard) still applies: destructive Git and publication stay refused or asked.
+# Several pair sessions are allowed, with a warning.
 # req: R61 R63
+# changed: a pair session may change the workspace's own configuration (plans/agent-feedback.md,
+# 3.1), where it was asked before.
 # source: spec (no candidate source)
 # milestone: M3
 
@@ -33,20 +36,13 @@ exec awtest-hook bash 'git push origin main'
 stdout '"permissionDecision":"ask"'
 
 exec awtest-hook bash 'echo x > workspace.toml'
-stdout '"permissionDecision":"ask"'
-stdout 'human reviews'
-exec awtest-hook bash 'cp /tmp/x AGENTS.md'
-stdout '"permissionDecision":"ask"'
-exec awtest-hook bash 'rm -rf .claude'
-stdout '"permissionDecision":"ask"'
-exec awtest-hook bash 'sed -i s/a/b/ workspace.toml'
-stdout '"permissionDecision":"ask"'
+! stdout .
+exec awtest-hook bash 'cp /tmp/x AGENTS.md && sed -i s/a/b/ workspace.toml'
+! stdout .
 exec awtest-hook bash 'echo x | tee .githooks/pre-commit'
-stdout '"permissionDecision":"ask"'
-! exec awtest-hook bash 'echo x > "$OUT"'
-stderr 'write the path literally'
-! exec awtest-hook bash 'echo x > .git/config'
-stderr 'inside a Git directory'
+! stdout .
+exec awtest-hook bash 'bin/aw upgrade --to 9.9.9'
+! stdout .
 ! exec awtest-hook -harness codex -session never-granted bash 'echo x > workspace.toml'
 
 # Reading those files needs nothing.

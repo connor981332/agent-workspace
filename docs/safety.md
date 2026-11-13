@@ -54,9 +54,11 @@ state database it cannot read, a payload it does not recognize and a missing bin
 only reads (with the `secrets` safeguard on, even then). In your own checkout, an unattached session
 is asked instead.
 
-**Pair sessions** are agents you have invited into your own checkout with `aw pair`. They may edit
-there. They still need your approval to change the workspace's own instructions, hooks and
-configuration, and the safeguards you turned on still apply.
+**Pair sessions** are agents you have invited into your own checkout with `aw pair`. aw's own rules
+do not apply to them: they may edit there and in lanes, change the workspace's own instructions,
+hooks and configuration, and run your `aw` commands, such as `aw upgrade` or `aw discard`. Your
+team's guards and the safeguards you turned on still apply, and so do your harness's own permission
+prompts.
 
 ## What the guards do not do
 

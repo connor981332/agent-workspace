@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/connor981332/agent-workspace/internal/shell"
-	"github.com/connor981332/agent-workspace/internal/workspace"
 )
 
 // dirOptions take a directory as their value, with or without a slash in it.
@@ -1075,49 +1074,6 @@ func writeTargets(c shell.Command) []shell.Word {
 		}
 	}
 	return nil
-}
-
-// selfModRule applies the rule on a pair session's file tools to its shell commands (R63, R60):
-// redirects, the common file commands, and any writing command that names aw's own records.
-func selfModRule(s Scope, c shell.Command) Decision {
-	if s.Role != Pair {
-		return allow()
-	}
-	first := allow()
-	check := func(w shell.Word) Decision {
-		abs, ok := "", false
-		if w.Known {
-			abs, ok = absolute(w.Text, c.Dir)
-		}
-		if !ok {
-			return deny("self-modification", "this command writes to a path aw cannot read until it runs, so aw cannot tell whether that is the workspace's own configuration → write the path literally")
-		}
-		return s.selfModification(abs, w.Text)
-	}
-	targets := writeTargets(c)
-	for _, r := range c.Redirs {
-		if strings.Contains(r.Op, ">") && !isDup(r) && !harmless[r.Target.Text] {
-			targets = append(targets, r.Target)
-		}
-	}
-	for _, t := range targets {
-		switch d := check(t); d.Verdict {
-		case Deny:
-			return d
-		case Ask:
-			if first.Verdict == Allow {
-				first = d
-			}
-		}
-	}
-	if !isReadOnly(c) && len(c.Args) > 1 && !isAW(c) {
-		for _, a := range c.Args[1:] {
-			if abs, ok := absolute(a.Text, c.Dir); a.Known && ok && (within(abs, filepath.Join(s.Owner, ".git", "aw")) || within(abs, filepath.Join(s.Owner, workspace.LocalStateDir))) {
-				return deny("self-modification", "%s is aw's own record of this workspace, which agents do not change → ask the human", quote(a.Text))
-			}
-		}
-	}
-	return first
 }
 
 // unattachedRule claims lanes lazily, for what is in the owner's workspace. A session with no lane
