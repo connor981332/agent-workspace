@@ -548,7 +548,30 @@ func TestLaneNewBranchRefusedBeforeGitRuns(t *testing.T) {
 		{"git switch aw/own", Allow, ""},
 		{"git checkout -- file", Allow, ""},
 	})
-	s := f.scope(Pair)
+	// Renaming, copying or making a branch is refused whatever safeguards are on; the lane's own
+	// branch may be made again, to recover from a rename.
+	s := f.scope(Lane)
+	s.Safeguards, s.LaneBranches = nil, []string{"aw/own"}
+	run(t, s, f.lane, []tcase{
+		{"git branch -m team/KEY-1", Deny, "git"},
+		{"git branch -M aw/own team/KEY-1", Deny, "git"},
+		{"git branch --copy team/KEY-1", Deny, "git"},
+		{"git branch team/KEY-1", Deny, "git"},
+		{"git branch team/KEY-1 HEAD", Deny, "git"},
+		{"git branch aw/own HEAD", Allow, ""},
+		{"git switch -c aw/own", Allow, ""},
+		{"git switch -c team/KEY-1", Deny, "git"},
+		{"git branch", Allow, ""},
+		{"git branch -vv", Allow, ""},
+		{"git branch --show-current", Allow, ""},
+		{"git branch --contains HEAD", Allow, ""},
+		{"git branch -a", Allow, ""},
+	})
+	d := Decide(s, Call{Tool: Shell, Cwd: f.lane, Command: "git branch -m team/KEY-1"})
+	if !strings.Contains(d.Message, "bin/aw push --as <name>") || !strings.Contains(d.Message, "aw/own") {
+		t.Errorf("the refusal does not give the push form: %s", d.Message)
+	}
+	s = f.scope(Pair)
 	run(t, s, f.owner, []tcase{{"git switch -c other", Allow, ""}})
 }
 

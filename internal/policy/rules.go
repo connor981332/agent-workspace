@@ -1,6 +1,7 @@
 package policy
 
 import (
+	"fmt"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -506,6 +507,9 @@ func gitRule(s Scope, c shell.Command) Decision {
 			return refused("forces or deletes")
 		}
 	case "branch":
+		if d := s.laneBranchChange(args); d.Verdict != Allow {
+			return d
+		}
 		if hasArg(args, "--delete") || hasShortFlag(args, 'd') || hasShortFlag(args, 'D') {
 			return refused("deletes a branch")
 		}
@@ -532,8 +536,8 @@ func gitRule(s Scope, c shell.Command) Decision {
 		}
 		// The ref hook refuses this too, but only after Git has moved the files, which leaves the
 		// worktree full of staged changes. Refusing here leaves it untouched.
-		if s.Role == Lane && hasArg(args, "-c", "-C", "--create", "--force-create", "--orphan", "-b", "-B") {
-			return deny("git", "git %s here would make a new branch, and a lane works only on its own branch → commit on this one, or run bin/aw attach from a new session for separate work", sub)
+		if s.Role == Lane && hasArg(args, "-c", "-C", "--create", "--force-create", "--orphan", "-b", "-B") && !s.recreatesLaneBranch(args) {
+			return deny("git", "git %s here would make a new branch, and a lane works only on its own branch → commit on this one, or run bin/aw attach from a new session for separate work; to publish under another name, run bin/aw push --as <name>", sub)
 		}
 	case "stash":
 		if st, _ := subcommand(args); st == "drop" || st == "clear" {
@@ -567,6 +571,43 @@ func gitRule(s Scope, c shell.Command) Decision {
 		}
 	}
 	return allow()
+}
+
+// laneBranchChange refuses, in a lane, renaming or copying a branch and making a new one. The lane's
+// branch is how aw knows the lane's work, and Git's ref hook never sees the new name of a rename, so
+// a renamed lane branch would leave the lane unable to commit. This is aw's own, so it holds whatever
+// safeguards are on. The lane's own branch may be made again, to recover.
+func (s Scope) laneBranchChange(args []shell.Word) Decision {
+	if s.Role != Lane {
+		return allow()
+	}
+	own := "aw/<lane>"
+	if len(s.LaneBranches) > 0 {
+		own = s.LaneBranches[0]
+	}
+	publish := fmt.Sprintf("to publish it under another name, run bin/aw push --as <name>, which pushes %s to that name", own)
+	if hasArg(args, "--move", "--copy") || hasShortFlag(args, 'm') || hasShortFlag(args, 'M') || hasShortFlag(args, 'c') || hasShortFlag(args, 'C') {
+		return deny("git", "git branch would rename or copy a branch, and a lane keeps its branch, %s, which aw tracks its work by → %s", own, publish)
+	}
+	listing := hasArg(args, "--list", "--delete", "--set-upstream-to", "--unset-upstream", "--edit-description", "--contains", "--no-contains",
+		"--merged", "--no-merged", "--points-at", "--show-current", "-a", "--all", "-r", "--remotes", "-v", "-vv", "--verbose") ||
+		hasShortFlag(args, 'l') || hasShortFlag(args, 'd') || hasShortFlag(args, 'D') || hasShortFlag(args, 'u')
+	names := nonOptions(args)
+	if listing || len(names) == 0 || slices.Contains(s.LaneBranches, names[0]) {
+		return allow()
+	}
+	return deny("git", "git branch %s would make a new branch, and a lane works only on its own branch, %s → commit on that one; %s", names[0], own, publish)
+}
+
+// recreatesLaneBranch reports whether git switch -c or checkout -b names the lane's own branch,
+// which recovers a lane whose branch went missing.
+func (s Scope) recreatesLaneBranch(args []shell.Word) bool {
+	for i, a := range args {
+		if (a.Text == "-c" || a.Text == "-C" || a.Text == "--create" || a.Text == "-b" || a.Text == "-B") && i+1 < len(args) {
+			return args[i+1].Known && slices.Contains(s.LaneBranches, args[i+1].Text)
+		}
+	}
+	return false
 }
 
 func nonOptions(args []shell.Word) []string {
