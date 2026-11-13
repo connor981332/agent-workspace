@@ -358,21 +358,28 @@ or its number. aw recap shows each lane in full. It writes nothing.`,
 func newRecapCmd() *cobra.Command {
 	var asJSON, remote, all bool
 	cmd := &cobra.Command{
-		Use:   "recap [--remote]",
+		Use:   "recap [lane] [--remote]",
 		Short: "Every lane in full: what needs you, what runs, each handoff (aw lanes is the short list)",
 		Long: `Show every lane in full: what needs you, what is running, what is parked and what can be cleaned
 up, with each lane's handoff and each repository's head and push state. In a lane it shows that
-lane only, unless --all. It reads local state only; --remote also asks the forge for each change's
-state, within a deadline. It writes nothing.`,
-		Args: cobra.NoArgs,
-		RunE: run(func(cmd *cobra.Command, _ []string) error {
+lane only, unless --all; a lane's name or number shows that one. It reads local state only; --remote
+also asks the forge for each change's state, within a deadline. It writes nothing.`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: run(func(cmd *cobra.Command, args []string) error {
 			m, done, err := openForRead()
 			if err != nil {
 				return err
 			}
 			defer done()
 			o := lanes.StatusOptions{Remote: remote}
-			if !all {
+			switch {
+			case len(args) == 1:
+				l, err := m.Resolve(args[0])
+				if err != nil {
+					return err
+				}
+				o.Only = l.Number
+			case !all:
 				o.Only = m.CallerLane()
 			}
 			ss, err := statuses(cmd, m, o)
