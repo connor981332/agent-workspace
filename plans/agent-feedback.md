@@ -18,7 +18,8 @@ item 3), [#82](https://github.com/connor981332/agent-workspace/pull/82) `fix/acc
 [#83](https://github.com/connor981332/agent-workspace/pull/83) `feedback/1-guard` (Phase 1),
 [#84](https://github.com/connor981332/agent-workspace/pull/84) `feedback/2-branches` (Phase 2),
 [#85](https://github.com/connor981332/agent-workspace/pull/85) `feedback/3-owner` (Phase 3),
-`feedback/4-recovery` (Phase 4).
+[#86](https://github.com/connor981332/agent-workspace/pull/86) `feedback/4-recovery` (Phase 4),
+`feedback/5-containers` (Phase 5, in part).
 
 **Done:** Phases 1 to 4, with scenarios for each item. 4.3 does not record a configuration hash
 per lane or mark old lanes in `aw lanes`: `aw setup <lane>` adds what is missing, and says which
@@ -33,10 +34,12 @@ review on its PR. Two changes from the plan as written:
 - 2.2: `aw push` also records the remote name for recap and sweep's forge lookups, which by the
   lane's own branch name would never find the merge request.
 
-**In progress:** nothing.
+**In progress:** Phase 5. Done: 5.1 (B2, reproduced with `docker compose config`, then fixed), 5.6
+as skill text (detecting alternatives in `aw inspect` is not built), and 5.7 as `on_acquire` only
+(no `on_release`: a seat is given up in many ways, and the handoff asked for is the new holder's).
 
-**Next step:** Phase 5, 5.1 (reproduce B2, then adopt the project's Compose name), on a branch
-stacked on `feedback/4-recovery`.
+**Next step:** 5.5 (F3, team options with a choice per developer), then 5.2 to 5.4 (F5). 5.2 starts
+with the change requests' four checks, two of which need VS Code by hand.
 
 ## Decisions taken
 
