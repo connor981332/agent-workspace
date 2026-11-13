@@ -670,7 +670,7 @@ func (d *Devcontainer) reconcile(ctx context.Context, id string, c inspected, ou
 	if len(used) > 0 {
 		return false, fmt.Errorf("the %s container was built from a different configuration and is in use: %s → %s", d.Project, strings.Join(used, "; "), fix)
 	}
-	fmt.Fprintf(out, "Replacing the idle %s container: its configuration changed.\n", d.Project)
+	fmt.Fprintf(out, "Replacing the idle %s container: its configuration changed. Named volumes are kept; anonymous volumes and changes made inside the container are not.\n", d.Project)
 	_, err = docker(ctx, "rm", "-f", id)
 	return err == nil, err
 }

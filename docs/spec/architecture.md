@@ -316,7 +316,9 @@ listed project Compose files, checkout/Compose `.env` files, referenced host env
 CLI settings, and aw's mount and ports. The generated fragment is excluded from the inputs, so
 writing it cannot cause a rebuild loop. Before reuse or a claim, a changed or missing label triggers
 an idle check: aw checks seats, active setups and attached processes, then replaces only that
-project's service container without deleting volumes. An in-use container, unreadable state, failed
+project's service container. Named volumes are kept; the old container's anonymous volumes are
+left orphaned, not reattached, and changes made inside the container are lost. A container built
+before 0.2.0 has no label, so it is replaced once, when idle, after the upgrade. An in-use container, unreadable state, failed
 process inspection or an unidentifiable main process refuses replacement with the fix. Mount and
 port mismatches on a container carrying the current hash still require explicit recreation.
 
