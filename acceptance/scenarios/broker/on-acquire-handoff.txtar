@@ -1,0 +1,55 @@
+# A process resource's on_acquire runs each time a seat is handed to a lane, in its root and with its
+# environment, before its servers start: a single app slot can reset shared state, such as a Kafka
+# consumer group, for each new holder. A failure gives the seat back, with the end of its log.
+# req: R36
+# source: 0.1.5 change requests, F6
+# milestone: M12
+
+workspace shop --init
+exec aw attach one
+exec aw attach two
+cd .worktrees/01
+exec aw serve slot
+stderr 'aw: running slot''s on_acquire for seat 1'
+exec cat $WORK/handoffs
+stdout '^lane=01 seat=1 resource=slot dir=.*/\.worktrees/01$'
+exec aw stop slot
+cd ../02
+exec aw serve slot
+exec cat $WORK/handoffs
+stdout '^lane=02 seat=1 resource=slot'
+exec aw stop slot
+
+# A failing hook gives the seat back.
+exec touch $WORK/fail
+! exec aw serve slot
+stderr 'slot''s on_acquire failed \(exit status 4\), so the seat was given back'
+stderr 'consumer group reset failed'
+exec aw queue --json
+! stdout '"lane_name": "two"'
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+port_stride = 100
+
+[projects.web]
+directory = "web"
+
+[projects.web.servers.app]
+command = "exec sleep 60 # {port}"
+port = 3000
+
+[projects.api]
+directory = "api"
+
+[resources.slot]
+kind = "process"
+capacity = 1
+servers = ["web.app"]
+on_acquire = 'if [ -e "$WORK/fail" ]; then echo "consumer group reset failed"; exit 4; fi; echo "lane=$AW_LANE seat=$AW_SEAT_SLOT resource=$AW_RESOURCE dir=$PWD" >> "$WORK/handoffs"'
