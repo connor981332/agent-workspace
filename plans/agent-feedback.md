@@ -33,22 +33,25 @@ from the plan as written:
 **In progress:** F5 on `feedback/7-devcontainer`. Committed there: the Compose name resolved exactly
 as the devcontainer CLI 0.89.0 does (read from its source), and the F5 checks recorded in
 `docs/dev/spikes.md` (checks 1 to 3 answered; check 4, VS Code's picker and Rebuild with two
-configurations, needs the owner in VS Code). Committed as work in progress, unit tests passing,
-acceptance suite not yet run: 5.2 and 5.3 started:
+configurations, needs the owner in VS Code). 5.2 and 5.3 started, with config validation, unit and
+full acceptance tests passing:
 - `projects.<name>.local_compose` (Mode B): aw writes its fragment (same-path mount, seat ports,
   Compose name) into the project's own gitignored local Compose file, which its committed
   devcontainer.json lists, instead of `aw.compose.yaml`. `runners.Validate(dir, local)` checks the
   right file is listed; doctor reports Mode B as OK without requiring aw's claim step.
 - The `workspaceFolder = ${localWorkspaceFolder}` requirement is dropped in every mode: aw's mount
-  is an extra mount, and aw runs commands at lane paths.
+  is an extra mount, and aw runs commands at lane paths. Scenarios cover a different editor folder
+  and an omitted one, plus Mode B with stubbed docker/devcontainer, seat ports and Git exclusion.
+- `config.check` refuses `local_compose` on a host runner, absolute paths, `..` components and unclean
+  paths. Changelog, Runners architecture and the regenerated config reference describe Mode B.
+- Mode A and the config-hash/recreation behavior in 5.2 are not implemented.
+- Vet, gofmt and full unit/acceptance checks pass. Benchmarks are recorded in
+  `docs/dev/benchmarks.md`: absolute budgets failed on this non-quiet run; the reduced interleaved
+  comparison against master passed every regression check.
 
-**Next step:** on `feedback/7-devcontainer`: (1) in `config.check`, refuse `local_compose` unless
-the runner is devcontainer, and refuse an absolute path or `..`; (2) fix any acceptance scenarios that
-expected the workspaceFolder refusal (`acceptance/scenarios/runners/`, `doctor/`), and add a
-scenario for `local_compose`, with stubbed docker/devcontainer as the existing runner scenarios do;
-(3) changelog, `docs/spec/architecture.md` (Runners) and `docs/reference/config.md` (regenerate);
-(4) then 5.4, Mode A (aw generates `.devcontainer/aw/devcontainer.json`), once the owner has run
-check 4 in VS Code.
+**Next step:** wait for every check on #88 to pass, merge it (approved), merge master into
+`feedback/7-devcontainer` without rebasing, then push and open the F5 PR against master. Mode A
+(5.4, aw generates `.devcontainer/aw/devcontainer.json`) waits for the owner's check 4 in VS Code.
 
 ## Decisions taken
 
