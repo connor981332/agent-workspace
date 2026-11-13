@@ -66,8 +66,9 @@ func newInspectCmd() *cobra.Command {
 				return err
 			}
 			inspect.Preflight(cmd.Context(), ws.Owner, c, projects)
+			unconfigured := unconfiguredRepos(ws.Owner, c)
 			if asJSON {
-				return writeJSON(cmd.OutOrStdout(), map[string]any{"projects": projects, "other_hooks": sandbox.OtherHooks(ws.Owner)})
+				return writeJSON(cmd.OutOrStdout(), map[string]any{"projects": projects, "other_hooks": sandbox.OtherHooks(ws.Owner), "unconfigured": unconfigured})
 			}
 			for _, h := range sandbox.OtherHooks(ws.Owner) {
 				fmt.Fprintf(cmd.OutOrStdout(), "! a hook that is not aw's, which also runs in lanes: %s\n", ui.Clean(h))
@@ -78,11 +79,38 @@ func newInspectCmd() *cobra.Command {
 					fmt.Fprintf(cmd.OutOrStdout(), "  ! %s\n", ui.Clean(line))
 				}
 			}
+			for _, name := range unconfigured {
+				fmt.Fprintf(cmd.OutOrStdout(), "%s: a Git repository that is not a project yet → aw add project %s\n", ui.Clean(name), ui.Clean(name))
+			}
 			return nil
 		}),
 	}
 	cmd.Flags().BoolVar(&asJSON, "json", false, "print the facts as JSON")
 	return cmd
+}
+
+// unconfiguredRepos are the Git repositories directly in the workspace root that no project names,
+// such as one cloned there before it was added.
+func unconfiguredRepos(owner string, c *config.Config) []string {
+	entries, err := os.ReadDir(owner)
+	if err != nil {
+		return nil
+	}
+	used := map[string]bool{}
+	for _, p := range c.Projects {
+		used[filepath.Clean(p.Directory)] = true
+	}
+	out := []string{}
+	for _, e := range entries {
+		name := e.Name()
+		if !e.IsDir() || strings.HasPrefix(name, ".") || used[name] {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(owner, name, ".git")); err == nil {
+			out = append(out, name)
+		}
+	}
+	return out
 }
 
 func doctorProjects(cmd *cobra.Command, asJSON bool) error {
