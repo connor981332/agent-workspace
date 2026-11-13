@@ -367,6 +367,13 @@ func ownerOnlyRule(s Scope, c shell.Command) Decision {
 			return allow()
 		}
 	}
+	if sub == "add" && s.Role == Lane {
+		// In a lane, aw add project edits the lane's own workspace.toml, which a merge request
+		// reviews; cloning waits for the human's aw setup after the merge.
+		if as, _ := subcommand(rest); as == "project" {
+			return allow()
+		}
+	}
 	if sub == "containers" {
 		// The claim step only removes a dead leftover, and a harness's devcontainer up runs it.
 		if cs, _ := subcommand(rest); cs == "claim" {

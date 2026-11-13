@@ -1,0 +1,25 @@
+# In a lane, aw add project changes the lane's own workspace.toml and .gitignore, for review like
+# any other change to the workspace, and an agent may run it. The owner checkout is untouched, and
+# nothing is cloned until the human runs aw setup after the merge.
+# req: R13
+# source: plans/agent-feedback.md, item 6
+# milestone: M12
+
+workspace shop --init
+exec aw attach 'add the jobs project'
+cd .worktrees/01
+exec awtest-hook bash 'bin/aw add project jobs https://example.com/jobs.git'
+env CLAUDE_CODE_SESSION_ID=s-1
+exec aw add project jobs https://example.com/jobs.git
+stdout 'Added project jobs to this lane''s workspace.toml and .gitignore'
+stdout 'the human runs aw setup'
+grep '\[projects.jobs\]' workspace.toml
+grep '/jobs' .gitignore
+! exists jobs
+exec aw config validate
+! grep 'projects.jobs' $OWNER/workspace.toml
+
+# In the owner checkout it stays the human's.
+cd $OWNER
+! exec aw add project other https://example.com/other.git
+stderr 'only for the human'
