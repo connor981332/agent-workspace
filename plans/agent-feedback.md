@@ -16,9 +16,12 @@ harness). Not every suggestion is taken: each section says what is kept as it is
 item 3), [#82](https://github.com/connor981332/agent-workspace/pull/82) `fix/acceptance-tmp`
 (acceptance runs leaking into `$TMPDIR`),
 [#83](https://github.com/connor981332/agent-workspace/pull/83) `feedback/1-guard` (Phase 1),
-[#84](https://github.com/connor981332/agent-workspace/pull/84) `feedback/2-branches` (Phase 2).
+[#84](https://github.com/connor981332/agent-workspace/pull/84) `feedback/2-branches` (Phase 2),
+`feedback/3-owner` (Phase 3).
 
-**Done:** Phases 1 and 2, with scenarios for each item. Two changes from the plan as written:
+**Done:** Phases 1, 2 and 3, with scenarios for each item. In 3.1, a pair session may also
+delete aw's own records (`.git/aw`), which the removed self-modification rule refused; flagged for
+review on its PR. Two changes from the plan as written:
 - 2.6, F4: rehearsal does not guess which Compose files a host project's scripts start; aw cannot
   see into them, and a wrong guess would let a rehearsal reach real containers. A person's review
   in `accepted_findings` decides instead, and an accepted file's Compose project name is still
@@ -28,8 +31,7 @@ item 3), [#82](https://github.com/connor981332/agent-workspace/pull/82) `fix/acc
 
 **In progress:** nothing.
 
-**Next step:** Phase 3, 3.1 (pair bypasses aw's own rules), on a branch stacked on
-`feedback/2-branches`.
+**Next step:** Phase 4, 4.1 (`aw attach --wait`), on a branch stacked on `feedback/3-owner`.
 
 ## Decisions taken
 
