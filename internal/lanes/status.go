@@ -243,10 +243,15 @@ func (m *Manager) repoStatus(ctx context.Context, r state.LaneRepo) RepoStatus {
 		}
 	}
 	g := run.In(r.Path)
+	rs.Ahead = ownCommits(ctx, g, r)
 	switch {
+	case rs.upstream == "" && rs.Ahead == 0:
+		// Nothing of the lane's own: what it has is where it started or the base's, which are not
+		// its to push. Most of a lane's repositories are like this, so this saves them a Git call.
+		rs.Push = "pushed"
 	case rs.upstream == "":
-		// No upstream configured. A commit some remote branch already has is pushed, such as a lane
-		// branch that never moved from its base; a push without -u still leaves origin's ref.
+		// No upstream configured. A commit some remote branch already has is pushed; a push
+		// without -u still leaves origin's ref.
 		ref := "refs/remotes/origin/" + rs.Branch
 		if n, err := g.Line(ctx, "rev-list", "--count", "HEAD", "--not", "--remotes"); err == nil && n == "0" {
 			rs.Push = "pushed"
@@ -260,7 +265,6 @@ func (m *Manager) repoStatus(ctx context.Context, r state.LaneRepo) RepoStatus {
 		fmt.Sscanf(ab, "+%d -%d", &ahead, &behind)
 		rs.Push = pushState(strconv.Itoa(ahead), rs.upstream)
 	}
-	rs.Ahead = ownCommits(ctx, g, r)
 	return rs
 }
 
