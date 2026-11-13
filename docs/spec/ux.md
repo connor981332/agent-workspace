@@ -31,6 +31,7 @@ The CLI is part of the design, not an afterthought. Most of the tool's value is 
 | `aw <team-command>` | both | Run a named team command, queueing for its resources |
 | `aw serve <resource>` / `aw stop <resource>` | both | Take or return a seat |
 | `aw queue` | both | Who holds and who waits for each resource |
+| `aw push [--as <name>] [project…]` | both | Push the lane's branch to origin, under the team's branch name if it differs, and remember that name for recap, finish and sweep |
 | `aw finish --summary "…"` | agent | Hand off as ready for review |
 | `aw park` / `aw unpark` / `aw discard` | human | Shelve, restore or abandon work |
 | `aw sweep [--apply]` | human | Recycle lanes proven merged |

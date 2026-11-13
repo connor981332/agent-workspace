@@ -1186,6 +1186,8 @@ func publishAction(name, sub, sub2 string, c shell.Command, args []shell.Word) s
 		return "merge"
 	case isAW(c) && sub == "changeset":
 		return "open-merge-request"
+	case isAW(c) && sub == "push":
+		return "push" // only ever the lane's own branch
 	}
 	return ""
 }
@@ -1204,7 +1206,7 @@ func (s Scope) publishDecision(action string, c shell.Command, args []shell.Word
 	if s.Role != Lane {
 		return nil
 	}
-	if !s.preauthorized(action, c) || (action == "push" && !s.pushesOwnBranch(args)) || (actsOnAnMR(args) && !s.ownMergeRequest(args)) {
+	if !s.preauthorized(action, c) || (action == "push" && !isAW(c) && !s.pushesOwnBranch(args)) || (actsOnAnMR(args) && !s.ownMergeRequest(args)) {
 		return nil
 	}
 	d := allow()
@@ -1299,7 +1301,8 @@ func (s Scope) pushesOwnBranch(args []shell.Word) bool {
 		if !mapped {
 			dst = src
 		}
-		if strings.HasPrefix(src, "+") || (dst != "HEAD" && !slices.Contains(s.LaneBranches, strings.TrimPrefix(dst, "refs/heads/"))) {
+		dst = strings.TrimPrefix(dst, "refs/heads/")
+		if strings.HasPrefix(src, "+") || (dst != "HEAD" && !slices.Contains(s.LaneBranches, dst) && !slices.Contains(s.PublishedBranches, dst)) {
 			return false
 		}
 	}
@@ -1363,6 +1366,9 @@ func publicationRule(s Scope, c shell.Command) Decision {
 	if isAW(c) && sub == "changeset" {
 		what = "aw changeset pushes branches and opens merge requests"
 	}
+	if isAW(c) && sub == "push" {
+		what = "aw push publishes the lane's commits to the remote"
+	}
 	if action := publishAction(name, sub, sub2, c, args); action != "" {
 		if d := s.publishDecision(action, c, args); d != nil {
 			return *d
@@ -1377,7 +1383,7 @@ func publicationRule(s Scope, c shell.Command) Decision {
 		switch {
 		case actsOnAnMR(args) && !s.ownMergeRequest(args):
 			return deny("publication", "%s, and only this lane's own merge request is pre-approved, which aw cannot tell from a number or another repository → run it from the project's worktree with no number, so that it means this lane's branch; if it is not this lane's, ask the human to do it", what)
-		case action == "push" && !s.pushesOwnBranch(args):
+		case action == "push" && !isAW(c) && !s.pushesOwnBranch(args):
 			return deny("publication", "%s, and only this lane's own branch is pre-approved → run git push -u origin HEAD from the worktree; for anything else, ask the human to do it", what)
 		}
 	}

@@ -1,0 +1,43 @@
+# aw push publishes a lane's branch under the team's branch name, keeps the lane on its own branch,
+# and remembers the name: the next aw push and recap use it. Without --as it pushes under the lane's
+# own name, and only repositories with the lane's own commits.
+# req: R58 R59
+# source: plans/agent-feedback.md, item 9
+# milestone: M12
+
+workspace shop --init --repos web,api
+owner-may-change
+exec aw attach 'add feature flag'
+cd web/.worktrees/01
+exec git commit -q --allow-empty -m 'lane work'
+
+! exec aw push --as 'bad..name'
+stderr 'is not a valid branch name'
+exec aw push --as team/KEY-1
+stdout '^web: pushed aw/feature-flag to origin/team/KEY-1$'
+! stdout 'api'
+stdout 'plain git push refuses'
+exec git branch --show-current
+stdout '^aw/feature-flag$'
+exec git rev-parse --abbrev-ref '@{upstream}'
+stdout '^origin/team/KEY-1$'
+
+exec git commit -q --allow-empty -m 'more lane work'
+exec aw push
+stdout '^web: pushed aw/feature-flag to origin/team/KEY-1$'
+exec git ls-remote origin refs/heads/team/KEY-1
+stdout 'refs/heads/team/KEY-1'
+exec aw recap
+stdout 'web [0-9a-f]+: pushed as team/KEY-1'
+
+# The publication safeguard covers it like git push.
+cd $OWNER
+safeguards
+cd web/.worktrees/01
+exec awtest-hook bash 'bin/aw push'
+stdout '"permissionDecision":"ask"'
+
+# From the api worktree, which has no commits of its own: nothing to push but web.
+cd $OWNER/api/.worktrees/01
+exec aw push api
+stdout '^api: pushed aw/feature-flag to origin/aw/feature-flag$'

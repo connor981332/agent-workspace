@@ -271,7 +271,7 @@ func (m *Manager) forgeProof(ctx context.Context, owner string, r state.LaneRepo
 	if c == nil {
 		return
 	}
-	ch := c.Find(ctx, forge.Identity{Host: host, Project: project, Target: target}, r.Branch, ev.Head)
+	ch := c.Find(ctx, forge.Identity{Host: host, Project: project, Target: target}, r.RemoteBranch(), ev.Head)
 	ev.Forge = &ch
 	if ch.Merged() {
 		ev.Proof, ev.Reason = evidence.Forge, ""

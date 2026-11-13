@@ -45,6 +45,16 @@ type LaneRepo struct {
 	Branch  string `json:"branch"`
 	BaseRef string `json:"base_ref"`
 	BaseSHA string `json:"base_sha"`
+	// Published is the remote branch aw push --as pushed Branch to, or "" when it has the same name.
+	Published string `json:"published,omitempty"`
+}
+
+// RemoteBranch is the name the lane's branch has on the remote: what a forge knows it by.
+func (r LaneRepo) RemoteBranch() string {
+	if r.Published != "" {
+		return r.Published
+	}
+	return r.Branch
 }
 
 // Session is one harness session.
@@ -251,7 +261,7 @@ func DeleteLane(tx *sql.Tx, n int) error {
 
 // LaneRepos returns a lane's repositories, the workspace repository first.
 func LaneRepos(q Querier, lane int) ([]LaneRepo, error) {
-	rows, err := q.Query(`SELECT lane, project, path, branch, base_ref, base_sha FROM lane_repos WHERE lane = ? ORDER BY project`, lane)
+	rows, err := q.Query(`SELECT lane, project, path, branch, base_ref, base_sha, published FROM lane_repos WHERE lane = ? ORDER BY project`, lane)
 	if err != nil {
 		return nil, err
 	}
@@ -259,12 +269,18 @@ func LaneRepos(q Querier, lane int) ([]LaneRepo, error) {
 	var out []LaneRepo
 	for rows.Next() {
 		var r LaneRepo
-		if err := rows.Scan(&r.Lane, &r.Project, &r.Path, &r.Branch, &r.BaseRef, &r.BaseSHA); err != nil {
+		if err := rows.Scan(&r.Lane, &r.Project, &r.Path, &r.Branch, &r.BaseRef, &r.BaseSHA, &r.Published); err != nil {
 			return nil, err
 		}
 		out = append(out, r)
 	}
 	return out, rows.Err()
+}
+
+// SetPublished records the remote branch a lane's repository was pushed under.
+func SetPublished(tx *sql.Tx, lane int, project, name string) error {
+	_, err := tx.Exec(`UPDATE lane_repos SET published = ? WHERE lane = ? AND project = ?`, name, lane, project)
+	return err
 }
 
 // SetLaneRepos replaces a lane's repositories.
@@ -273,8 +289,8 @@ func SetLaneRepos(tx *sql.Tx, lane int, repos []LaneRepo) error {
 		return err
 	}
 	for _, r := range repos {
-		if _, err := tx.Exec(`INSERT INTO lane_repos (lane, project, path, branch, base_ref, base_sha) VALUES (?, ?, ?, ?, ?, ?)`,
-			lane, r.Project, r.Path, r.Branch, r.BaseRef, r.BaseSHA); err != nil {
+		if _, err := tx.Exec(`INSERT INTO lane_repos (lane, project, path, branch, base_ref, base_sha, published) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			lane, r.Project, r.Path, r.Branch, r.BaseRef, r.BaseSHA, r.Published); err != nil {
 			return err
 		}
 	}

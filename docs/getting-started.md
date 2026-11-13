@@ -87,6 +87,7 @@ local_files = ["schema.graphqls"]      # copied into each lane, as a clone where
 | `aw lanes` | Lists the lanes. `aw recap` shows each in full. |
 | `aw run <project> <command>` | Runs a command in the project, in this lane. |
 | `aw serve <resource>`, `aw stop <resource>` | Takes and gives up a seat on a resource, starting and stopping its servers. |
+| `aw push [--as <name>]` | Pushes the lane's branch, under your team's branch name if it differs from `aw/<lane>`. |
 | `aw finish` | Hands a lane off for review. |
 | `aw sweep`, `aw sweep --apply` | Shows, then does, the cleanup of lanes proven merged. |
 | `aw doctor` | Checks the workspace and this machine, and names the fix for each problem. |

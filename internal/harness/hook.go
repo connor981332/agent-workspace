@@ -270,6 +270,9 @@ func resolveScope(p Payload, version string, t *timing.Recorder) (*policy.Scope,
 		if !slices.Contains(scope.LaneBranches, r.Branch) {
 			scope.LaneBranches = append(scope.LaneBranches, r.Branch)
 		}
+		if r.Published != "" && !slices.Contains(scope.PublishedBranches, r.Published) {
+			scope.PublishedBranches = append(scope.PublishedBranches, r.Published)
+		}
 		if pr := cfg.Projects[r.Project]; pr != nil && len(pr.Publication) > 0 {
 			if scope.ProjectPublication == nil {
 				scope.ProjectPublication = map[string][]string{}

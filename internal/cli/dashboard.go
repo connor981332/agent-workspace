@@ -181,7 +181,11 @@ func printSections(out io.Writer, all []*lanes.LaneStatus, width int, detail boo
 						remote = fmt.Sprintf(", remote: !%d %s", r.Remote.IID, r.Remote.State)
 					}
 				}
-				line(fmt.Sprintf("  %17s%s %s: %s%s", "", r.Project, short(r.Head), r.Push, remote))
+				push := r.Push
+				if r.Published != "" && push == "pushed" {
+					push = "pushed as " + r.Published
+				}
+				line(fmt.Sprintf("  %17s%s %s: %s%s", "", r.Project, short(r.Head), push, remote))
 			}
 			if len(untouched) > 0 {
 				line(fmt.Sprintf("  %17sno changes: %s", "", strings.Join(untouched, ", ")))

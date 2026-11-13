@@ -191,6 +191,9 @@ var migrations = []string{
 		granted TEXT NOT NULL,
 		expires TEXT NOT NULL
 	) STRICT`,
+
+	// 12: the name a lane's branch was pushed under, when the team's branch names differ from aw's.
+	`ALTER TABLE lane_repos ADD COLUMN published TEXT NOT NULL DEFAULT ''`,
 }
 
 // BackupPath is where the database is copied before migrating from schema version v.
