@@ -98,7 +98,9 @@ func Run(dir, version string, withTimings bool) *Report {
 		add(Check{Name: "git repository", Status: OK, Message: filepath.Dir(stateDir)})
 	}
 
-	c, err := config.Load(ws.Owner)
+	// In a lane, its own workspace.toml: the change it proposes is what is worth checking there.
+	configDir := ws.ConfigDir()
+	c, err := config.Load(configDir)
 	t.Mark("load configuration")
 	var cerrs config.Errors
 	switch {
@@ -109,7 +111,11 @@ func Run(dir, version string, withTimings bool) *Report {
 	case err != nil:
 		add(Check{Name: "configuration", Status: Fail, Message: firstPart(err), Fix: fixPart(err, "check workspace.toml")})
 	default:
-		add(Check{Name: "configuration", Status: OK, Message: fmt.Sprintf("valid (%d projects, schema %d)", len(c.Projects), c.Workspace.Schema)})
+		msg := fmt.Sprintf("valid (%d projects, schema %d)", len(c.Projects), c.Workspace.Schema)
+		if configDir != ws.Owner {
+			msg += ", in this lane's workspace.toml; lanes use the owner checkout's until it is merged"
+		}
+		add(Check{Name: "configuration", Status: OK, Message: msg})
 		for _, ref := range c.Refused {
 			add(Check{Name: "configuration", Status: Warn,
 				Message: fmt.Sprintf("%s: %s is locked by the team (lock %q), so this setting is ignored", ref.Pos, ref.Key, ref.Lock),

@@ -1,0 +1,19 @@
+# In a lane, aw config validate and aw doctor check the lane's own workspace.toml, which is the
+# change the lane proposes; the owner checkout's still configures lanes until it is merged.
+# req: R14
+# source: 0.1.5 change requests, B5
+# milestone: M12
+
+workspace shop --init
+exec aw attach 'add a project'
+cd .worktrees/01
+exec aw config validate
+stdout 'workspace.toml'
+! stdout 'invalid'
+exec sh -c 'printf "\n[projects.web]\nrunner = \"nonsense\"\n" >> workspace.toml'
+! exec aw config validate
+stdout '\.worktrees/01/workspace.toml'
+! exec aw doctor
+stdout '^✗ configuration: '
+cd $OWNER
+exec aw config validate
