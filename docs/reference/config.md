@@ -133,7 +133,7 @@ Servers the project runs. The key names the server, e.g. rails.
 |---|---|---|---|
 | `command` | string | — | Starts the server. {port} is the seat's port. Should exec the server process. |
 | `port` | integer, 1 to 65535 | — | Base port, used by the owner's seat 0. Seat k uses port + port_stride × k. |
-| `owner_port` | integer, 1 to 65535 | — | A process listening here is the owner's copy, started without aw. |
+| `owner_port` | integer, 1 to 65535 | — | A process listening here is the owner's copy, started without aw. Literal for host servers; devcontainers add ports.offset. |
 | `after` | array of strings | — | Servers that must start first: <server> in the same project, or <project>.<server>. |
 | `ready` | string | — | A command that exits 0 when the server is ready. |
 

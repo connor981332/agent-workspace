@@ -4,6 +4,8 @@ Newest first. A line starting with **Breaking:** is called out by `aw upgrade`.
 
 ## 0.2.0
 
+- Host servers started outside aw are detected at their literal `owner_port`, even with a workspace port offset, so they still count toward resource capacity. Devcontainer detection keeps the offset used by aw's published ports.
+
 - **Breaking:** a new lane starts from origin's default branch as last fetched, not from the owner checkout's branch, so a lane no longer carries the owner's unpushed commits or other branch. `aw new` says when the owner checkout differs, or when origin was last fetched over a day ago. A workspace repository with unpushed commits refuses to start a lane until they are pushed, or `--branch` names the branch to start from.
 - `aw pull` fetches origin in every owner checkout and fast-forwards those on the default branch. It never merges, rebases or switches branches.
 - A lane may read anywhere, including the owner checkout, and only changes to files outside the lane are refused. Reading the owner's copy of a file the lane has too comes with a note naming the lane's copy. A read-only command is no longer refused for a path aw cannot resolve (unless the `secrets` safeguard is on), and variables, `for` loops over literal words and functions defined in the same command are followed. `gh api` and `glab api` endpoints are not checked as file paths.

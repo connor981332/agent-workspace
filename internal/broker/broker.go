@@ -126,9 +126,11 @@ func (b *Broker) ownerPortBusy(r Resource) bool {
 		if s == nil || s.OwnerPort == 0 {
 			continue
 		}
-		port := s.OwnerPort + b.Cfg.Ports.Offset
+		port := s.OwnerPort
 		if project, _, _ := strings.Cut(full, "."); b.Cfg.Projects[project].Runner == "devcontainer" && b.ListeningIn != nil {
-			if b.ListeningIn(project, port) {
+			// aw publishes the container's seat-zero ports with the workspace offset;
+			// a host server started outside aw listens on the explicit owner_port itself.
+			if b.ListeningIn(project, port+b.Cfg.Ports.Offset) {
 				return true
 			}
 			continue
