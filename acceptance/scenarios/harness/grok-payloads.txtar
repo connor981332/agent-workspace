@@ -13,10 +13,9 @@ exec awtest-hook -harness grok read web/README.md
 exec awtest-hook -harness grok list web
 exec awtest-hook -harness grok edit web/README.md
 
-! exec awtest-hook -harness grok bash 'cat ../../README.md'
+! exec awtest-hook -harness grok bash 'touch ../../README.md'
 stdout '"decision":"deny"'
 stderr 'is outside lane feature-flag'
-! exec awtest-hook -harness grok read ../../README.md
+! exec awtest-hook -harness grok write ../../README.md
 ! exec awtest-hook -harness grok edit $OWNER/README.md
-! exec awtest-hook -harness grok list $OWNER
-stderr 'is outside lane feature-flag'
+exec awtest-hook -harness grok list $OWNER

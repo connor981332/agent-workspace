@@ -7,6 +7,7 @@ package policy
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -51,6 +52,8 @@ const (
 type Scope struct {
 	Role  Role
 	Owner string // the owner checkout, absolute
+	// start is where a shell command starts, before any cd in it.
+	start shell.Dir
 	// Session is the session as <harness>:<id>, so a refusal can tell the human how to grant it.
 	Session string
 	// Namespace is the workspace's, which names the individual layer's files.
@@ -120,14 +123,18 @@ func (v Verdict) String() string {
 	return [...]string{"allow", "deny", "ask"}[v]
 }
 
-// Decision is a verdict with the rule that made it and a message that names the fix.
+// Decision is a verdict with the rule that made it and a message that names the fix. An allowed call
+// may carry a note for the agent, which a harness that can show one adds to the call.
 type Decision struct {
 	Verdict Verdict
 	Rule    string
 	Message string
+	Note    string
 }
 
 func allow() Decision { return Decision{Verdict: Allow} }
+
+func allowWith(note string) Decision { return Decision{Verdict: Allow, Note: note} }
 
 func deny(rule, format string, args ...any) Decision {
 	return Decision{Verdict: Deny, Rule: rule, Message: fmt.Sprintf(format, args...)}
@@ -180,6 +187,7 @@ func decideFiles(s Scope, c Call, cwd shell.Dir) Decision {
 			}
 		}
 	}
+	var notes []string
 	for _, p := range c.Paths {
 		if p == "" {
 			continue
@@ -189,7 +197,11 @@ func decideFiles(s Scope, c Call, cwd shell.Dir) Decision {
 		}
 		abs, _ := absolute(p, cwd)
 		if !s.isSecret(abs) {
-			if d := s.boundary(abs, p); d.Verdict != Allow {
+			if c.Tool == Read {
+				if n := s.ownerCopyNote(abs, p); n != "" && !slices.Contains(notes, n) {
+					notes = append(notes, n)
+				}
+			} else if d := s.boundary(abs, p); d.Verdict != Allow {
 				return d
 			}
 		} else {
@@ -213,7 +225,7 @@ func decideFiles(s Scope, c Call, cwd shell.Dir) Decision {
 			}
 		}
 	}
-	return allow()
+	return allowWith(strings.Join(notes, " "))
 }
 
 func decideShell(s Scope, src string, cwd shell.Dir) Decision {
@@ -227,7 +239,9 @@ func decideShell(s Scope, src string, cwd shell.Dir) Decision {
 		}
 		return allow()
 	}
+	s.start = cwd
 	var asks []Decision
+	var notes []string
 	for _, c := range p.Commands {
 		for _, rule := range []func(Scope, shell.Command) Decision{
 			computedRule, pathsRule, ownerOnlyRule, gitRule, containerRule, killRule, serverRule, secretRule, muxRule, selfModRule, unattachedRule, publicationRule, teamGuardRule,
@@ -237,13 +251,17 @@ func decideShell(s Scope, src string, cwd shell.Dir) Decision {
 				return d
 			case Ask:
 				asks = append(asks, d)
+			default:
+				if d.Note != "" && !slices.Contains(notes, d.Note) {
+					notes = append(notes, d.Note)
+				}
 			}
 		}
 	}
 	if len(asks) > 0 {
 		return asks[0]
 	}
-	return allow()
+	return allowWith(strings.Join(notes, " "))
 }
 
 // fromOutsideLane reports whether a lane session is working from elsewhere in the owner's
@@ -264,9 +282,43 @@ func (s Scope) boundary(abs, given string) Decision {
 		return allow()
 	}
 	if within(abs, s.Owner) && !s.inLane(abs) {
+		if lane := s.laneCopy(abs); lane != "" {
+			return deny("boundary", "%s is outside lane %s: it is the owner checkout's copy, and a lane changes only its own → change this lane's copy, %s", quote(given), s.LaneName, quote(lane))
+		}
 		return deny("boundary", "%s is outside lane %s (it resolves to %s, in the owner's workspace) → work inside the lane, under %s", quote(given), s.LaneName, quote(abs), quote(s.LaneRoot))
 	}
 	return allow()
+}
+
+// laneCopy is this lane's copy of a path in the owner checkout, when the lane has one: the same path
+// under the lane root, whose project directories link to the lane's worktrees. Another lane's files,
+// and aw's own records, have none.
+func (s Scope) laneCopy(abs string) string {
+	if s.Role != Lane || s.LaneRoot == "" || !within(abs, s.Owner) || s.inLane(abs) {
+		return ""
+	}
+	rel, err := filepath.Rel(s.Owner, abs)
+	if err != nil || rel == "." {
+		return ""
+	}
+	parts := strings.Split(rel, string(filepath.Separator))
+	if slices.Contains(parts, ".git") || slices.Contains(parts, ".worktrees") || parts[0] == workspace.LocalStateDir {
+		return ""
+	}
+	lane := filepath.Join(s.LaneRoot, rel)
+	if _, err := os.Lstat(lane); err != nil {
+		return ""
+	}
+	return lane
+}
+
+// ownerCopyNote is the note for a lane reading the owner's copy of a file it has too.
+func (s Scope) ownerCopyNote(abs, given string) string {
+	lane := s.laneCopy(abs)
+	if lane == "" {
+		return ""
+	}
+	return fmt.Sprintf("aw: %s is the owner checkout's copy, which may differ from this lane's; this lane's is %s.", quote(given), quote(lane))
 }
 
 func (s Scope) isSecret(abs string) bool {

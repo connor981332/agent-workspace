@@ -8,11 +8,11 @@ exec aw attach 'add feature flag'
 mkdir .worktrees/01/web/src/deep
 cd .worktrees/01/web/src/deep
 exec awtest-hook read ../README.md
-! exec awtest-hook read $OWNER/README.md
+! exec awtest-hook write $OWNER/README.md
 stderr 'is outside lane feature-flag'
 cd $OWNER/web/.worktrees/01/src/deep
 exec awtest-hook bash 'cat ../x.ts'
-! exec awtest-hook bash 'cat ../../../../README.md'
+! exec awtest-hook bash 'touch ../../../../README.md'
 stderr 'is outside lane feature-flag'
 
 # The same read from the owner checkout is the owner's to make.

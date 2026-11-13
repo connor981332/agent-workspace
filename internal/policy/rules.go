@@ -47,22 +47,42 @@ func computedRule(s Scope, c shell.Command) Decision {
 	return allow()
 }
 
-// pathsRule is the path boundary for a shell command (R58): every literal path, redirect target and
-// directory option must stay in the lane, and one whose value cannot be known fails closed.
+// pathsRule is the path boundary for a shell command (R58). What a command writes must stay in the
+// lane, and a written path whose value cannot be known fails closed. What it only reads may be
+// anywhere: reading the owner checkout disturbs nothing, and a read of the owner's copy of a file the
+// lane has too comes with a note naming the lane's.
 func pathsRule(s Scope, c shell.Command) Decision {
 	if s.Role != Lane {
 		return allow()
 	}
-	if !c.Dir.Known {
-		return deny("boundary", "this command runs after a cd to a directory aw cannot determine, so it is refused → cd to a literal path inside the lane, %s", quote(s.LaneRoot))
+	reads := isReadOnly(c)
+	// An unknown path may name a secret, which the secrets safeguard keeps from being read.
+	unknownReadOK := !s.safeguard("secrets")
+	if !c.Dir.Known && !(reads && unknownReadOK) {
+		return deny("boundary", "this command runs after a cd to a directory aw cannot determine, so it is refused → cd to a literal path inside the lane, %s; a variable set earlier in the same command is fine", quote(s.LaneRoot))
 	}
 	// Each command must run in the lane: from the owner checkout, a session starts with cd into it.
-	// cd is that step (its target is checked below), and attaching or asking who it is is allowed.
-	if s.fromOutsideLane(c.Dir.Physical) && len(c.Args) > 0 && c.Name() != "cd" && !isIdentityCommand(c) {
+	// cd is that step, and attaching or asking who it is is allowed. A command that only reads may
+	// run there when it says so: after its own cd, or naming every path absolutely.
+	if c.Dir.Known && s.fromOutsideLane(c.Dir.Physical) && len(c.Args) > 0 && c.Name() != "cd" && !isIdentityCommand(c) &&
+		!(reads && (c.Dir.Physical != s.start.Physical || namesPathsAbsolutely(c))) {
 		return deny("boundary", "this session belongs to lane %s, but this command would run in %s → start it with cd %s &&", s.LaneName, quote(c.Dir.Logical), quote(s.LaneRoot))
 	}
+	// A command whose writes are known (cp, mv, redirects…) only reads its other paths.
+	targets, understood := unattachedWrites(c)
+	written := func(w shell.Word) bool {
+		if reads {
+			return false
+		}
+		if !understood || slices.Contains(targets, w) {
+			return true
+		}
+		_, val, ok := strings.Cut(w.Text, "=")
+		return ok && slices.Contains(targets, shell.Word{Text: val, Known: w.Known})
+	}
+	var notes []string
 	cdTarget := false
-	check := func(w shell.Word, always bool) Decision {
+	check := func(w shell.Word, always, write bool) Decision {
 		text := w.Text
 		if !always {
 			if i := strings.Index(text, "="); i > 0 && !strings.HasPrefix(text, "/") {
@@ -73,7 +93,10 @@ func pathsRule(s Scope, c shell.Command) Decision {
 			}
 		}
 		if !w.Known {
-			return deny("boundary", "the path %s depends on a value aw cannot determine, so it is refused → write the path literally", quote(w.Text))
+			if !write && unknownReadOK {
+				return allow()
+			}
+			return deny("boundary", "the path %s depends on a value aw cannot determine, so it is refused → write the path literally; a variable set earlier in the same command, or a for loop over literal words, is fine", quote(w.Text))
 		}
 		if harmless[text] {
 			return allow()
@@ -83,10 +106,19 @@ func pathsRule(s Scope, c shell.Command) Decision {
 			abs = c.Dir.Cd(text).Physical // cd follows links logically, as the shell does
 		}
 		if !ok {
+			if !write && unknownReadOK {
+				return allow()
+			}
 			return deny("boundary", "the path %s is relative to a directory aw cannot determine → use an absolute path inside the lane", quote(text))
 		}
 		if s.isSecret(abs) {
 			return allow() // the secrets rule decides, with its own message
+		}
+		if !write {
+			if n := s.ownerCopyNote(abs, text); n != "" && !slices.Contains(notes, n) {
+				notes = append(notes, n)
+			}
+			return allow()
 		}
 		return s.boundary(abs, text)
 	}
@@ -94,15 +126,19 @@ func pathsRule(s Scope, c shell.Command) Decision {
 	// prefix it reaches the command's environment, so it is a path that command may use.
 	if len(c.Args) > 0 {
 		for _, a := range c.Assigns {
-			if d := check(a, false); d.Verdict != Allow {
+			if d := check(a, false, !reads); d.Verdict != Allow {
 				return d
 			}
 		}
 	}
 	name := c.Name()
+	endpoint := apiEndpoint(c)
 	for i, a := range c.Args {
 		if i == 0 && isAW(c) {
 			continue // running the workspace's launcher touches none of the owner's files
+		}
+		if i == endpoint {
+			continue // gh api repos/o/r/pulls: a path on the forge, not a file
 		}
 		if i > 0 && isMessageText(name, c.Args[i-1], a) {
 			continue // a commit message or a title is prose, whatever slashes it has
@@ -114,13 +150,13 @@ func pathsRule(s Scope, c shell.Command) Decision {
 		}
 		if i > 0 && strings.HasPrefix(a.Text, "--") {
 			if opt, val, ok := strings.Cut(a.Text, "="); ok && dirOptions[opt] {
-				if d := check(shell.Word{Text: val, Known: a.Known}, true); d.Verdict != Allow {
+				if d := check(shell.Word{Text: val, Known: a.Known}, true, written(a)); d.Verdict != Allow {
 					return d
 				}
 				continue
 			}
 		}
-		if d := check(a, always); d.Verdict != Allow {
+		if d := check(a, always, written(a)); d.Verdict != Allow {
 			return d
 		}
 	}
@@ -129,11 +165,51 @@ func pathsRule(s Scope, c shell.Command) Decision {
 		if isDup(r) || isHeredoc(r) {
 			continue
 		}
-		if d := check(r.Target, true); d.Verdict != Allow {
+		if d := check(r.Target, true, strings.Contains(r.Op, ">")); d.Verdict != Allow {
 			return d
 		}
 	}
-	return allow()
+	return allowWith(strings.Join(notes, " "))
+}
+
+// namesPathsAbsolutely reports whether a command names at least one path, and every path it names
+// is absolute, so it means the same wherever it runs.
+func namesPathsAbsolutely(c shell.Command) bool {
+	n := 0
+	for i, a := range c.Args[1:] {
+		text := a.Text
+		if !looksLikePath(text) && !(i > 0 && dirOptions[c.Args[i].Text]) {
+			continue
+		}
+		if !a.Known || !filepath.IsAbs(text) {
+			return false
+		}
+		n++
+	}
+	return n > 0
+}
+
+// apiValueOptions are the options of gh api and glab api that take a value.
+var apiValueOptions = map[string]bool{"-X": true, "--method": true, "-H": true, "--header": true, "-f": true, "--raw-field": true,
+	"-F": true, "--field": true, "-q": true, "--jq": true, "-t": true, "--template": true, "--hostname": true, "--input": true,
+	"-p": true, "--preview": true, "--cache": true}
+
+// apiEndpoint is the index of the endpoint argument of gh api or glab api, or -1.
+func apiEndpoint(c shell.Command) int {
+	if n := c.Name(); (n != "gh" && n != "glab") || len(c.Args) < 3 || c.Args[1].Text != "api" {
+		return -1
+	}
+	for i := 2; i < len(c.Args); i++ {
+		t := c.Args[i].Text
+		switch {
+		case apiValueOptions[t]:
+			i++
+		case strings.HasPrefix(t, "-"):
+		default:
+			return i
+		}
+	}
+	return -1
 }
 
 // messageOptions take prose for git and the forge CLIs. -F and the like name files, so are not here.
@@ -920,14 +996,23 @@ func writeTargets(c shell.Command) []shell.Word {
 	case "rm", "mv", "tee", "touch", "chmod", "chown", "chgrp", "mkdir", "rmdir", "truncate", "unlink", "shred", "patch":
 		return plain
 	case "cp", "install", "ln", "rsync":
+		// The destination, and any option's value that is a path (--target-directory=d,
+		// --backup-dir=d, --log-file=f): an option aw does not know may write there.
+		var out []shell.Word
+		for _, a := range args {
+			if opt, val, ok := strings.Cut(a.Text, "="); ok && strings.HasPrefix(opt, "--") && looksLikePath(val) {
+				out = append(out, shell.Word{Text: val, Known: a.Known})
+			}
+		}
 		for i, a := range args[:max(len(args)-1, 0)] {
 			if a.Text == "-t" || a.Text == "--target-directory" {
-				return []shell.Word{args[i+1]}
+				return append(out, args[i+1])
 			}
 		}
 		if len(plain) > 0 {
-			return plain[len(plain)-1:]
+			return append(out, plain[len(plain)-1])
 		}
+		return out
 	case "dd":
 		var out []shell.Word
 		for _, a := range args {

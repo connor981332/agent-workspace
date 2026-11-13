@@ -22,7 +22,7 @@ that says what to do instead, or passed to you for approval.
 
 | Protected | How |
 |---|---|
-| Your checkout | A lane agent is confined to its lane. File tools and literal paths in shell commands that reach outside it are refused. An agent that has not claimed a lane may read, but not change anything. |
+| Your checkout | A lane agent changes files only in its lane: file tools and shell commands that would change your checkout or another lane are refused. It may read anywhere, and is told when what it read is your copy of a file its lane has too. An agent that has not claimed a lane may read, but not change anything. |
 | Your branches and tags | Git's `reference-transaction` hook refuses ref updates from a lane outside that lane's own branches. It runs inside Git, so `--no-verify` does not skip it. |
 | Shared Git configuration | In a lane, `git config` writes and `-c core.hooksPath=…` are refused. `git worktree` commands are refused everywhere, because `aw` manages worktrees. |
 | Your servers | Configured servers are started through `aw serve`, so that they take a seat. |
@@ -50,8 +50,9 @@ enable = ["git-safety", "publication", "secrets", "processes", "containers"]
 
 **Guards fail closed where a rule depends on the answer.** That covers an invalid configuration, a
 state database it cannot read, a payload it does not recognize and a missing binary. A command or path
-`aw` cannot read is refused in a lane or when a safeguard or team guard is on. In your own checkout,
-an unattached session is asked instead.
+`aw` cannot read is refused in a lane or when a safeguard or team guard is on, unless the command
+only reads (with the `secrets` safeguard on, even then). In your own checkout, an unattached session
+is asked instead.
 
 **Pair sessions** are agents you have invited into your own checkout with `aw pair`. They may edit
 there. They still need your approval to change the workspace's own instructions, hooks and

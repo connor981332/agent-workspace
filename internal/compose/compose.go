@@ -44,7 +44,7 @@ const framework = `## Working in this workspace
 
 This workspace runs several agents in parallel, each in its own lane.
 
-- The checkout you start in belongs to the human. Reading needs nothing. Before changing anything, run ` + "`bin/aw attach \"<what you are working on>\"`" + ` and work in the lane root it prints.
+- The checkout you start in belongs to the human. Reading needs nothing, here or from a lane. Before changing anything, run ` + "`bin/aw attach \"<what you are working on>\"`" + ` and work in the lane root it prints.
 - If your working directory stays where it was, start each shell command with ` + "`cd <lane root> &&`" + ` and use absolute paths inside the lane for file tools.
 - ` + "`bin/aw lanes`" + ` lists the lanes, and ` + "`bin/aw whoami`" + ` shows where you are. ` + "`bin/aw run <project> <command>`" + ` runs a command with the lane's environment.
 - When you stop, run ` + "`bin/aw finish`" + ` so that the next session can pick up the work.

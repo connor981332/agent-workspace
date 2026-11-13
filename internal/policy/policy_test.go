@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/connor981332/agent-workspace/internal/shell"
 )
 
 // fixture lays out a workspace as aw does: the owner checkout with two projects, lane 01 whose root
@@ -95,19 +97,19 @@ func TestBoundary(t *testing.T) {
 	other := quote(filepath.Join(f.owner, ".git", "aw", "lanes", "02"))
 	run(t, s, f.lane, []tcase{
 		{"cat {lane}/file", Allow, ""},
-		{"cat {lane}/file {owner}/file", Deny, "boundary"},
-		{"cat {owner}/.worktrees/02/file", Deny, "boundary"},
-		{"cat ../../AGENTS.md", Deny, "boundary"},
-		{"cat escape/AGENTS.md", Deny, "boundary"},
+		{"touch {lane}/file {owner}/file", Deny, "boundary"},
+		{"touch {owner}/.worktrees/02/file", Deny, "boundary"},
+		{"rm ../../AGENTS.md", Deny, "boundary"},
+		{"echo x > escape/AGENTS.md", Deny, "boundary"},
 		// cd follows the link logically, as the shell does, so .. returns to the lane root.
-		{"cd api && cd .. && cat AGENTS.md", Allow, ""},
+		{"cd api && cd .. && rm AGENTS.md", Allow, ""},
 		// Changed from C1: a file argument is resolved physically, as the kernel does: from the api
 		// worktree, ../AGENTS.md is in the owner's api directory, not the lane root.
-		{"cd api && cat ../AGENTS.md", Deny, "boundary"},
-		{"cd api && cat src/x.go", Allow, ""},
-		{"cd api && cat ../../../AGENTS.md", Deny, "boundary"},
-		{"cat " + state + "/api.log", Allow, ""},
-		{"cat " + other + "/api.env", Deny, "boundary"},
+		{"cd api && rm ../AGENTS.md", Deny, "boundary"},
+		{"cd api && rm src/x.go", Allow, ""},
+		{"cd api && rm ../../../AGENTS.md", Deny, "boundary"},
+		{"touch " + state + "/api.log", Allow, ""},
+		{"touch " + other + "/api.env", Deny, "boundary"},
 		{"bin/aw run api npm test -- test/unit/example.ts", Allow, ""},
 		{"cat /tmp/claude-scratch/out.txt ~/.claude/notes.md", Allow, ""},
 		{"echo $(pwd)/x 2>/dev/null", Allow, ""},
@@ -115,27 +117,41 @@ func TestBoundary(t *testing.T) {
 		{"echo hi > {owner}/x", Deny, "boundary"},
 		{"cp a.txt --target-directory={owner}", Deny, "boundary"}, // an option's value is a path too
 		{"cp a.txt --target-directory=api", Allow, ""},
-		{"cat it\\'s/../../../AGENTS.md", Deny, "boundary"}, // backslash escapes are resolved first
-		{"cat \"../..\"/AGENTS.md", Deny, "boundary"},
-		{"git -C {owner} status", Deny, "boundary"},
+		{"rm it\\'s/../../../AGENTS.md", Deny, "boundary"}, // backslash escapes are resolved first
+		{"rm \"../..\"/AGENTS.md", Deny, "boundary"},
+		{"git -C {owner} commit -m x", Deny, "boundary"},
 		{"git -C api status", Allow, ""},
 		{"make -C ../.. build", Deny, "boundary"},
-		{"cd {owner} && ls", Deny, "boundary"},
+		{"cd {owner} && touch x", Deny, "boundary"},
 		{"cd /tmp && rm -rf x", Allow, ""},
 		{"cd \"$SOMEWHERE\" && rm -rf x", Deny, "boundary"},
-		{"cat $DIR/file", Deny, "boundary"},
-		{"cat \"$(git rev-parse --show-toplevel)/AGENTS.md\"", Deny, "boundary"},
-		{"(cd {owner} && ls)", Deny, "boundary"},
-		{"ls ../*", Deny, "boundary"},
+		{"rm $DIR/file", Deny, ""},
+		{"rm \"$(git rev-parse --show-toplevel)/AGENTS.md\"", Deny, ""},
+		{"(cd {owner} && touch x)", Deny, "boundary"},
+		{"rm ../*", Deny, "boundary"},
 		{"OUT=../../x make", Deny, "boundary"},
-		{"bash -c 'cat ../../AGENTS.md'", Deny, "boundary"},
+		{"bash -c 'rm ../../AGENTS.md'", Deny, "boundary"},
 		{"bash -c \"$CMD\"", Deny, "parse"},
-		{"echo $(cat ../../AGENTS.md)", Deny, "boundary"},
-		{"diff <(cat ../../AGENTS.md) AGENTS.md", Deny, "boundary"},
+		{"echo $(rm ../../AGENTS.md)", Deny, "boundary"},
+		{"diff <(rm ../../AGENTS.md) AGENTS.md", Deny, "boundary"},
 		{"curl https://example.com/a/b > /tmp/page", Allow, ""},
-		{"for f in a b; do cd $f; done; ls", Deny, "boundary"},
+		{"for f in a b; do cd $f; done; touch x", Deny, "boundary"},
 		{"if true; then cd /tmp; fi; rm x", Deny, "boundary"},
 		{"echo 'unterminated", Deny, "parse"},
+		{"rm /lane/{a,../../owner}", Deny, ""}, // brace expansion: not one known path
+		// Reading the owner checkout, another lane or aw's records disturbs nothing.
+		{"cat {lane}/file {owner}/file", Allow, ""},
+		{"cat ../../AGENTS.md", Allow, ""},
+		{"cat escape/AGENTS.md", Allow, ""},
+		{"cat " + other + "/api.env", Allow, ""},
+		{"git -C {owner} status", Allow, ""},
+		{"git -C {owner} merge-base HEAD origin/main", Allow, ""},
+		{"grep -n x AGENTS.md {owner}/AGENTS.md", Allow, ""},
+		{"cd {owner} && ls", Allow, ""},
+		{"ls ../*", Allow, ""},
+		{"diff <(cat ../../AGENTS.md) AGENTS.md", Allow, ""},
+		{"cp {owner}/AGENTS.md {lane}/copy.md", Allow, ""}, // cp reads its sources
+		{"cp {lane}/AGENTS.md {owner}/copy.md", Deny, "boundary"},
 	})
 	run(t, s, f.lane, []tcase{{"{owner}/bin/aw whoami", Allow, ""}, {"{owner}/bin/aw discard x", Deny, "owner-only"}})
 	// Running from the owner checkout: every command starts with cd into the lane.
@@ -146,7 +162,10 @@ func TestBoundary(t *testing.T) {
 		{"bin/aw run web npm test", Deny, "boundary"},
 		{"git status", Deny, "boundary"},
 		{"cd {lane} && git status", Allow, ""},
-		{"cd {lane} && cat ../../AGENTS.md", Deny, "boundary"},
+		{"cd {lane} && cat ../../AGENTS.md", Allow, ""},
+		{"cd {lane} && rm ../../AGENTS.md", Deny, "boundary"},
+		{"cat {owner}/AGENTS.md", Allow, ""}, // an absolute path says which file it means
+		{"ls", Deny, "boundary"},
 		{"cd {owner} && git status", Deny, "boundary"},
 	})
 	for _, tc := range []struct {
@@ -156,7 +175,7 @@ func TestBoundary(t *testing.T) {
 		{[]string{filepath.Join(f.lane, "x")}, Allow},
 		{[]string{"x"}, Deny},
 		{nil, Deny},
-		{[]string{filepath.Join(f.owner, "x")}, Deny},
+		{[]string{filepath.Join(f.owner, "x")}, Allow}, // an absolute path says which file it means
 	} {
 		if d := Decide(s, Call{Tool: Read, Cwd: f.owner, Paths: tc.paths}); d.Verdict != tc.want {
 			t.Errorf("from the owner checkout, reading %v: %v", tc.paths, d)
@@ -180,11 +199,12 @@ func TestFileTools(t *testing.T) {
 		path string
 		want Verdict
 	}{
-		{Read, f.owner, Deny},
+		{Read, f.owner, Allow},
 		{Write, filepath.Join(f.owner, "AGENTS.md"), Deny},
 		{Read, filepath.Join(f.lane, "AGENTS.md"), Allow},
 		{Write, "api/src/new.go", Allow},
-		{Read, "escape/AGENTS.md", Deny},
+		{Read, "escape/AGENTS.md", Allow},
+		{Write, "escape/AGENTS.md", Deny},
 		{Read, "/tmp/tool-output.txt", Allow},
 		{Read, "~/.claude/notes.md", Allow},
 		{Read, "api/.env", Deny},
@@ -336,7 +356,7 @@ func TestPairSelfModification(t *testing.T) {
 func TestDenyMessagesQuotePaths(t *testing.T) {
 	f := newFixture(t)
 	s := f.scope(Lane)
-	d := Decide(s, Call{Tool: Shell, Cwd: f.lane, Command: "cat " + quote(f.owner+"/AGENTS.md")})
+	d := Decide(s, Call{Tool: Shell, Cwd: f.lane, Command: "touch " + quote(f.owner+"/AGENTS.md")})
 	if d.Verdict != Deny || !strings.Contains(d.Message, quote(f.owner+"/AGENTS.md")) {
 		t.Errorf("the message does not quote the path: %s", d.Message)
 	}
@@ -542,7 +562,8 @@ func TestMessagesAreNotPaths(t *testing.T) {
 		{`glab mr note --message "see ../../x"`, Deny, "publication"}, // past the path check, to the policy
 		{`git commit -F ../../msg`, Deny, "boundary"},
 		{`git -C ../.. commit -m ok`, Deny, "boundary"},
-		{`cat -m ../../x`, Deny, "boundary"},
+		{`touch -m ../../x`, Deny, "boundary"},
+		{`cat -m ../../x`, Allow, ""},
 	})
 }
 
@@ -576,5 +597,78 @@ func TestUnreadableCommandsOnlyMatterToARuleInForce(t *testing.T) {
 	pair.Safeguards = allSafeguards
 	if d := Decide(pair, call); d.Verdict != Deny {
 		t.Errorf("a pair session with safeguards on: %v %s", d.Verdict, d.Message)
+	}
+}
+
+// TestFeedbackShapes are the command shapes the 0.1.5 agent feedback lists as refused, though each
+// only reads or names what it writes (plans/agent-feedback.md, items 1, 2 and 13), with the
+// default safeguards. Their writing twins stay refused.
+func TestFeedbackShapes(t *testing.T) {
+	f := newFixture(t)
+	s := f.scope(Lane)
+	s.Safeguards = nil
+	notes := filepath.Join(f.home, "notes", "folder")
+	if err := os.MkdirAll(notes, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	s.Guards = []TeamGuard{{Name: "generated-contract-api", Paths: []string{"api/src/main/graphql/schema.graphqls"}, Message: "this file is generated"}}
+	run(t, s, f.lane, []tcase{
+		{"A={owner}; grep -rn X $A/docs", Allow, ""},
+		{"for r in api web; do (cd \"./$r\" && git status); done", Allow, ""},
+		{"for d in {owner}/*/.worktrees/01; do git -C \"$d\" status; done", Allow, ""},
+		{"chk() { git -C \"$2\" status; }; chk api {lane}/api", Allow, ""},
+		{"P=group%2Fproject; glab api \"projects/$P/pipeline_schedules/123\"", Allow, ""},
+		{"for j in 111 222; do glab api \"projects/group%2Fproject/jobs/$j/trace\" > /tmp/j-$j.log; done", Allow, ""},
+		{"S={lane}/scratch; glab api projects/x > \"$S/job.log\"", Allow, ""},
+		{"S={lane}/scratch; glab api projects/x > $S/job.log", Deny, "boundary"}, // unquoted, the spaces in the path split it
+		{"cd {lane} && mkdir -p scratch && cd scratch && (test -d repo || git clone https://example.com/r.git repo) && cd repo && git log -1", Allow, ""},
+		{"grep -n X workspace.toml {owner}/workspace.toml", Allow, ""},
+		{"ls {owner}/new-clone", Allow, ""},
+		{"cat $UNKNOWN/x", Allow, ""}, // only reads
+		{"cd " + quote(notes) + " && f=\"Some Note.md\" && sed -i '' -e 's|a|b|' \"$f\"", Allow, ""},
+		// Writes stay confined.
+		{"A={owner}; touch \"$A/x\"", Deny, "boundary"},
+		{"for d in {owner} {lane}; do touch \"$d/x\"; done", Deny, "boundary"},
+		{"chk() { git -C \"$1\" commit -m x; }; chk {owner}", Deny, "boundary"},
+		{"S={owner}; glab api projects/x > \"$S/job.log\"", Deny, "boundary"},
+		{"echo x > $UNKNOWN/x", Deny, "boundary"},
+		{"glab api --input {owner}/x projects/y > {owner}/out", Deny, "boundary"},
+	})
+	// With the secrets safeguard on, a read aw cannot resolve might be of a secret, so it fails closed.
+	s.Safeguards = []string{"secrets"}
+	run(t, s, f.lane, []tcase{{"cat $UNKNOWN/x", Deny, "boundary"}})
+
+	// Item 13: a write aw cannot resolve names no single guard.
+	if d := teamGuardRule(s, shell.Command{Args: []shell.Word{{Text: "sed", Known: true}, {Text: "-i", Known: true}, {Known: false}}, Dir: shell.Dir{Logical: notes, Physical: notes, Known: true}}); d.Verdict != Deny || strings.Contains(d.Message, "generated") || !strings.Contains(d.Message, "cannot determine") {
+		t.Errorf("teamGuardRule on an unknown target: %s (%s)", d.Verdict, d.Message)
+	}
+	s.Safeguards = nil
+	p := f.scope(Pair)
+	p.Guards = s.Guards
+	d := Decide(p, Call{Tool: Shell, Cwd: f.owner, Command: "cd " + quote(notes) + " && sed -i -e s/a/b/ \"$f\""})
+	if d.Verdict != Deny || strings.Contains(d.Message, "generated") {
+		t.Errorf("an unknown write target: %s (%s)", d.Verdict, d.Message)
+	}
+}
+
+// Reading the owner's copy of a file the lane has too comes with a note naming the lane's copy.
+func TestOwnerCopyNote(t *testing.T) {
+	f := newFixture(t)
+	s := f.scope(Lane)
+	owner, lane := filepath.Join(f.owner, "AGENTS.md"), filepath.Join(f.lane, "AGENTS.md")
+	for _, c := range []Call{
+		{Tool: Shell, Cwd: f.lane, Command: "cat " + quote(owner)},
+		{Tool: Read, Cwd: f.lane, Paths: []string{owner}},
+	} {
+		d := Decide(s, c)
+		if d.Verdict != Allow || !strings.Contains(d.Note, quote(lane)) {
+			t.Errorf("%+v: %s, note %q", c, d.Verdict, d.Note)
+		}
+	}
+	if d := Decide(s, Call{Tool: Shell, Cwd: f.lane, Command: "cat " + quote(lane)}); d.Note != "" {
+		t.Errorf("the lane's own copy: note %q", d.Note)
+	}
+	if d := Decide(s, Call{Tool: Shell, Cwd: f.lane, Command: "touch " + quote(owner)}); d.Verdict != Deny || !strings.Contains(d.Message, quote(lane)) {
+		t.Errorf("writing the owner's copy: %s (%s)", d.Verdict, d.Message)
 	}
 }

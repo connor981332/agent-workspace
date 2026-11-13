@@ -165,8 +165,8 @@ func teamGuardRule(s Scope, c shell.Command) Decision {
 		}
 		if ok {
 			d = s.guardsOnPath(abs)
-		} else if i := firstPathGuard(s.Guards); i >= 0 {
-			d = s.guardDecision(s.Guards[i])
+		} else {
+			d = s.unknownGuardedWrite(t)
 		}
 		switch d.Verdict {
 		case Deny:
@@ -180,11 +180,25 @@ func teamGuardRule(s Scope, c shell.Command) Decision {
 	return first
 }
 
-func firstPathGuard(gs []TeamGuard) int {
-	for i, g := range gs {
+// unknownGuardedWrite decides a write to a path aw cannot determine, while the team guards some
+// paths: it might be one of them. The message says that, and names no guard, since none is known to
+// match. If every such guard only asks, so does this.
+func (s Scope) unknownGuardedWrite(t shell.Word) Decision {
+	guarded, asks := false, true
+	for _, g := range s.Guards {
 		if len(g.Paths) > 0 {
-			return i
+			guarded, asks = true, asks && g.Ask
 		}
 	}
-	return -1
+	if !guarded {
+		return allow()
+	}
+	what := "a path"
+	if t.Text != "" {
+		what = quote(t.Text) + ", a path"
+	}
+	if asks {
+		return ask("team-guard", "this command writes to %s aw cannot determine, and the team guards some files in this workspace → approve it if it is none of them, or write the path literally", what)
+	}
+	return deny("team-guard", "this command writes to %s aw cannot determine, and the team guards some files in this workspace, so it is refused → write the path literally; a variable set earlier in the same command is fine", what)
 }

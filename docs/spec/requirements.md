@@ -136,7 +136,10 @@ expected but can follow.
   must exist; while one is missing, everything the guard matches is refused. Executable guards are
   not part of the first release, because a process per tool call cannot fit the guard budget.
 - **R55.** Shell commands are parsed into a syntax tree for guard decisions. A command whose effect
-  the guard cannot determine (for example a computed path into another lane) is refused.
+  the guard cannot determine (for example a computed path into another lane) is refused. Values the
+  command itself makes known (earlier assignments, loops over literal words, functions it defines
+  and calls) are followed, and a command that only reads is not refused for a path it cannot
+  determine unless a rule in force depends on it.
 - **R56.** Guard behavior is identical across supported harnesses. A harness parity suite verifies it
   for each adapter.
 - **R57.** A harness without hooks still receives the composed instructions and a single entry

@@ -7,7 +7,7 @@
 workspace shop --init
 exec aw attach 'add feature flag'
 cd .worktrees/01
-! exec awtest-hook bash 'cat ../../README.md; rm -rf ~'
-stderr 'aw: ../../README.md is outside lane feature-flag \(it resolves to ''.*/it''\\''''s a workspace/shop/README.md'''
+! exec awtest-hook bash 'touch ../../new.txt; rm -rf ~'
+stderr 'aw: ../../new.txt is outside lane feature-flag \(it resolves to ''.*/it''\\''''s a workspace/shop/new.txt'''
 stderr 'work inside the lane, under ''.*/it''\\''''s a workspace/shop/.worktrees/01'''
 ! stderr 'rm -rf'
