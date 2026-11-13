@@ -13,8 +13,8 @@ harness). Not every suggestion is taken: each section says what is kept as it is
 
 **Branches / MRs:** merged into master: #81 to #87 (Phases 1 to 4, and 5.1, 5.6, 5.7).
 [#88](https://github.com/connor981332/agent-workspace/pull/88) `feedback/6-options` (5.5, F3): merged
-on 2026-11-12, after every check passed. `feedback/7-devcontainer` (5.2 to 5.4, F5): local only,
-not pushed; master including #88 has been merged into it.
+on 2026-11-12, after every check passed. `feedback/7-devcontainer` (5.2 to 5.4, F5): being proposed against master;
+master including #88 has been merged into it.
 
 **Done:** Phases 1 to 4, 5.1, 5.5 (in #88), 5.6 as skill text, 5.7 as `on_acquire` only. Changes
 from the plan as written:
@@ -53,7 +53,8 @@ full acceptance tests passing:
   `docs/dev/benchmarks.md`: absolute budgets failed on this non-quiet run; the reduced interleaved
   comparison against master passed every regression check.
 
-**Next step:** verify the combined F3/F5 branch, then push and open the F5 PR against master. Mode A
+**Next step:** F5 review and CI. The combined F3/F5 branch passes unit, vet and full acceptance
+checks; the owner's dev binary has been rebuilt from master after #88. Mode A
 (5.4, aw generates `.devcontainer/aw/devcontainer.json`) waits for the owner's check 4 in VS Code.
 
 ## Decisions taken

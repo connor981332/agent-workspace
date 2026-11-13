@@ -352,3 +352,9 @@ Interleaved comparison (p50, at most 25% above master):
 | serve-free-seat | 10 | 21.83 | 22.43 | pass |
 | grant-next | 10 | 47.30 | 50.29 | pass |
 | preempt | 10 | 17.86 | 17.73 | pass |
+
+The completed shared F5 groundwork (`5945b15`, including config-hash replacement and process
+inspection) was compared again with the same master baseline at `-mode relative -scale 0.1`:
+all ten regression checks passed. Hook p50 was 12.91 ms versus master's 12.91 ms; ref-hook was
+13.97 ms versus 13.83 ms. These remain non-quiet, reduced-sample relative results; the absolute
+failures above are not cleared by them.
