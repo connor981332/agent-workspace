@@ -1,0 +1,58 @@
+# aw audit starts an agent in a lane of its own with the workspace-audit skill, the developer's
+# question, what changed in aw since the configuration was last audited, and aw's suggestions. Its
+# agent may rehearse its lane, as the onboarding agent may.
+# req: R85 R87 R88
+# source: plans/workspace-audit.md, Phase 2
+# milestone: M12
+
+stubs claude
+owner-may-change
+workspace solo --single --init
+cp $WORK/stamped.toml workspace.toml
+exec aw audit --harness claude --focus 'should solo keep two lanes?'
+stderr '^aw audit: setting up this workspace'
+stderr 'run bin/aw rehearse without asking'
+exists .claude/skills/aw-workspace-audit/SKILL.md
+exists .agents/skills/aw-workspace-audit/SKILL.md
+grep 'aw-workspace-audit' .aw/managed
+grep 'claude .*Use the aw-workspace-audit skill' $STUB_LOG
+grep 'begin there: should solo keep two lanes\?' $STUB_LOG
+grep 'last designed or audited with aw 0\.1\.5\. This is aw '$AW_VERSION $STUB_LOG
+grep 'What changed in aw since 0\.1\.5' $STUB_LOG
+grep '^- 0\.2\.0, breaking: a new lane starts from origin' $STUB_LOG
+grep 'Bash\(bin/aw rehearse\)' .worktrees/01/.claude/settings.local.json
+exec aw lanes --json
+stdout '"audit this workspace"'
+
+# Never audited: the agent is pointed at the whole changelog, and at the missing stamp.
+exec aw discard 01 --yes
+cp $WORK/unstamped.toml workspace.toml
+exec aw audit --harness claude
+grep 'does not say which aw designed it' $STUB_LOG
+grep '^- audited-with-missing: ' $STUB_LOG
+
+-- stamped.toml --
+[workspace]
+name = "Solo"
+namespace = "solo"
+schema = 1
+audited_with = "0.1.5"
+
+[lanes]
+max = 2
+pool = 0
+
+[projects.solo]
+directory = "."
+-- unstamped.toml --
+[workspace]
+name = "Solo"
+namespace = "solo"
+schema = 1
+
+[lanes]
+max = 2
+pool = 0
+
+[projects.solo]
+directory = "."
