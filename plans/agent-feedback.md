@@ -19,7 +19,8 @@ item 3), [#82](https://github.com/connor981332/agent-workspace/pull/82) `fix/acc
 [#84](https://github.com/connor981332/agent-workspace/pull/84) `feedback/2-branches` (Phase 2),
 [#85](https://github.com/connor981332/agent-workspace/pull/85) `feedback/3-owner` (Phase 3),
 [#86](https://github.com/connor981332/agent-workspace/pull/86) `feedback/4-recovery` (Phase 4),
-`feedback/5-containers` (Phase 5, in part).
+[#87](https://github.com/connor981332/agent-workspace/pull/87) `feedback/5-containers` (Phase 5, in
+part), all merged on 2026-11-12; `feedback/6-options` (F3).
 
 **Done:** Phases 1 to 4, with scenarios for each item. 4.3 does not record a configuration hash
 per lane or mark old lanes in `aw lanes`: `aw setup <lane>` adds what is missing, and says which
@@ -35,11 +36,14 @@ review on its PR. Two changes from the plan as written:
   lane's own branch name would never find the merge request.
 
 **In progress:** Phase 5. Done: 5.1 (B2, reproduced with `docker compose config`, then fixed), 5.6
-as skill text (detecting alternatives in `aw inspect` is not built), and 5.7 as `on_acquire` only
-(no `on_release`: a seat is given up in many ways, and the handoff asked for is the new holder's).
+as skill text (detecting alternatives in `aw inspect` is not built), 5.7 as `on_acquire` only
+(no `on_release`: a seat is given up in many ways, and the handoff asked for is the new holder's),
+and 5.5 (F3), with options declared as `[options.<name>.choices.<choice>]` tables rather than
+choices beside `default` in one table, so the schema can tell them apart. `aw rehearse --choose` is
+not built.
 
-**Next step:** 5.5 (F3, team options with a choice per developer), then 5.2 to 5.4 (F5). 5.2 starts
-with the change requests' four checks, two of which need VS Code by hand.
+**Next step:** 5.2 to 5.4 (F5). 5.2 starts with the change requests' four checks, two of which need
+VS Code by hand.
 
 ## Decisions taken
 

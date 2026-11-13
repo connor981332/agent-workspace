@@ -44,6 +44,11 @@ type Config struct {
 	Plans    Plans                        `json:"plans"`
 	// Harnesses are declarative adapters: another hooked harness, added without a release.
 	Harnesses map[string]*Harness `json:"harnesses"`
+	// Options are the alternative setups the team supports, and Choose the individual's picks.
+	Options map[string]*Option `json:"options"`
+	Choose  map[string]string  `json:"choose"`
+	// Chosen is each option's choice in effect: the individual's pick, or the default.
+	Chosen map[string]string `json:"-"`
 
 	// Values is the merged configuration as decoded TOML values, for aw config get.
 	Values map[string]any `json:"-"`
@@ -53,6 +58,13 @@ type Config struct {
 	Refused []Refusal `json:"-"`
 	// Sources are the files read, for the cache.
 	Sources []Source `json:"-"`
+}
+
+// Option is a team option: alternative setups, one of which each developer picks.
+type Option struct {
+	Default     string                    `json:"default"`
+	Description string                    `json:"description"`
+	Choices     map[string]map[string]any `json:"choices"`
 }
 
 type Workspace struct {
@@ -383,11 +395,42 @@ func Load(owner string) (*Config, error) {
 		}
 		return nil, Errors{{Pos: Pos{File: teamPath}, Msg: "cannot be read: " + err.Error(), Fix: "check the file's permissions"}}
 	}
-	return load(teamPath, data, func(namespace string) (string, []byte, error) {
-		path := IndividualFile(namespace)
-		data, err := os.ReadFile(path)
-		return path, data, err
-	})
+	return load(teamPath, data, readIndividual)
+}
+
+func readIndividual(namespace string) (string, []byte, error) {
+	path := IndividualFile(namespace)
+	data, err := os.ReadFile(path)
+	return path, data, err
+}
+
+// ChoiceProblem is a choice of a team option that does not load, though nobody may pick it now.
+type ChoiceProblem struct {
+	Option, Choice string
+	Err            error
+}
+
+// CheckEveryChoice loads the configuration once for every choice of every option that is not in
+// effect, so a choice nobody uses today does not quietly rot (aw config validate). c is the
+// configuration as loaded from dir.
+func CheckEveryChoice(dir string, c *Config) []ChoiceProblem {
+	teamPath := filepath.Join(dir, TeamFile)
+	data, err := os.ReadFile(teamPath)
+	if err != nil {
+		return nil
+	}
+	var out []ChoiceProblem
+	for _, name := range sortedMap(c.Options) {
+		for _, ch := range sortedMap(c.Options[name].Choices) {
+			if c.Chosen[name] == ch {
+				continue
+			}
+			if _, err := loadChoosing(teamPath, data, readIndividual, map[string]string{name: ch}); err != nil {
+				out = append(out, ChoiceProblem{Option: name, Choice: ch, Err: err})
+			}
+		}
+	}
+	return out
 }
 
 // LoadBytes validates a team file's contents with no individual layer, for aw config validate on
@@ -397,6 +440,12 @@ func LoadBytes(teamPath string, data []byte) (*Config, error) {
 }
 
 func load(teamPath string, teamData []byte, individual func(namespace string) (string, []byte, error)) (*Config, error) {
+	return loadChoosing(teamPath, teamData, individual, nil)
+}
+
+// loadChoosing is load, with some options' choices given instead of the individual's: aw config
+// validate checks each choice nobody may be using this way.
+func loadChoosing(teamPath string, teamData []byte, individual func(namespace string) (string, []byte, error), override map[string]string) (*Config, error) {
 	team, err := parseTOML(teamPath, teamData)
 	if err != nil {
 		return nil, Errors{err.(*Error)}
@@ -434,10 +483,18 @@ func load(teamPath string, teamData []byte, individual func(namespace string) (s
 	if len(lockErrs) > 0 {
 		return nil, lockErrs.sorted()
 	}
-	c.merge(nil, defaults(), LayerDefault, nil, nil)
-	c.merge(nil, team.values, LayerTeam, team, nil)
+	c.merge(nil, defaults(), LayerDefault, nil, nil, nil)
+	c.merge(nil, team.values, LayerTeam, team, nil, nil)
+	chosen, errs := chooseOptions(team, indiv, locks, override)
+	if len(errs) > 0 {
+		return nil, errs.sorted()
+	}
+	for _, name := range sortedMap(chosen) {
+		overlay, _ := nested(team.values, "options", name, "choices", chosen[name]).(map[string]any)
+		c.merge(nil, overlay, LayerOption+" "+name+"="+chosen[name], team, nil, Path{"options", name, "choices", chosen[name]})
+	}
 	if indiv != nil {
-		c.merge(nil, indiv.values, LayerIndividual, indiv, locks)
+		c.merge(nil, indiv.values, LayerIndividual, indiv, locks, nil)
 	}
 	c.fillElemDefaults(c.Values, schema, nil)
 
@@ -451,7 +508,97 @@ func load(teamPath string, teamData []byte, individual func(namespace string) (s
 	if errs := c.check(team); len(errs) > 0 {
 		return nil, errs.sorted()
 	}
+	c.Chosen = chosen
 	return c, nil
+}
+
+// chooseOptions decides each option's choice: the override, else the individual's pick unless the
+// team locked it, else the default. It refuses an option with no valid default, a pick of an option
+// or a choice that does not exist, a pick in the team layer, and two options whose choices set the
+// same key, since which wins would depend on their names.
+func chooseOptions(team, indiv *doc, locks []lockPattern, override map[string]string) (map[string]string, Errors) {
+	var errs Errors
+	fail := func(d *doc, p Path, msg, fix string) {
+		errs = append(errs, &Error{Pos: d.at(p), Key: p.String(), Msg: msg, Fix: fix})
+	}
+	opts, _ := nested(team.values, "options").(map[string]any)
+	if _, set := team.values["choose"]; set {
+		fail(team, Path{"choose"}, "is each developer's own choice, so it belongs in the individual file", "remove it here; a team sets each option's default instead")
+	}
+	chosen := map[string]string{}
+	leaves := map[string]string{} // key → the option whose choice sets it
+	for _, name := range sortedKeys(opts) {
+		o, _ := opts[name].(map[string]any)
+		choices, _ := o["choices"].(map[string]any)
+		p := Path{"options", name}
+		if len(choices) == 0 {
+			fail(team, p, "has no choices", fmt.Sprintf("add [options.%s.choices.<name>] tables", name))
+			continue
+		}
+		def, _ := o["default"].(string)
+		if _, ok := choices[def]; !ok {
+			fail(team, p.child("default"), fmt.Sprintf("%q is not one of its choices", def), "set default to one of "+strings.Join(sortedKeys(choices), ", "))
+			continue
+		}
+		chosen[name] = def
+		for _, ch := range sortedKeys(choices) {
+			overlay, _ := choices[ch].(map[string]any)
+			for _, leaf := range overlayLeaves(overlay, nil) {
+				if other, ok := leaves[leaf.key()]; ok && other != name {
+					fail(team, p.child("choices").child(ch), fmt.Sprintf("sets %s, which option %s also sets", leaf, other), "set each key in one option only")
+				}
+				leaves[leaf.key()] = name
+			}
+		}
+	}
+	if indiv != nil {
+		picks, _ := nested(indiv.values, "choose").(map[string]any)
+		for _, name := range sortedKeys(picks) {
+			pick, _ := picks[name].(string)
+			p := Path{"choose", name}
+			o, ok := opts[name].(map[string]any)
+			if !ok {
+				fix := "the team has no options"
+				if len(opts) > 0 {
+					fix = "choose one of the team's options: " + strings.Join(sortedKeys(opts), ", ")
+				}
+				fail(indiv, p, "is not an option of this workspace", fix)
+				continue
+			}
+			choices, _ := o["choices"].(map[string]any)
+			if _, ok := choices[pick]; !ok {
+				fail(indiv, p, fmt.Sprintf("%q is not a choice of option %s", pick, name), "choose one of "+strings.Join(sortedKeys(choices), ", "))
+				continue
+			}
+			if _, locked := matchLock(locks, p); locked {
+				continue // the merge records the refusal, and the default stands
+			}
+			if _, ok := chosen[name]; ok {
+				chosen[name] = pick
+			}
+		}
+	}
+	for name, pick := range override {
+		if _, ok := chosen[name]; ok {
+			chosen[name] = pick
+		}
+	}
+	return chosen, errs
+}
+
+// overlayLeaves are the keys an overlay sets, down to leaves the merge replaces whole.
+func overlayLeaves(m map[string]any, path Path) []Path {
+	var out []Path
+	for _, k := range sortedKeys(m) {
+		p := path.child(k)
+		n := lookupSchema(p)
+		if sub, ok := m[k].(map[string]any); ok && n != nil && (n.kind == kTable || n.kind == kMap) {
+			out = append(out, overlayLeaves(sub, p)...)
+			continue
+		}
+		out = append(out, p)
+	}
+	return out
 }
 
 func nested(m map[string]any, keys ...string) any {
@@ -468,7 +615,10 @@ func nested(m map[string]any, keys ...string) any {
 
 // merge lays src over c.Values at path, recording provenance. Tables and maps merge key by key;
 // every other value, hooks included, replaces what was there.
-func (c *Config) merge(path Path, src map[string]any, layer string, d *doc, locks []lockPattern) {
+//
+// prefix is where src sits in d, when that is not path: an option's overlay is laid over the root,
+// but written under [options.<name>.choices.<choice>].
+func (c *Config) merge(path Path, src map[string]any, layer string, d *doc, locks []lockPattern, prefix Path) {
 	dst := c.Values
 	for _, seg := range path {
 		dst = dst[seg].(map[string]any)
@@ -481,12 +631,12 @@ func (c *Config) merge(path Path, src map[string]any, layer string, d *doc, lock
 			if _, ok := dst[k].(map[string]any); !ok {
 				dst[k] = map[string]any{}
 			}
-			c.merge(p, m, layer, d, locks)
+			c.merge(p, m, layer, d, locks, prefix)
 			continue
 		}
 		pos := Pos{}
 		if d != nil {
-			pos = d.at(p)
+			pos = d.at(append(prefix[:len(prefix):len(prefix)], p...))
 		}
 		if lock, locked := matchLock(locks, p); locked {
 			c.provenance(p).Settings = append(c.provenance(p).Settings, Setting{Layer: layer, Pos: pos, Value: v, Status: "refused", Lock: lock})

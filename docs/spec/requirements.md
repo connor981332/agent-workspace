@@ -23,7 +23,10 @@ expected but can follow.
 ## Layers and configuration (wishlist 1, 24)
 
 - **R6.** Configuration has three layers: framework defaults, team (`workspace.toml` and installed
-  modules) and individual (`~/.config/agent-workspace/<namespace>.toml`).
+  modules) and individual (`~/.config/agent-workspace/<namespace>.toml`). The team can declare named
+  options, the alternative setups it supports, each choice a reviewed overlay laid between the team
+  and the individual layer; the individual layer picks one per option in `[choose]`, and every
+  choice is validated, whether or not anyone picks it.
 - **R7.** The team layer can lock any key or key pattern. A locked key cannot be overridden by the
   individual layer, and an attempt is reported, not ignored.
 - **R8.** `aw config explain <key>` shows the effective value and every layer that set it.

@@ -25,6 +25,7 @@ const (
 	kStringList             // array of strings
 	kHook                   // string, or { run, timeout, needs }
 	kMux                    // none, herdr, tmux, or { command }
+	kOverlay                // a table of ordinary configuration keys, laid over the team's (an option's choice)
 )
 
 // layer names where a key comes from.
@@ -32,6 +33,8 @@ const (
 	LayerDefault    = "default"
 	LayerTeam       = "team"
 	LayerIndividual = "individual"
+	// LayerOption is a team option's chosen overlay, laid between the team and the individual layer.
+	LayerOption = "option"
 )
 
 // node describes one key of the schema.
@@ -202,7 +205,8 @@ var schema = table("",
 				acceptedRE, "name a file relative to the project, e.g. \".env.template\" or \"ci/**\"", str("")),
 			"post_checkout", str("run: the repository's own post-checkout hook runs as a setup step of each lane, which can be retried. skip: it does not run in lanes.").
 				oneOf("run", "skip").withDefault("run"),
-			"env", mapOf("Variables for this project's hooks and aw run commands, such as a switch one of its hooks reads.", envRE, envFix, str("")),
+			"env", mapOf("Variables for this project's hooks and aw run commands, such as a switch one of its hooks reads. {lane} and "+
+				"{namespace} are filled in, as in lane_env, so a value such as \"lane-{lane}\" differs per lane.", envRE, envFix, str("")),
 			"generated", strList("Ignored paths (Git pathspecs) that builds create and that do not block recycling a lane, "+
 				"such as node_modules or tmp. Other ignored files may be someone's work, so they keep the lane."),
 			"lane_guards", mapOf("Checks a branch must pass before a lane is created on it (R28). The key names the guard.",
@@ -261,6 +265,18 @@ var schema = table("",
 			"message", str("Why it is refused, and what to do instead."),
 			"requires", strList("Files that must exist, from the workspace root. While one is missing, everything the guard matches is refused."),
 		)),
+	"options", mapOf("Alternative setups the team supports, each a named option with choices, from which every developer "+
+		"picks one in [choose] of their individual file. Each choice is a table of ordinary configuration keys, laid over the "+
+		"team's: the merge order is defaults, the team, the chosen overlays, then the individual file. aw config validate checks "+
+		"every choice. AW_OPTION_<NAME> tells hooks and commands the choice.", nameRE, nameFix,
+		table("",
+			"default", str("The choice of a developer who picks none.").teamOnly(),
+			"description", str("What the option decides, as aw options shows it.").teamOnly(),
+			"choices", mapOf("The choices, each a table of configuration keys, such as projects.web.runner or projects.web.env.", nameRE, nameFix,
+				&node{kind: kOverlay, doc: "Configuration keys this choice sets. Team-only keys, and [workspace], [locks], [options] and [choose], cannot be set here."}).teamOnly(),
+		)),
+	"choose", mapOf("Your choice for each of the team's [options], in your individual file: the option's name, and the choice. "+
+		"A team can lock an option with locks.keys = [\"choose.<name>\"].", nameRE, nameFix, str("")),
 	"locks", table("Keys the individual layer may not override. Team layer only.",
 		"keys", strList("Key patterns. * matches one key segment; a pattern locks everything under it.").teamOnly(),
 	),
@@ -367,6 +383,10 @@ func walk(d *doc, layer string, v any, n *node, path Path, errs *Errors) {
 	fail := func(p Path, msg, fix string) {
 		*errs = append(*errs, &Error{Pos: d.at(p), Key: p.String(), Msg: msg, Fix: fix})
 	}
+	if n.team && layer == LayerOption {
+		fail(path, "is the team's alone, so an option's choice cannot set it", "set it in workspace.toml outside [options]")
+		return
+	}
 	if n.team && layer != LayerTeam {
 		fail(path, "can only be set in the team layer (workspace.toml)", "remove it from this file")
 		return
@@ -404,6 +424,24 @@ func walk(d *doc, layer string, v any, n *node, path Path, errs *Errors) {
 			}
 			walk(d, layer, m[k], n.elem, path.child(k), errs)
 		}
+	case kOverlay:
+		m, ok := v.(map[string]any)
+		if !ok {
+			fail(path, "must be a table of configuration keys, not "+typeName(v), fmt.Sprintf("write it as [%s] with keys under it, such as projects.web.runner", path))
+			return
+		}
+		for _, k := range sortedKeys(m) {
+			if notInOverlay[k] {
+				fail(path.child(k), "cannot be set by an option's choice", "set it in workspace.toml outside [options]")
+				continue
+			}
+			child, ok := schema.fields[k]
+			if !ok {
+				fail(path.child(k), "unknown key", unknownFix(k, schema))
+				continue
+			}
+			walk(d, LayerOption, m[k], child, path.child(k), errs)
+		}
 	case kMux:
 		switch m := v.(type) {
 		case string:
@@ -438,6 +476,10 @@ func walk(d *doc, layer string, v any, n *node, path Path, errs *Errors) {
 		}
 	}
 }
+
+// notInOverlay are the top-level tables an option's choice may not set: what identifies the
+// workspace, and what decides the options themselves.
+var notInOverlay = map[string]bool{"workspace": true, "locks": true, "options": true, "choose": true}
 
 var muxTable = table("",
 	"command", str("Opens a window or pane. {name} is the session's name and {cmd} the command to run in it."),
