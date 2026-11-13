@@ -281,3 +281,15 @@ owner checkout. "(delete)" means the new value is zero. "—" means no hook call
 | owner | worktree remove | — | — | — | — |
 | owner | branch -D lane-04 | `refs/heads/lane-04 (delete)` | `refs/heads/lane-04 (delete)` | `refs/heads/lane-04 (delete)` | `refs/heads/lane-04 (delete)` |
 
+
+## Devcontainer CLI behavior for F5
+
+Checked on 2026-11-12 by reading the source of `@devcontainers/cli` 0.89.0, the pinned version
+(`dist/spec-node/devContainersSpecCLI.js`), for the 0.1.5 change requests' F5. Check 4 needs VS Code and is still open.
+
+| Check | Finding |
+|---|---|
+| 1. Can a project's devcontainer set its own Compose name? (B2) | The CLI passes `--project-name`, resolved as: `COMPOSE_PROJECT_NAME` from its environment; else from the `.env` in its working directory; else the merged Compose configuration's top-level `name` (unless it is `devcontainer`), else the last listed file's; else `<folder>_devcontainer` when the files are in `.devcontainer`. Lowercased, and only `[-_a-z0-9]` kept. Reproduced with `docker compose config`: aw's old fragment, listed after the project's file, replaced its name. |
+| 2. Does the CLI tolerate a listed Compose file that `initializeCommand` creates? (Mode B) | Yes. `up` runs `initializeCommand` (after a check of disallowed features, which reads no Compose file) before it reads the Compose configuration, so a file it creates is there in time. aw's `aw.compose.yaml` already relies on this. |
+| 3. Does the CLI pass each Compose file with `-f`? | Yes: every file in `dockerComposeFile` becomes `-f <file>`, with `--project-name`. `COMPOSE_FILE` is read only when `dockerComposeFile` is absent. So Compose's automatic `compose.override.yaml` and `COMPOSE_FILE` never apply, and a setup with no project change cannot add aw's mount to a container VS Code builds from the committed configuration: that is why Mode B exists. |
+| 4. Two configurations in one repository: does VS Code offer a picker, and does "Rebuild" reuse the configuration that built the container? (Mode A) | Not checked: it needs VS Code. |

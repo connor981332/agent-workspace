@@ -186,6 +186,10 @@ var schema = table("",
 				oneOf("worktree", "shared").withDefault("worktree"),
 			"runner", str("Where commands run: host, or devcontainer (one container per project, shared with VS Code).").
 				oneOf("host", "devcontainer").withDefault("host"),
+			"local_compose", str("Devcontainer runner only: a gitignored Compose file, relative to .devcontainer (no absolute path or .. component), that the project's "+
+				"committed devcontainer.json lists in dockerComposeFile and its initializeCommand creates when missing. aw writes its "+
+				"same-path mount, the seat ports and the Compose name there, replacing the whole file instead of writing aw.compose.yaml, so the committed "+
+				"configuration needs nothing of aw's and VS Code's Rebuild keeps the mount."),
 			"install", str("Installs dependencies, in each lane's worktree. Rerun when its stamp changes."),
 			"install_stamp", strList("Files, relative to the project, whose contents decide whether install reruns, e.g. package-lock.json."),
 			"run", str("The default command for aw run <project> with no command."),

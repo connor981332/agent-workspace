@@ -11,39 +11,52 @@ harness). Not every suggestion is taken: each section says what is kept as it is
 
 **Updated:** 2026-11-12
 
-**Branches / MRs:** stacked, each on the one before:
-[#81](https://github.com/connor981332/agent-workspace/pull/81) `fix/lane-attribution` (B4, part of
-item 3), [#82](https://github.com/connor981332/agent-workspace/pull/82) `fix/acceptance-tmp`
-(acceptance runs leaking into `$TMPDIR`),
-[#83](https://github.com/connor981332/agent-workspace/pull/83) `feedback/1-guard` (Phase 1),
-[#84](https://github.com/connor981332/agent-workspace/pull/84) `feedback/2-branches` (Phase 2),
-[#85](https://github.com/connor981332/agent-workspace/pull/85) `feedback/3-owner` (Phase 3),
-[#86](https://github.com/connor981332/agent-workspace/pull/86) `feedback/4-recovery` (Phase 4),
-[#87](https://github.com/connor981332/agent-workspace/pull/87) `feedback/5-containers` (Phase 5, in
-part), all merged on 2026-11-12; `feedback/6-options` (F3).
+**Branches / MRs:** #81 to #89 are merged into master. #88 added team options (5.5, F3);
+[#89](https://github.com/connor981332/agent-workspace/pull/89) completed shared F5 groundwork and
+Mode B (5.2, 5.3), after all 16 checks passed. `feedback/8-owner-port` fixes the verified item 8
+finding and is being proposed against master; #89 has been merged into that branch.
 
-**Done:** Phases 1 to 4, with scenarios for each item. 4.3 does not record a configuration hash
-per lane or mark old lanes in `aw lanes`: `aw setup <lane>` adds what is missing, and says which
-projects the lane lacks, which covered the reported case without a migration. 4.5 also keeps a
-lane with open notes from `aw sweep`, since recycling it would lose them. In 3.1, a pair session may also
-delete aw's own records (`.git/aw`), which the removed self-modification rule refused; flagged for
-review on its PR. Two changes from the plan as written:
-- 2.6, F4: rehearsal does not guess which Compose files a host project's scripts start; aw cannot
-  see into them, and a wrong guess would let a rehearsal reach real containers. A person's review
-  in `accepted_findings` decides instead, and an accepted file's Compose project name is still
+**Done:** Phases 1 to 4, 5.1 to 5.3, 5.5, 5.6 as skill text, 5.7 as `on_acquire` only. Changes
+from the plan as written:
+- 2.6, F4: rehearsal does not guess which Compose files a host project's scripts start; a person's
+  review in `accepted_findings` decides, and an accepted file's Compose project name is still
   refused beside a container command. The runtime refusal of an accepted file is not built.
-- 2.2: `aw push` also records the remote name for recap and sweep's forge lookups, which by the
-  lane's own branch name would never find the merge request.
+- 2.2: `aw push` also records the remote name for recap and sweep's forge lookups.
+- 3.1: a pair session may also delete aw's own records under `.git/aw` (flagged in #85, merged).
+- 4.3: no per-lane configuration hash; `aw setup <lane>` adds what is missing and names projects the
+  lane lacks. 4.5: `aw sweep` keeps a lane with open notes.
+- 5.5: choices live under `[options.<name>.choices.<choice>]`; `aw rehearse --choose` is not built;
+  `{lane}` and `{namespace}` are now expanded in `projects.<name>.env` too.
+- 5.6: detecting alternatives in `aw inspect` is not built. 5.7: no `on_release`.
 
-**In progress:** Phase 5. Done: 5.1 (B2, reproduced with `docker compose config`, then fixed), 5.6
-as skill text (detecting alternatives in `aw inspect` is not built), 5.7 as `on_acquire` only
-(no `on_release`: a seat is given up in many ways, and the handoff asked for is the new holder's),
-and 5.5 (F3), with options declared as `[options.<name>.choices.<choice>]` tables rather than
-choices beside `default` in one table, so the schema can tell them apart. `aw rehearse --choose` is
-not built.
+**F5 progress:** 5.4 (Mode A) waits for the owner's VS Code check. Completed in #89: the Compose name resolved exactly
+as the devcontainer CLI 0.89.0 does (read from its source), and the F5 checks recorded in
+`docs/dev/spikes.md` (checks 1 to 3 answered; check 4, VS Code's picker and Rebuild with two
+configurations, needs the owner in VS Code). 5.2 and 5.3 pass config validation, unit and full
+acceptance tests:
+- `projects.<name>.local_compose` (Mode B): aw writes its fragment (same-path mount, seat ports,
+  Compose name) into the project's own gitignored local Compose file, which its committed
+  devcontainer.json lists, instead of `aw.compose.yaml`. `runners.Validate(dir, local)` checks the
+  right file is listed; doctor reports Mode B as OK without requiring aw's claim step.
+- The `workspaceFolder = ${localWorkspaceFolder}` requirement is dropped in every mode: aw's mount
+  is an extra mount, and aw runs commands at lane paths. Scenarios cover a different editor folder
+  and an omitted one, plus Mode B with stubbed docker/devcontainer, seat ports and Git exclusion.
+- `config.check` refuses `local_compose` on a host runner, absolute paths, `..` components and unclean
+  paths. Changelog, Runners architecture and the regenerated config reference describe Mode B.
+- Shared 5.2 groundwork is implemented: the fragment carries a hash of the devcontainer/Compose
+  configuration, dotenv files, referenced environment values and aw's settings. A changed or missing
+  label replaces only an idle service container, with volumes kept; seats, setups, attached sessions,
+  unreadable state or failed/incomplete process inspection refuse replacement. Scenarios cover each
+  busy/refusal path and stable reuse. Mode A remains gated on the owner's VS Code check 4.
+- Onboarding offers a local Compose slot as an optional project MR, with the ownership tradeoff.
+- Vet, gofmt and full unit/acceptance checks pass. Benchmarks are recorded in
+  `docs/dev/benchmarks.md`: absolute budgets failed on this non-quiet run; the reduced interleaved
+  comparison against master passed every regression check.
 
-**Next step:** 5.2 to 5.4 (F5). 5.2 starts with the change requests' four checks, two of which need
-VS Code by hand.
+**Next step:** review/CI for the owner-port fix, then Mode A (5.4,
+aw generates `.devcontainer/aw/devcontainer.json`) once the owner reports check 4 in VS Code.
+The owner's dev binary is rebuilt from master after #89. The check fixture is
+`/tmp/aw-f5-vscode-check`, with instructions in its README.
 
 ## Decisions taken
 

@@ -178,6 +178,7 @@ type Project struct {
 	Repo         string                `json:"repo"`
 	Lanes        string                `json:"lanes"`
 	Runner       string                `json:"runner"`
+	LocalCompose string                `json:"local_compose"`
 	Install      string                `json:"install"`
 	InstallStamp []string              `json:"install_stamp"`
 	Run          string                `json:"run"`
@@ -905,6 +906,14 @@ func (c *Config) check(team *doc) Errors {
 			fail(p.child("directory"), fmt.Sprintf("%q is also project %s's directory; directories must be unique", dir, other), "give each project its own directory")
 		}
 		dirs[dir] = name
+		if local := pr.LocalCompose; local != "" {
+			if pr.Runner != "devcontainer" {
+				fail(p.child("local_compose"), `requires runner = "devcontainer"`, `set runner = "devcontainer", or remove local_compose`)
+			}
+			if filepath.IsAbs(local) || slices.Contains(strings.Split(filepath.ToSlash(local), "/"), "..") || filepath.ToSlash(filepath.Clean(local)) != local || local == "." {
+				fail(p.child("local_compose"), fmt.Sprintf("%q is not a clean path inside .devcontainer", local), `name the file relative to .devcontainer, e.g. "compose.local.yaml"`)
+			}
+		}
 		for _, sname := range sortedMap(pr.Servers) {
 			s, sp := pr.Servers[sname], p.child("servers").child(sname)
 			servers[name+"."+sname] = s

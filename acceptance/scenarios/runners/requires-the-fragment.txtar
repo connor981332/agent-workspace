@@ -1,4 +1,4 @@
-# A devcontainer.json that does not list the fragment, or whose workspace folder is not the same path, is refused with the fix.
+# A devcontainer.json that does not list the fragment is refused with the fix.
 # req: R47
 # source: spec S7
 # milestone: M6

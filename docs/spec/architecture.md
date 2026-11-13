@@ -266,7 +266,6 @@ A project's devcontainer must be a Compose one, and its `devcontainer.json` must
 {
   "dockerComposeFile": ["compose.yaml", "aw.compose.yaml"],
   "service": "app",
-  "workspaceFolder": "${localWorkspaceFolder}",        // the same path inside and outside (S7)
   "initializeCommand": "../bin/aw containers claim web" // `bin/aw` for a single-repository workspace
 }
 ```
@@ -274,14 +273,35 @@ A project's devcontainer must be a Compose one, and its `devcontainer.json` must
 `aw.compose.yaml` is written by `aw`, in the clone's `.devcontainer`, and kept out of Git through the
 clone's `.git/info/exclude`, because it names this checkout's path. It holds the same-path bind mount,
 every seat's port on loopback, and the Compose name: the one the project's own configuration resolves
-to (`COMPOSE_PROJECT_NAME`, from the environment or `.devcontainer/.env`, else the last top-level
+to (`COMPOSE_PROJECT_NAME`, from the environment or the checkout's `.env`, else the last top-level
 `name:` in its Compose files, else `<folder>_devcontainer`, as VS Code derives it), so that aw and VS
 Code share the developer's existing stack and its volumes. The team commits `devcontainer.json`, which
 lists it. `aw containers claim <project>` rewrites it, and removes a container left over from a moved
 checkout, or refuses when that other checkout is live and running there. The CLI runs
 `initializeCommand` before it reads the Compose files, so VS Code gets exactly what `aw` gets.
+The project's `workspaceFolder` may stay as it is, or be absent. aw's same-path bind is an extra
+mount, and aw executes commands at lane paths, independently of the editor's folder.
+
+Alternatively, set `projects.<name>.local_compose = "compose.local.yaml"` (Mode B). This must be a
+clean relative path inside `.devcontainer`, with no `..` component, and requires `runner =
+"devcontainer"`. The committed `devcontainer.json` must list that file after its own Compose files.
+aw writes the mount, seat ports and Compose name there instead of `aw.compose.yaml`, and excludes it
+from Git. aw owns the whole file; use an empty local slot, not a file with settings to preserve.
+The project's `initializeCommand` should create the slot when missing without overwriting it;
+VS Code's Rebuild then keeps aw's fragment. aw writes it and runs the claim step before its own
+`devcontainer up`; Mode B does not require aw's claim command in `initializeCommand`.
+
 A server listening only on the container's loopback is not reachable through a published port, so
 servers must bind `0.0.0.0`.
+
+The fragment also carries `dev.aw.config-hash`, fingerprinting the devcontainer configuration,
+listed project Compose files, checkout/Compose `.env` files, referenced host environment values,
+CLI settings, and aw's mount and ports. The generated fragment is excluded from the inputs, so
+writing it cannot cause a rebuild loop. Before reuse or a claim, a changed or missing label triggers
+an idle check: aw checks seats, active setups and attached processes, then replaces only that
+project's service container without deleting volumes. An in-use container, unreadable state, failed
+process inspection or an unidentifiable main process refuses replacement with the fix. Mount and
+port mismatches on a container carrying the current hash still require explicit recreation.
 
 The CLI itself is pinned under `[devcontainer]`: `command`, `version` and `env` (S16). `aw doctor`
 checks the wiring and the pin from the files alone, and asks no container engine (R2).

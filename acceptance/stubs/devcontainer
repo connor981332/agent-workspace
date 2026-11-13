@@ -16,6 +16,18 @@ if [ -f "$dir/.devcontainer/devcontainer.json" ]; then
   s="$(sed -n 's/.*"service": *"\([^"]*\)".*/\1/p' "$dir/.devcontainer/devcontainer.json")"
   service="${s:-$service}"
 fi
+# Read the listed files, including a project's local Compose slot. The fixtures put the
+# dockerComposeFile list on one line, as they do the service name above.
+listed=""
+if [ -f "$dir/.devcontainer/devcontainer.json" ]; then
+  listed="$(sed -n 's/.*"dockerComposeFile": *\[\(.*\)\].*/\1/p' "$dir/.devcontainer/devcontainer.json" | tr ',"' '  ')"
+fi
+for file in $listed; do
+  candidate="$dir/.devcontainer/$file"
+  if [ -f "$candidate" ] && grep -q '^# Written by aw;' "$candidate"; then
+    fragment="$candidate"
+  fi
+done
 if [ -f "$fragment" ]; then
   n="$(sed -n 's/^name: *//p' "$fragment")"
   name="${n:-$name}"
@@ -27,6 +39,10 @@ if [ -e "$STUB_STATE/ps/${name}__$service" ]; then
   echo true > "$STUB_STATE/state/$id"
   exit 0
 fi
+hash=""
+if [ -f "$fragment" ]; then
+  hash="$(sed -n 's/.*dev.aw.config-hash: "\([^"]*\)"/\1/p' "$fragment")"
+fi
 bindings=""
 if [ -f "$fragment" ]; then
   for p in $(sed -n 's/.*127\.0\.0\.1:\([0-9]*\):.*/\1/p' "$fragment"); do
@@ -37,6 +53,6 @@ echo "$id" > "$STUB_STATE/ps/${name}__$service"
 echo "$dir" > "$STUB_STATE/folder/$id"
 echo true > "$STUB_STATE/state/$id"
 cat > "$STUB_STATE/inspect/$id" <<JSON
-[{"Id":"$id","State":{"Running":true,"Pid":100},"Config":{"Labels":{"devcontainer.local_folder":"$dir"}},
+[{"Id":"$id","State":{"Running":true,"Pid":100},"Config":{"Labels":{"devcontainer.local_folder":"$dir","dev.aw.config-hash":"$hash"}},
 "Mounts":[{"Type":"bind","Source":"$dir","Destination":"$dir"}],"HostConfig":{"PortBindings":{$bindings}}}]
 JSON
