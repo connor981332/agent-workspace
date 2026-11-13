@@ -105,7 +105,7 @@ configuration. On a fresh clone of a workspace already set up, aw setup is all y
 	root.CompletionOptions.HiddenDefaultCmd = true
 
 	root.AddCommand(newVersionCmd(), newConfigCmd(), newInitCmd(), newSetupCmd(), newBackgroundSetupCmd(), newSnapshotCmd(), newRestoreCmd(), newSnapshotsCmd(), newDoctorCmd(), newWhoamiCmd(), newAttachCmd(),
-		newSuperviseCmd(), newInspectCmd(), newRehearseCmd(), newOnboardCmd(), newAddCmd(), newModulesCmd(), newEjectCmd(), newInfraCmd(), newWebhookCmd(), newPlanCmd(), newCheckDocsCmd(), newDelegateCmd(), newMoveToLaneCmd(), newTryCmd(), newChangesetCmd(), newUpgradeCmd(), newUpgradeFinishCmd(), newContainersCmd(), newKeepCmd(), newSweepCmd(), newDiscardCmd(), newParkCmd(false), newParkCmd(true), newFinishCmd(), newRunCmd(), newNewCmd(), newRecapCmd(), newLanesCmd(), newPairCmd(), newResumeCmd(), newOpenCmd(), newServeCmd(), newStopCmd(), newQueueCmd(), newPullCmd(), newPushCmd())
+		newSuperviseCmd(), newInspectCmd(), newRehearseCmd(), newOnboardCmd(), newAddCmd(), newModulesCmd(), newEjectCmd(), newInfraCmd(), newWebhookCmd(), newPlanCmd(), newCheckDocsCmd(), newDelegateCmd(), newMoveToLaneCmd(), newTryCmd(), newChangesetCmd(), newUpgradeCmd(), newUpgradeFinishCmd(), newContainersCmd(), newKeepCmd(), newSweepCmd(), newDiscardCmd(), newParkCmd(false), newParkCmd(true), newFinishCmd(), newRunCmd(), newNewCmd(), newRecapCmd(), newLanesCmd(), newPairCmd(), newResumeCmd(), newOpenCmd(), newServeCmd(), newStopCmd(), newQueueCmd(), newPullCmd(), newPushCmd(), newNoteCmd())
 	root.PersistentPreRunE = refuseAgent
 	return root
 }

@@ -194,6 +194,18 @@ var migrations = []string{
 
 	// 12: the name a lane's branch was pushed under, when the team's branch names differ from aw's.
 	`ALTER TABLE lane_repos ADD COLUMN published TEXT NOT NULL DEFAULT ''`,
+
+	// 13: notes a lane's agent keeps about what it left to do, such as a temporary CI schedule to
+	// remove, so that they outlive a context compaction (aw note).
+	`CREATE TABLE lane_notes (
+		id         INTEGER PRIMARY KEY,
+		lane       INTEGER NOT NULL,
+		generation INTEGER NOT NULL,
+		text       TEXT NOT NULL,
+		created    TEXT NOT NULL,
+		done       TEXT NOT NULL DEFAULT ''
+	) STRICT;
+	CREATE INDEX lane_notes_lane ON lane_notes (lane, generation)`,
 }
 
 // BackupPath is where the database is copied before migrating from schema version v.

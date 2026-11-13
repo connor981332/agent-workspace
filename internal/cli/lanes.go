@@ -312,6 +312,18 @@ func newParkCmd(unpark bool) *cobra.Command {
 	return cmd
 }
 
+// warnOpenNotes says, at a handoff, what the lane's agent wrote down and has not done.
+func warnOpenNotes(cmd *cobra.Command, w *writeContext, l state.Lane) {
+	notes, err := state.OpenNotes(w.store.DB(), l.Number, l.Generation)
+	if err != nil || len(notes) == 0 {
+		return
+	}
+	fmt.Fprintf(cmd.ErrOrStderr(), "aw: warning: lane %s has %d open note%s → do them, or mark them done with aw note --done <n>:\n", l.Name, len(notes), plural(len(notes)))
+	for _, n := range notes {
+		fmt.Fprintf(cmd.ErrOrStderr(), "  %d. %s\n", n.ID, ui.Clean(n.Text))
+	}
+}
+
 func newFinishCmd() *cobra.Command {
 	var o lanes.FinishOptions
 	var asJSON bool
@@ -351,6 +363,7 @@ uncommitted work, is not on the lane's branch, or changes while it runs.`,
 				return nil
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Lane %s is ready for review. It stays protected until its work is proven merged.\n", f.Lane.Name)
+			warnOpenNotes(cmd, w, l)
 			return nil
 		}),
 	}

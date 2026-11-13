@@ -150,6 +150,13 @@ func (m *Manager) Sweep(ctx context.Context, o SweepOptions) (*SweepReport, erro
 }
 
 // decide examines a lane that is not in the pool. Anything that cannot be read keeps the lane.
+func firstNote(notes []state.Note) string {
+	if len(notes) == 0 {
+		return ""
+	}
+	return notes[0].Text
+}
+
 func (m *Manager) decide(ctx context.Context, d *Decision, sessions []state.Session, caller int) {
 	keep := func(format string, args ...any) { d.Action, d.Reason = ActionKeep, fmt.Sprintf(format, args...) }
 	l := d.lane
@@ -173,6 +180,11 @@ func (m *Manager) decide(ctx context.Context, d *Decision, sessions []state.Sess
 			keep("session %s (%s) is attached", s.HarnessSession, s.Harness)
 			return
 		}
+	}
+	// An open note is work the lane's agent left outside it, which no merge proves done.
+	if notes, err := state.OpenNotes(m.Store.DB(), l.Number, l.Generation); err != nil || len(notes) > 0 {
+		keep("it has %d open note%s, such as %q → do them, or mark them done with aw note --done <n> in the lane", len(notes), plural(len(notes)), firstNote(notes))
+		return
 	}
 	root := m.Root(l.Number)
 	if info, err := os.Lstat(root); err != nil {
