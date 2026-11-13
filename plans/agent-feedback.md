@@ -17,9 +17,13 @@ item 3), [#82](https://github.com/connor981332/agent-workspace/pull/82) `fix/acc
 (acceptance runs leaking into `$TMPDIR`),
 [#83](https://github.com/connor981332/agent-workspace/pull/83) `feedback/1-guard` (Phase 1),
 [#84](https://github.com/connor981332/agent-workspace/pull/84) `feedback/2-branches` (Phase 2),
-`feedback/3-owner` (Phase 3).
+[#85](https://github.com/connor981332/agent-workspace/pull/85) `feedback/3-owner` (Phase 3),
+`feedback/4-recovery` (Phase 4).
 
-**Done:** Phases 1, 2 and 3, with scenarios for each item. In 3.1, a pair session may also
+**Done:** Phases 1 to 4, with scenarios for each item. 4.3 does not record a configuration hash
+per lane or mark old lanes in `aw lanes`: `aw setup <lane>` adds what is missing, and says which
+projects the lane lacks, which covered the reported case without a migration. 4.5 also keeps a
+lane with open notes from `aw sweep`, since recycling it would lose them. In 3.1, a pair session may also
 delete aw's own records (`.git/aw`), which the removed self-modification rule refused; flagged for
 review on its PR. Two changes from the plan as written:
 - 2.6, F4: rehearsal does not guess which Compose files a host project's scripts start; aw cannot
@@ -31,7 +35,8 @@ review on its PR. Two changes from the plan as written:
 
 **In progress:** nothing.
 
-**Next step:** Phase 4, 4.1 (`aw attach --wait`), on a branch stacked on `feedback/3-owner`.
+**Next step:** Phase 5, 5.1 (reproduce B2, then adopt the project's Compose name), on a branch
+stacked on `feedback/4-recovery`.
 
 ## Decisions taken
 
