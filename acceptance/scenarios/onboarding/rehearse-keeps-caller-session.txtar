@@ -1,0 +1,71 @@
+# aw rehearse run by a paired agent in the owner checkout claims two lanes of its own: the caller's
+# session identity is not passed on, so both claims are distinct lanes, each is torn down once, and
+# the caller is still paired and attached to nothing afterwards.
+# req: R87
+# source: feedback 2026-11-13 (RideTracker and mortgage 0.2.0 upgrades)
+# milestone: M11
+
+owner-may-change
+workspace shop --init
+exec aw setup
+exec aw pair --session claude:p-1
+session p-1 claude
+exec aw whoami --json
+cp stdout $WORK/before.json
+exec aw rehearse
+stdout 'Claimed lanes rehearse-first and rehearse-second|Claimed lanes rehearse-second and rehearse-first'
+stdout 'The rehearsal passed'
+! stderr 'left behind'
+exec aw whoami --json
+cmp stdout $WORK/before.json
+exec aw --json
+json stdout .pair_sessions[0].harness_session p-1
+json stdout .pair_sessions[0].pair true
+! stdout 'rehearse'
+! exists .worktrees/01
+! exists .worktrees/02
+
+# A Codex session known only by its own variable is not passed on either.
+end-session p-1
+exec aw pair --session codex:c-1
+env CODEX_THREAD_ID=c-1
+exec aw whoami --json
+cp stdout $WORK/codex-before.json
+exec aw rehearse
+stdout 'The rehearsal passed'
+! stderr 'left behind'
+exec aw whoami --json
+cmp stdout $WORK/codex-before.json
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[lane_env.app]
+DATABASE_URL = "postgres://localhost/shop_{lane}"
+
+[projects.web]
+directory = "web"
+smoke = "true"
+
+[projects.web.servers.app]
+command = "exec awtest-server -port {port}"
+port = 44300
+ready = "awtest-http 127.0.0.1:{port}"
+
+[projects.api]
+directory = "api"
+
+[projects.api.servers.main]
+command = "exec awtest-server -port {port}"
+port = 44500
+
+[resources.stack]
+kind = "process"
+capacity = 2
+servers = ["web.app", "api.main"]
