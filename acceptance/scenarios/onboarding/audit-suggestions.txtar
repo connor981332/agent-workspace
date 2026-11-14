@@ -25,14 +25,16 @@ json stdout .suggestions[1].id devcontainer-committed-wiring-solo
 json stdout .changelog_since[0].version
 stdout '"projects.<name>.local_compose"'
 
-cp $WORK/declined.toml workspace.toml
+# Audited with a version no older than the declined suggestion and no newer than the aw under test,
+# so that nothing else is suggested: the release itself, or 0.2.1 for a development build.
+exec sh -c 'case "$AW_VERSION" in 0.0.0*) v=0.2.1 ;; *) v=$AW_VERSION ;; esac; echo "$v" > "$WORK/stamp"; sed "s/@STAMP@/$v/" "$WORK/declined.toml" > workspace.toml'
 exec aw config validate
 exec aw doctor
 ! stdout '^· suggestions'
 exec aw doctor --json
 json stdout .suggestions []
+exec sh -c 'aw inspect --json | grep -qF "\"audited_with\": \"$(cat "$WORK/stamp")\""'
 exec aw inspect --json
-json stdout .audited_with 0.2.1
 json stdout .suggestions []
 
 -- workspace.toml --
@@ -55,7 +57,7 @@ command = "devcontainer"
 name = "Solo"
 namespace = "solo"
 schema = 1
-audited_with = "0.2.1"
+audited_with = "@STAMP@"
 
 [lanes]
 pool = 0
