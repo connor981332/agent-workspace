@@ -108,7 +108,7 @@ func runSetup(ctx context.Context, w *writeContext, m *lanes.Manager, l state.La
 		Fresh: len(w.cfg.Lanes.Data) > 0,
 		Hooks: lifecycle.CheckoutHooks(context.Background(), w.ws.Owner, w.cfg),
 		InContainer: func(ctx context.Context, project, dir string, env []string, run, log string) ([]string, error) {
-			return hookInContainer(ctx, w, project, dir, env, run, log)
+			return hookInContainer(ctx, w, setupLane{l.Number, l.Generation}, project, dir, env, run, log)
 		},
 		Where: func(project string) (string, []string, error) {
 			where, err := m.LocateIn(l.Number, project)

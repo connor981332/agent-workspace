@@ -8,12 +8,14 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/connor981332/agent-workspace/internal/broker"
 	"github.com/connor981332/agent-workspace/internal/config"
+	"github.com/connor981332/agent-workspace/internal/lanes"
 	"github.com/connor981332/agent-workspace/internal/procs"
 	"github.com/connor981332/agent-workspace/internal/runners"
 	"github.com/connor981332/agent-workspace/internal/state"
@@ -24,6 +26,14 @@ import (
 const keepCommand = "__keep"
 
 func devcontainerIn(ws *workspace.Workspace, c *config.Config, project string) (*runners.Devcontainer, error) {
+	return devcontainerFor(ws, c, project, setupLane{})
+}
+
+// setupLane is the lane setup asking for a container, or the zero value for anything else. Its own
+// setup is not a use of the container, and its entering the container is recorded for the others.
+type setupLane struct{ number, generation int }
+
+func devcontainerFor(ws *workspace.Workspace, c *config.Config, project string, req setupLane) (*runners.Devcontainer, error) {
 	if p := c.Projects[project]; p == nil || p.Runner != "devcontainer" {
 		return nil, fmt.Errorf("project %q does not run in a devcontainer → set [projects.%s] runner = \"devcontainer\"", project, project)
 	}
@@ -49,9 +59,40 @@ func devcontainerIn(ws *workspace.Workspace, c *config.Config, project string) (
 			return nil, err
 		}
 		defer store.Close()
-		return inUse(ctx, c, store.DB(), d, id)
+		return inUse(ctx, c, store.DB(), d, id, dir, req.number)
+	}
+	if req.number > 0 {
+		d.Entered = func() error { return recordEntered(dir, c, req, project) }
 	}
 	return d, nil
+}
+
+// enteredPath is where a lane's setup records that it has used a project's container.
+func enteredPath(stateDir string, c *config.Config, lane int, project string) string {
+	return filepath.Join(stateDir, "lanes", lanes.Dir(lane, c.Lanes.Max), "containers", project)
+}
+
+// recordEntered notes, for the setup's generation, that the lane's setup has used the container.
+func recordEntered(stateDir string, c *config.Config, req setupLane, project string) error {
+	path := enteredPath(stateDir, c, req.number, project)
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	return os.WriteFile(path, []byte(strconv.Itoa(req.generation)+"\n"), 0o600)
+}
+
+// entered says whether a setup in progress has used the project's container. What cannot be read
+// counts as a use, since the container is then not proven idle.
+func entered(stateDir string, c *config.Config, s state.Setup, project string) bool {
+	data, err := os.ReadFile(enteredPath(stateDir, c, s.Lane, project))
+	if errors.Is(err, os.ErrNotExist) {
+		return false
+	}
+	if err != nil {
+		return true
+	}
+	gen, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	return err != nil || gen == s.Generation
 }
 
 func devcontainerOf(w *writeContext, project string) (*runners.Devcontainer, error) {
@@ -102,11 +143,12 @@ func keeperArgv(d *runners.Devcontainer, id, dir string, env, argv []string, log
 
 // hookInContainer returns the command that runs a hook in its project's container, or nil for a
 // project on the host. What starting the container says goes to the hook's log.
-func hookInContainer(ctx context.Context, w *writeContext, project, dir string, env []string, run, log string) ([]string, error) {
+// lane is the lane whose setup runs the hook, or the zero value for the owner.
+func hookInContainer(ctx context.Context, w *writeContext, lane setupLane, project, dir string, env []string, run, log string) ([]string, error) {
 	if p := w.cfg.Projects[project]; p == nil || p.Runner != "devcontainer" {
 		return nil, nil
 	}
-	d, err := devcontainerOf(w, project)
+	d, err := devcontainerFor(w.ws, w.cfg, project, lane)
 	if err != nil {
 		return nil, err
 	}
@@ -174,8 +216,9 @@ func newKeepCmd() *cobra.Command {
 }
 
 // inUse says what is using a project's container (R49): lanes or the owner holding seats on its
-// servers, setups in progress, and anything attached to the container.
-func inUse(ctx context.Context, cfg *config.Config, q state.Querier, d *runners.Devcontainer, id string) ([]string, error) {
+// servers, other lanes' setups in progress that have used it, and anything attached to it. The
+// setup of lane self (0 for none) is the caller, and does not count.
+func inUse(ctx context.Context, cfg *config.Config, q state.Querier, d *runners.Devcontainer, id, stateDir string, self int) ([]string, error) {
 	var out []string
 	b := &broker.Broker{Cfg: cfg}
 	leases, err := state.Leases(q)
@@ -201,7 +244,12 @@ func inUse(ctx context.Context, cfg *config.Config, q state.Querier, d *runners.
 		return nil, err
 	}
 	for _, s := range setups {
-		out = append(out, fmt.Sprintf("lane %d is setting up", s.Lane))
+		if s.Lane == self {
+			continue
+		}
+		if entered(stateDir, cfg, s, d.Project) {
+			out = append(out, fmt.Sprintf("lane %d is setting up in it", s.Lane))
+		}
 	}
 	if id != "" {
 		sessions, err := d.Sessions(ctx, id)
@@ -262,7 +310,11 @@ func containersVerb(use, short string, remove, start bool) *cobra.Command {
 					if err != nil {
 						return err
 					}
-					used, err := inUse(ctx, w.cfg, w.store.DB(), d, id)
+					stateDir, err := w.ws.StateDir()
+					if err != nil {
+						return err
+					}
+					used, err := inUse(ctx, w.cfg, w.store.DB(), d, id, stateDir, 0)
 					if err != nil {
 						return err
 					}

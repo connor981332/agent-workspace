@@ -56,6 +56,9 @@ type Devcontainer struct {
 	BeforeStart func(context.Context, io.Writer) error
 	// InUse must account for seats, setups and attached processes before replacing a container.
 	InUse func(context.Context, string) ([]string, error)
+	// Entered, when set, runs under the start lock once the container is running and current, so
+	// that the use it records is seen by any other caller's replacement check.
+	Entered func() error
 }
 
 // devcontainerJSON is what aw reads of devcontainer.json.
@@ -796,7 +799,15 @@ func (d *Devcontainer) Up(ctx context.Context, out io.Writer) (string, error) {
 			return "", fmt.Errorf("devcontainer up finished, but no %s container of Compose project %s is running → check the service name and the Compose name in .devcontainer", d.Service, d.Compose)
 		}
 	}
-	return id, d.Check(ctx, id)
+	if err := d.Check(ctx, id); err != nil {
+		return "", err
+	}
+	if d.Entered != nil {
+		if err := d.Entered(); err != nil {
+			return "", err
+		}
+	}
+	return id, nil
 }
 
 // Sessions lists the processes attached to a running container: VS Code, terminals, aw run, servers.
