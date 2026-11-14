@@ -20,7 +20,7 @@
 | `pool` | Recycled, reset to the base, ready to claim | n/a |
 | `setting-up` | Claimed; setup steps still running in the background | yes |
 | `working` | Has work in progress; zero or more sessions attached | yes |
-| `incomplete` | A setup step failed; `aw run` refuses until it is retried | yes |
+| `incomplete` | A setup step failed; `aw run` refuses until it is retried. `aw finish` still hands its work off, with a warning, since review needs only its branches | yes |
 | `ready` | Handed off for review; exact heads recorded | yes |
 | `parked` | Shelved on purpose | yes |
 | `recyclable` | Every repository proven merged and clean | no |

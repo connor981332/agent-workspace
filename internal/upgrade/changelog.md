@@ -11,6 +11,10 @@ Newest first. A line starting with **Breaking:** is called out by `aw upgrade`.
 - `aw upgrade` and `aw setup` no longer call an onboarding skill "edited by hand" when it holds a version aw shipped but `.aw/managed` has no hash for it, and they record a missing hash for a skill that is up to date.
 - `aw rehearse`, `aw inspect` and `aw doctor --projects` no longer report the ports in files aw generates, such as `.devcontainer/aw.compose.yaml`, or the localhost URLs in agent harnesses' settings, as fixed ports.
 - A lane's setup no longer blocks its own replacement of a devcontainer built from an older configuration. Another lane's setup protects the container only once it has used it; seats, attached sessions and an unreadable usage check still refuse.
+- `aw finish` hands off a lane whose setup did not complete, with a warning naming `aw setup <lane>`, instead of refusing. Commands that need the failed step still refuse until it is retried.
+- In a lane, `aw options`, `aw config get` and `aw config explain` read the lane's `workspace.toml`, as `aw config validate` and `aw doctor` do, so a proposed option can be previewed before it is merged.
+- `aw config validate <file>` checks every option choice too, as it does for the workspace: a choice nobody picks may no longer name a server that does not exist.
+- `aw inspect` names the tools a hook runs, rather than its first word: `(bundle check || bundle install)` no longer reports the tool `(bundle`.
 - `aw upgrade` mentions `aw audit` when the versions it skipped touch keys the workspace sets, or there are suggestions.
 
 ## 0.2.1
