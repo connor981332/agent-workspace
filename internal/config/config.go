@@ -429,13 +429,23 @@ func CheckEveryChoice(dir string, c *Config) []ChoiceProblem {
 	if err != nil {
 		return nil
 	}
+	return checkEveryChoice(teamPath, data, readIndividual, c)
+}
+
+// CheckEveryChoiceBytes is CheckEveryChoice for a team file on its own, with no individual layer,
+// as aw config validate checks a file it is given.
+func CheckEveryChoiceBytes(teamPath string, data []byte, c *Config) []ChoiceProblem {
+	return checkEveryChoice(teamPath, data, func(string) (string, []byte, error) { return "", nil, os.ErrNotExist }, c)
+}
+
+func checkEveryChoice(teamPath string, data []byte, individual func(namespace string) (string, []byte, error), c *Config) []ChoiceProblem {
 	var out []ChoiceProblem
 	for _, name := range sortedMap(c.Options) {
 		for _, ch := range sortedMap(c.Options[name].Choices) {
 			if c.Chosen[name] == ch {
 				continue
 			}
-			if _, err := loadChoosing(teamPath, data, readIndividual, map[string]string{name: ch}); err != nil {
+			if _, err := loadChoosing(teamPath, data, individual, map[string]string{name: ch}); err != nil {
 				out = append(out, ChoiceProblem{Option: name, Choice: ch, Err: err})
 			}
 		}

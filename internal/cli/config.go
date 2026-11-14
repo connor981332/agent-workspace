@@ -327,6 +327,13 @@ its own, which is how the examples in the repository are checked.`,
 				if err := check(f, c, err); err != nil {
 					return err
 				}
+				if err == nil {
+					for _, p := range config.CheckEveryChoiceBytes(f, data, c) {
+						if err := check(fmt.Sprintf("%s, with option %s = %s", f, p.Option, p.Choice), nil, p.Err); err != nil {
+							return err
+						}
+					}
+				}
 			}
 
 			invalid := 0
