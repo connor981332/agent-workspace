@@ -8,6 +8,11 @@
 workspace shop --init
 exec aw attach 'add feature flag'
 lane-commit 01 web/flag.txt 'flag'
+# aw run waits for the background setup, which fails.
+cd .worktrees/01
+! exec aw run web true
+stderr 'setup incomplete'
+cd ../..
 exec aw --json
 json stdout .lanes[0].state incomplete
 cd .worktrees/01
