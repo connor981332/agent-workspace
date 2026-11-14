@@ -1,0 +1,36 @@
+# In a lane, aw options, aw config get and aw config explain read the lane's own workspace.toml, as
+# aw config validate does, so a proposed option can be previewed before it is merged; they say so.
+# The owner checkout still reads its own.
+# req: R6 R14
+# source: feedback 2026-11-13 (mortgage 0.2.0 upgrade)
+# milestone: M12
+
+workspace shop --init
+exec aw attach 'add an option'
+cd .worktrees/01
+exec aw options
+stdout 'This workspace has no options'
+! stderr 'lane''s workspace.toml'
+exec sh -c 'cat $WORK/option >> workspace.toml'
+exec aw options
+stdout '^monolith: off'
+stderr 'this is the lane''s workspace.toml, the change it proposes'
+exec aw config get options.monolith.default
+stdout '^off$'
+exec aw config explain options.monolith.default
+stdout 'workspace.toml'
+cd $OWNER
+exec aw options
+stdout 'This workspace has no options'
+! stderr 'lane''s workspace.toml'
+! exec aw config get options.monolith.default
+
+-- option --
+
+[options.monolith]
+description = "Run the API inside the web app"
+default = "off"
+
+[options.monolith.choices.off]
+
+[options.monolith.choices.on]

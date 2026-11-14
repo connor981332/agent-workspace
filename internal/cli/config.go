@@ -39,6 +39,32 @@ func loadConfig() (*workspace.Workspace, *config.Config, error) {
 	return ws, c, err
 }
 
+// loadProposedConfig is loadConfig for the commands that show the configuration. In a lane whose
+// workspace.toml differs from the owner checkout's, it reads the lane's, the change the lane
+// proposes, as aw config validate checks it, and says so on errOut.
+func loadProposedConfig(errOut io.Writer) (*workspace.Workspace, *config.Config, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return nil, nil, err
+	}
+	ws, err := workspace.Find(cwd)
+	if err != nil {
+		return nil, nil, err
+	}
+	if dir := ws.ConfigDir(); dir != ws.Owner {
+		lane, lerr := os.ReadFile(filepath.Join(dir, config.TeamFile))
+		owner, oerr := os.ReadFile(filepath.Join(ws.Owner, config.TeamFile))
+		if lerr == nil && (oerr != nil || string(lane) != string(owner)) {
+			c, err := config.Load(dir)
+			if err == nil {
+				fmt.Fprintln(errOut, "aw: this is the lane's workspace.toml, the change it proposes; the owner checkout's configures lanes until it is merged")
+			}
+			return ws, c, err
+		}
+	}
+	return loadConfig()
+}
+
 func newConfigCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "config",
@@ -66,7 +92,7 @@ func newConfigGetCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("%q is not a key: %v → write a dotted key, such as lanes.max", args[0], err)
 			}
-			_, c, err := loadConfig()
+			_, c, err := loadProposedConfig(cmd.ErrOrStderr())
 			if err != nil {
 				return err
 			}
@@ -174,7 +200,7 @@ shown as refused, with the lock.`,
 			if err != nil {
 				return fmt.Errorf("%q is not a key: %v → write a dotted key, such as lanes.max", args[0], err)
 			}
-			_, c, err := loadConfig()
+			_, c, err := loadProposedConfig(cmd.ErrOrStderr())
 			if err != nil {
 				return err
 			}

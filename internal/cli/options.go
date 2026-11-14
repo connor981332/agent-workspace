@@ -26,7 +26,7 @@ Hooks and commands see the choice as AW_OPTION_<NAME>. A lane created earlier ke
 up with; aw setup <lane> brings it up to date where it can.`,
 		Args: cobra.NoArgs,
 		RunE: run(func(cmd *cobra.Command, _ []string) error {
-			_, c, err := loadConfig()
+			_, c, err := loadProposedConfig(cmd.ErrOrStderr())
 			if err != nil {
 				return err
 			}
