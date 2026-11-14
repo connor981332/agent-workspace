@@ -48,3 +48,31 @@ func TestShippedChangelogParses(t *testing.T) {
 		t.Fatalf("notes %q", notes)
 	}
 }
+
+func TestEntriesBetween(t *testing.T) {
+	text := "# Changelog\n\nIntro.\n\n## 0.3.0\n\n- **Breaking:** one\n  continued\n- two\n\n## 0.2.0\n\n- three\n\n## 0.1.0\n\n- four\n"
+	got := EntriesBetween(text, "0.1.0", "")
+	want := []Entry{{"0.3.0", true, "one continued"}, {"0.3.0", false, "two"}, {"0.2.0", false, "three"}}
+	if len(got) != len(want) {
+		t.Fatalf("got %+v", got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("entry %d: got %+v, want %+v", i, got[i], want[i])
+		}
+	}
+	if all := EntriesBetween(text, "", "0.2.0"); len(all) != 2 || all[1].Text != "four" {
+		t.Errorf("from the start to 0.2.0: got %+v", all)
+	}
+}
+
+func TestShippedChangelogHasEntries(t *testing.T) {
+	if Latest() == "" || len(Entries("", "")) == 0 {
+		t.Fatalf("latest %q, %d entries", Latest(), len(Entries("", "")))
+	}
+	for _, e := range Entries("", "") {
+		if e.Text == "" {
+			t.Errorf("an empty entry in %s", e.Version)
+		}
+	}
+}

@@ -355,7 +355,7 @@ func CopyPersonal(owner, laneRoot string) {
 var skillFiles embed.FS
 
 // Skills are the framework's onboarding skills, by name.
-var Skills = []string{"workspace-design", "readiness-audit"}
+var Skills = []string{"workspace-design", "readiness-audit", "workspace-audit"}
 
 // ApplySkills composes the skills into each harness's own format. Grok reads Claude Code's. A file
 // edited by hand is left alone, and listed.

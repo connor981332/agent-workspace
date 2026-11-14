@@ -24,12 +24,14 @@ const rehearsalOffset = 20000
 // Onboarding purposes, which mark the lane aw onboard creates.
 const (
 	PurposeOnboard = "onboard this workspace"
-	PurposeReview  = "review onboarding"
+	PurposeReview  = "review onboarding" // aw onboard --review before aw audit replaced it
+	PurposeAudit   = "audit this workspace"
 )
 
-// IsOnboarding reports whether a lane is the one aw onboard created.
+// IsOnboarding reports whether a lane is one aw onboard or aw audit created, whose agent works on
+// the workspace's own configuration.
 func IsOnboarding(l state.Lane) bool {
-	return l.Purpose == PurposeOnboard || l.Purpose == PurposeReview
+	return l.Purpose == PurposeOnboard || l.Purpose == PurposeReview || l.Purpose == PurposeAudit
 }
 
 // Rehearsal is a throwaway copy of the workspace, holding one lane's proposal.

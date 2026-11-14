@@ -114,9 +114,32 @@ The output goes on a branch and a merge request at the team level, through the n
 changes to the workspace's own configuration (requirement R63). Lifecycle hooks run with the user's
 privileges, so this review matters.
 
-## Re-running
+## Auditing the workspace
 
-`aw onboard --review` compares the current configuration with the repositories and proposes changes
-only for what is new or has drifted, such as a newly added project, a new server or a new
-dependency on a database. This is the documented path for adding repositories later (requirement
-R13).
+`aw audit` revisits a configuration that already exists (requirement R95). The workspace-audit skill
+compares it with the repositories as they are now, such as a newly added project, a new server or a
+new dependency on a database, and with what the running aw can do that the aw it was written for
+could not. This is the documented path for adding repositories later (requirement R13).
+`aw onboard --review` starts the same audit.
+
+It is a conversation, not a report. The agent opens with a short brief, ranked by what each change
+would gain, discusses it with the developer, and changes nothing until they agree. Then it applies
+only what was agreed, in a lane, and the result goes through review like the design.
+
+The deterministic part comes from aw, so the agent judges rather than searches:
+
+- `[workspace] audited_with` records the aw version that last designed or audited the
+  configuration. Both skills set it.
+- `aw changelog` lists what changed in aw since then, and its `--json` names the configuration keys
+  each item mentions.
+- `aw doctor` lists suggestions: patterns that a newer aw offers an alternative to, each citing the
+  version that introduced it. They are advisory and never fail the doctor.
+- `[audit] declined` records the suggestions the team declined, with the reason. One comes back
+  only when a newer aw changes the rule behind it, and the agent does not reopen a decision recorded
+  in `docs/workspace-design.md` unless a changelog item changed what it rested on.
+
+`aw inspect --json` carries all of these, and `aw upgrade` mentions `aw audit` when the versions it
+skipped touch keys the workspace sets, or aw has suggestions.
+
+This audits the workspace's configuration. The readiness audit above checks the projects, and the
+two are separate skills.

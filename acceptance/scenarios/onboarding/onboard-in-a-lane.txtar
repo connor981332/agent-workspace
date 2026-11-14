@@ -13,7 +13,8 @@ exists .worktrees/01
 exec git -C .worktrees/01 rev-parse --abbrev-ref HEAD
 stdout '^aw/'
 exec aw onboard --review
-grep 'new or has drifted' $STUB_LOG
+stderr 'is now aw audit'
+grep 'aw-workspace-audit' $STUB_LOG
 rm .claude/settings.json .codex/hooks.json
 env CLAUDE_CODE_SESSION_ID=s-1
 ! exec aw new x

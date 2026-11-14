@@ -49,7 +49,9 @@ The CLI is part of the design, not an afterthought. Most of the tool's value is 
 | `aw webhook <provider>` | both | Send a provider's sandbox webhooks to this lane |
 | `aw plan new\|list\|promote` / `aw check-docs` | both | Plans and their conventions |
 | `aw inspect` / `aw doctor --projects` | both | Facts about the projects, and the deterministic readiness audit |
-| `aw onboard [--review]` | human | Agent-proposed configuration in a lane |
+| `aw onboard` | human | Agent-proposed configuration in a lane |
+| `aw audit [--focus text]` | human | A conversation with an agent about the existing configuration, against the repositories and this aw; agreed changes go in a lane (`aw onboard --review` starts it too) |
+| `aw changelog [--since v]` | both | What changed in aw, by default since `[workspace] audited_with`; `--json` names the keys each item touches |
 | `aw add project <alias> [url]` | human in the owner checkout; both in a lane | Adding a repository: in the owner checkout it also clones it; in a lane it changes the lane's `workspace.toml` and `.gitignore` for review, and `aw setup` clones it after the merge |
 | `aw delegate` | human | Expiring, scoped maintenance authority ([owner-checkout.md](owner-checkout.md#delegation)) |
 | `aw changeset --title t` | both | Open this lane's linked merge requests in merge order; the publication policy applies |

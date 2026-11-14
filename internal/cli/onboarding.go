@@ -21,6 +21,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/connor981332/agent-workspace/internal/app"
+	"github.com/connor981332/agent-workspace/internal/audit"
 	"github.com/connor981332/agent-workspace/internal/compose"
 	"github.com/connor981332/agent-workspace/internal/config"
 	gitrun "github.com/connor981332/agent-workspace/internal/gitx/run"
@@ -68,7 +69,12 @@ func newInspectCmd() *cobra.Command {
 			inspect.Preflight(cmd.Context(), ws.Owner, c, projects)
 			unconfigured := unconfiguredRepos(ws.Owner, c)
 			if asJSON {
-				return writeJSON(cmd.OutOrStdout(), map[string]any{"projects": projects, "other_hooks": sandbox.OtherHooks(ws.Owner), "unconfigured": unconfigured})
+				return writeJSON(cmd.OutOrStdout(), map[string]any{"projects": projects, "other_hooks": sandbox.OtherHooks(ws.Owner), "unconfigured": unconfigured,
+					// What the workspace audit starts from: the configuration's last audit, what a program
+					// can suggest, and what changed in aw since.
+					"audited_with":    c.Workspace.AuditedWith,
+					"suggestions":     audit.Suggest(cmd.Context(), ws.Owner, c, frameworkVersion()),
+					"changelog_since": audit.Changelog(c.Workspace.AuditedWith)})
 			}
 			for _, h := range sandbox.OtherHooks(ws.Owner) {
 				fmt.Fprintf(cmd.OutOrStdout(), "! a hook that is not aw's, which also runs in lanes: %s\n", ui.Clean(h))
@@ -148,7 +154,7 @@ func newOnboardCmd() *cobra.Command {
 	var review, dropOtherHooks bool
 	var harness string
 	cmd := &cobra.Command{
-		Use:   "onboard [--review] [--harness h] [--without-other-hooks]",
+		Use:   "onboard [--harness h] [--without-other-hooks]",
 		Short: "Set this workspace up, and have an agent design its configuration for you to review",
 		Long: `The one command to start with. It runs everything aw setup does, reports what aw inspect finds, and
 then starts a harness with the workspace-design skill. If setup or creating the lane fails, the agent
@@ -167,89 +173,112 @@ refuse everything in a lane, and the agent is told which ones. Your checkout kee
 Hooks see your environment, so VARIABLE=value aw onboard reaches them. To keep a setting, put it in
 workspace.toml under [projects.<name>.env].
 
-With --review it compares the current configuration with the repositories, and proposes changes only
-for what is new or has drifted.`,
+To revisit a configuration that already exists, use aw audit.`,
 		Args: cobra.NoArgs,
 		RunE: run(func(cmd *cobra.Command, _ []string) error {
-			errOut := cmd.ErrOrStderr()
-			fmt.Fprintln(errOut, "aw onboard: setting up this workspace, then starting an agent. On a large project this can take a few minutes, and progress is shown here.")
-			ws, c, err := loadConfig()
-			if err != nil {
-				return err
-			}
-			var output bytes.Buffer
-			cmd.SetErr(io.MultiWriter(errOut, &output))
-			setupErr := setupWorkspace(cmd, ws, c, harness, false, false)
-			cmd.SetErr(errOut)
-			if setupErr != nil {
-				fmt.Fprintf(errOut, "aw onboard: setup did not finish (%v). The agent will start with this in front of it.\n", setupErr)
-			}
-			if fresh, err := config.Load(ws.Owner); err == nil {
-				c = fresh
-			}
-			if harness == "" {
-				harness = c.User.Harness
-			}
-			fmt.Fprintln(errOut, "aw onboard: checking the projects for what lanes will need")
-			preflight := reportPreflight(cmd, ws, c, errOut)
-
-			prompt := "Use the aw-workspace-design skill to design this workspace, then stop and report."
-			purpose := lanes.PurposeOnboard
 			if review {
-				prompt = "Use the aw-workspace-design skill, but only for what is new or has drifted: compare workspace.toml with aw inspect --json, and propose changes for a new project, a new server or a new dependency on data. Leave the rest. Then stop and report."
-				purpose = lanes.PurposeReview
+				fmt.Fprintln(cmd.ErrOrStderr(), "aw onboard: --review is now aw audit, which also compares the configuration with what this aw can do. Starting it.")
+				return startConfigAgent(cmd, auditAgent("", harness, dropOtherHooks))
 			}
-			if preflight != "" {
-				prompt += "\n\nWhat aw inspect found before anything was created:\n" + preflight
-			}
-			if setupErr != nil {
-				prompt += failureContext(setupErr, output.String())
-			}
-			if err := os.Chdir(ws.Owner); err != nil {
-				return err
-			}
-			laneNote, ownerNote := "", ""
-			if others := sandbox.OtherHooks(ws.Owner); len(others) > 0 {
-				list := strings.Join(others, "\n")
-				ownerNote = "\n\nThese hooks are not aw's, and they run in this checkout. If one refuses your tool calls, say so and ask the human to remove it:\n" + list
-				if dropOtherHooks {
-					fmt.Fprintf(errOut, "aw onboard: turning off hooks that are not aw's, in the onboarding lane only, as asked. Your checkout keeps them:\n  %s\n", strings.Join(others, "\n  "))
-					laneNote = "\n\nThese hooks are not aw's, and aw turned them off in this lane only. Decide whether the workspace should keep each one, and change the harness files on your branch to match:\n" + list
-				} else {
-					fmt.Fprintf(errOut, "aw onboard: these hooks are not aw's and they run in the lane too. If one refuses everything there, run aw onboard --without-other-hooks:\n  %s\n", strings.Join(others, "\n  "))
-					laneNote = "\n\nThese hooks are not aw's, and they run in this lane too:\n" + list
-				}
-			}
-			m := &lanes.Manager{WS: ws, Cfg: c}
-			var failed error
-			if m.CanReview(cmd.Context()) {
-				fmt.Fprintf(errOut, "aw onboard: letting this lane's agent run %s without asking, in this lane only, so that it can test its own proposal in a throwaway copy\n", sandbox.RehearseCommand)
-			}
-			if !m.CanReview(cmd.Context()) {
-				prompt += ownerNote + "\n\nThis workspace is not in a Git repository with a commit, so there is no lane branch to review: you are a pair session in the owner checkout. Leave your changes there, and report them."
-			} else {
-				failed = startLaneSession(cmd, purpose, harness, "", "", false, dropOtherHooks, true, launch.PromptArgs(harness, prompt+laneNote))
-				if failed == nil {
-					return nil
-				}
-				fmt.Fprintf(errOut, "aw onboard: no lane could be created (%v). Starting the agent in the owner checkout to work on that.\n", failed)
-				prompt += ownerNote + failureContext(failed, "") + "\n\nNo lane could be created, so you are a pair session in the owner checkout. Fix what stops lanes first, then carry on."
-			}
-			w, err := openForWrite()
-			if err != nil {
-				return err
-			}
-			defer w.Close()
-			if failed != nil || setupErr != nil {
-				offerDelegation(cmd, w)
-			}
-			return startPairSession(cmd, w, harness, false, launch.PromptArgs(harness, prompt))
+			return startConfigAgent(cmd, configAgent{
+				name: "aw onboard", purpose: lanes.PurposeOnboard, harness: harness, dropOtherHooks: dropOtherHooks,
+				prompt: func(*workspace.Workspace, *config.Config) string {
+					return "Use the aw-workspace-design skill to design this workspace, then stop and report."
+				},
+			})
 		}),
 	}
-	cmd.Flags().BoolVar(&review, "review", false, "propose changes only for what is new or has drifted")
+	cmd.Flags().BoolVar(&review, "review", false, "the same as aw audit, which replaces it")
+	_ = cmd.Flags().MarkHidden("review")
 	cmd.Flags().StringVar(&harness, "harness", "", "the harness to launch")
 	cmd.Flags().BoolVar(&dropOtherHooks, "without-other-hooks", false, "turn off hooks that are not aw's in the onboarding lane")
 	return cmd
+}
+
+// configAgent is an agent that works on the workspace's own configuration in a lane of its own:
+// aw onboard's design, or aw audit's.
+type configAgent struct {
+	name           string // the command, for what it prints
+	purpose        string // the lane's
+	harness        string
+	dropOtherHooks bool
+	// prompt is the agent's task, from the configuration as setup left it.
+	prompt func(ws *workspace.Workspace, c *config.Config) string
+}
+
+// startConfigAgent runs everything aw setup does, reports what aw inspect finds, and starts the
+// agent in a lane, or in the owner checkout as a pair session when there can be no lane. A failure
+// in setup goes to the agent instead of ending the command.
+func startConfigAgent(cmd *cobra.Command, a configAgent) error {
+	errOut := cmd.ErrOrStderr()
+	fmt.Fprintf(errOut, "%s: setting up this workspace, then starting an agent. On a large project this can take a few minutes, and progress is shown here.\n", a.name)
+	ws, c, err := loadConfig()
+	if err != nil {
+		return err
+	}
+	var output bytes.Buffer
+	cmd.SetErr(io.MultiWriter(errOut, &output))
+	setupErr := setupWorkspace(cmd, ws, c, a.harness, false, false)
+	cmd.SetErr(errOut)
+	if setupErr != nil {
+		fmt.Fprintf(errOut, "%s: setup did not finish (%v). The agent will start with this in front of it.\n", a.name, setupErr)
+	}
+	if fresh, err := config.Load(ws.Owner); err == nil {
+		c = fresh
+	}
+	harness := a.harness
+	if harness == "" {
+		harness = c.User.Harness
+	}
+	fmt.Fprintf(errOut, "%s: checking the projects for what lanes will need\n", a.name)
+	preflight := reportPreflight(cmd, ws, c, errOut)
+
+	prompt := a.prompt(ws, c)
+	if preflight != "" {
+		prompt += "\n\nWhat aw inspect found before anything was created:\n" + preflight
+	}
+	if setupErr != nil {
+		prompt += failureContext(setupErr, output.String())
+	}
+	if err := os.Chdir(ws.Owner); err != nil {
+		return err
+	}
+	laneNote, ownerNote := "", ""
+	if others := sandbox.OtherHooks(ws.Owner); len(others) > 0 {
+		list := strings.Join(others, "\n")
+		ownerNote = "\n\nThese hooks are not aw's, and they run in this checkout. If one refuses your tool calls, say so and ask the human to remove it:\n" + list
+		if a.dropOtherHooks {
+			fmt.Fprintf(errOut, "%s: turning off hooks that are not aw's, in the onboarding lane only, as asked. Your checkout keeps them:\n  %s\n", a.name, strings.Join(others, "\n  "))
+			laneNote = "\n\nThese hooks are not aw's, and aw turned them off in this lane only. Decide whether the workspace should keep each one, and change the harness files on your branch to match:\n" + list
+		} else {
+			fmt.Fprintf(errOut, "%s: these hooks are not aw's and they run in the lane too. If one refuses everything there, run %s --without-other-hooks:\n  %s\n", a.name, a.name, strings.Join(others, "\n  "))
+			laneNote = "\n\nThese hooks are not aw's, and they run in this lane too:\n" + list
+		}
+	}
+	m := &lanes.Manager{WS: ws, Cfg: c}
+	var failed error
+	if m.CanReview(cmd.Context()) {
+		fmt.Fprintf(errOut, "%s: letting this lane's agent run %s without asking, in this lane only, so that it can test its own proposal in a throwaway copy\n", a.name, sandbox.RehearseCommand)
+	}
+	if !m.CanReview(cmd.Context()) {
+		prompt += ownerNote + "\n\nThis workspace is not in a Git repository with a commit, so there is no lane branch to review: you are a pair session in the owner checkout. Leave your changes there, and report them."
+	} else {
+		failed = startLaneSession(cmd, a.purpose, harness, "", "", false, a.dropOtherHooks, true, launch.PromptArgs(harness, prompt+laneNote))
+		if failed == nil {
+			return nil
+		}
+		fmt.Fprintf(errOut, "%s: no lane could be created (%v). Starting the agent in the owner checkout to work on that.\n", a.name, failed)
+		prompt += ownerNote + failureContext(failed, "") + "\n\nNo lane could be created, so you are a pair session in the owner checkout. Fix what stops lanes first, then carry on."
+	}
+	w, err := openForWrite()
+	if err != nil {
+		return err
+	}
+	defer w.Close()
+	if failed != nil || setupErr != nil {
+		offerDelegation(cmd, w)
+	}
+	return startPairSession(cmd, w, harness, false, launch.PromptArgs(harness, prompt))
 }
 
 const maxFailureOutput = 4 << 10

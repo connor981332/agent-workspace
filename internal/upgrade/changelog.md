@@ -2,6 +2,13 @@
 
 Newest first. A line starting with **Breaking:** is called out by `aw upgrade`.
 
+## 0.3.0
+
+- `aw audit` starts an agent that talks through the workspace's configuration with you: what changed in the repositories, what this aw can do that the aw it was written for could not, and what `aw doctor` suggests. It changes nothing until you agree, and then only what you agreed, on a lane's branch for review. `aw onboard --review` now starts the same audit.
+- `[workspace] audited_with` records the aw version that last designed or audited the configuration; the design and audit skills set it. `aw changelog` lists what changed since then, and its `--json` names the configuration keys each item touches.
+- `aw doctor` lists suggestions for the configuration, such as a gitignored local Compose file that `projects.<name>.local_compose` could name, or committed aw devcontainer wiring that aw can now generate. They never fail the doctor. `[audit] declined` keeps one from being raised again until a newer aw changes it. `aw inspect --json` carries the stamp, the suggestions and the changelog since.
+- `aw upgrade` mentions `aw audit` when the versions it skipped touch keys the workspace sets, or there are suggestions.
+
 ## 0.2.1
 
 - The 0.2.0 notes said a replaced devcontainer keeps its volumes; only named volumes are kept. The replacement message now says so, and the 0.2.0 notes now call out that devcontainers built by an earlier aw are replaced once, when idle, after upgrading.

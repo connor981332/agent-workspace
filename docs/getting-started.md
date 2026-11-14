@@ -59,6 +59,11 @@ no branch to review, so there the agent works in the owner checkout as a pair se
 merge, run `aw rehearse`, which creates two lanes at once and reports anything that collides.
 `aw add project <alias> <url>` adds a repository later.
 
+`aw audit` revisits the configuration later: after an upgrade, when the projects have changed, or
+when you want to discuss an alternative (`aw audit --focus "should api use a devcontainer?"`). An
+agent compares the configuration with the repositories and with what this aw can do, talks it
+through with you, and changes only what you agree on, on a lane's branch for review.
+
 `aw setup` is the part of onboarding that involves no agent. Use it alone on a fresh clone of a
 workspace that is already configured, and `aw setup <lane>` to retry a lane's setup.
 

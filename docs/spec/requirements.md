@@ -39,7 +39,8 @@ expected but can follow.
 - **R11.** A new team member runs one command after cloning, `bin/aw setup`, with nothing installed
   beforehand except `sh`, `git`, `curl` or `wget`, and `sha256sum` or `shasum`.
 - **R12.** `setup` is idempotent and safe to rerun after any failure.
-- **R13.** There is a documented command for adding a project repository to an existing workspace.
+- **R13.** There is a documented command for adding a project repository to an existing workspace
+  (`aw add project`, then `aw audit` for the configuration it needs).
 - **R14.** `aw doctor` works read-only before setup has completed, and every failure it reports
   names its fix.
 
@@ -231,6 +232,9 @@ expected but can follow.
   they do not collide and tears them down, leaving nothing behind.
 - **R88.** Skill output is committed only through human review.
 - **R89.** The deterministic part of the readiness audit runs as `aw doctor --projects`.
+- **R95.** The framework ships a workspace-audit skill and an `aw audit` command that compare an
+  existing configuration with the repositories and with what the running aw can do, discuss changes
+  with a human, and apply only the agreed changes, through review.
 
 ## Non-functional
 

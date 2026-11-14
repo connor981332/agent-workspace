@@ -1,0 +1,35 @@
+# aw changelog shows what changed since a version, by default since the configuration's last audit,
+# and lists the configuration keys each item names.
+# req: R93 R95
+# source: plans/workspace-audit.md, Phase 1
+# milestone: M12
+
+exec aw changelog --since 0.1.5
+stdout '^What changed in aw since 0.1.5, newest first:$'
+stdout '^0\.2\.0$'
+stdout '^- Breaking: a new lane starts from origin'
+! stdout '^0\.1\.5$'
+exec aw changelog --since 0.1.5 --json
+json stdout .since 0.1.5
+json stdout .entries[0].version
+stdout '"projects.<name>.local_compose"'
+! exec aw changelog --since v0.2
+stderr 'is not a version → write it without a leading v'
+
+owner-may-change
+workspace solo --single --init
+exec aw changelog
+stdout '^0\.1\.0$'
+cp $WORK/stamped.toml workspace.toml
+exec aw changelog --json
+json stdout .since 0.1.5
+
+-- stamped.toml --
+[workspace]
+name = "Solo"
+namespace = "solo"
+schema = 1
+audited_with = "0.1.5"
+
+[projects.solo]
+directory = "."

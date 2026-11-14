@@ -92,6 +92,8 @@ func TestMistakesAreErrors(t *testing.T) {
 		{"bad lock", minimal + "[locks]\nkeys = [\"nonsense.key\"]\n", "matches no configuration key", 8},
 		{"command unknown project", minimal + "[commands.e2e]\nproject = \"mobile\"\nrun = \"x\"\n", `there is no project named "mobile"`, 8},
 		{"bad project name", minimal + "[projects.Web]\n", `"Web" is not a valid name`, 7},
+		{"bad audited_with", strings.Replace(minimal, "schema = 1", "schema = 1\naudited_with = \"v0.2\"", 1), "workspace.audited_with: is not a version", 5},
+		{"bad declined id", minimal + "[audit.declined]\n\"Bad Id\" = \"x\"\n", `use the suggestion's id`, 8},
 		{"step", minimal + "[commands.e2e]\nproject = \"web\"\nrun = \"x\"\nafter = [\"web.deploy\"]\n", "is not a lifecycle step", 10},
 	}
 	for _, tc := range cases {
@@ -346,5 +348,23 @@ func TestLocalCompose(t *testing.T) {
 				t.Fatalf("got %v; want local_compose error with %q and a fix", err, tc.want)
 			}
 		})
+	}
+}
+
+func TestAuditKeys(t *testing.T) {
+	c := mustLoad(t, strings.Replace(minimal, "schema = 1", "schema = 1\naudited_with = \"0.2.1\"", 1)+
+		"[audit.declined]\ndevcontainer-local-slot = \"we keep one configuration\"\n")
+	if c.Workspace.AuditedWith != "0.2.1" || c.Audit.Declined["devcontainer-local-slot"] != "we keep one configuration" {
+		t.Fatalf("got audited_with %q, declined %v", c.Workspace.AuditedWith, c.Audit.Declined)
+	}
+	for _, k := range []string{"workspace.audited_with", "audit.declined", "projects.<name>.local_compose", "lanes.max"} {
+		if !KnownKey(k) {
+			t.Errorf("KnownKey(%q) = false", k)
+		}
+	}
+	for _, k := range []string{"aw.pull", "projects.<name>.nonsense", "devcontainer.json", "", "a..b"} {
+		if KnownKey(k) {
+			t.Errorf("KnownKey(%q) = true", k)
+		}
 	}
 }

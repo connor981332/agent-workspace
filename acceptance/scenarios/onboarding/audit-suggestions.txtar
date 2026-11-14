@@ -1,0 +1,81 @@
+# aw doctor and aw inspect --json list what the workspace audit can suggest, without failing; a
+# suggestion the team declines in [audit] declined is not repeated.
+# req: R14 R85 R95
+# source: plans/workspace-audit.md, Phase 1
+# milestone: M12
+
+owner-may-change
+stubs docker devcontainer npx
+workspace solo --single --init
+exec sh -c 'cp -R $WORK/.devcontainer . && git add .devcontainer && git -c user.name=t -c user.email=t@t commit -q -m devcontainer && git push -q origin HEAD:main'
+
+exec aw doctor
+stdout '^· suggestions: 2 for this configuration: audited-with-missing, devcontainer-committed-wiring-solo → aw doctor --json explains each; aw audit walks through them with you$'
+! stdout '^✗'
+exec aw doctor --json
+json stdout .ok true
+json stdout .suggestions[0].rule audited-with-missing
+json stdout .suggestions[1].id devcontainer-committed-wiring-solo
+json stdout .suggestions[1].project solo
+json stdout .suggestions[1].since 0.2.0
+
+exec aw inspect --json
+json stdout .audited_with ''
+json stdout .suggestions[1].id devcontainer-committed-wiring-solo
+json stdout .changelog_since[0].version
+stdout '"projects.<name>.local_compose"'
+
+cp $WORK/declined.toml workspace.toml
+exec aw config validate
+exec aw doctor
+! stdout '^· suggestions'
+exec aw doctor --json
+json stdout .suggestions []
+exec aw inspect --json
+json stdout .audited_with 0.2.1
+json stdout .suggestions []
+
+-- workspace.toml --
+[workspace]
+name = "Solo"
+namespace = "solo"
+schema = 1
+
+[lanes]
+pool = 0
+
+[projects.solo]
+directory = "."
+runner = "devcontainer"
+
+[devcontainer]
+command = "devcontainer"
+-- declined.toml --
+[workspace]
+name = "Solo"
+namespace = "solo"
+schema = 1
+audited_with = "0.2.1"
+
+[lanes]
+pool = 0
+
+[projects.solo]
+directory = "."
+runner = "devcontainer"
+
+[devcontainer]
+command = "devcontainer"
+
+[audit.declined]
+devcontainer-committed-wiring-solo = "the team opens one configuration in VS Code"
+-- .devcontainer/devcontainer.json --
+{
+  "dockerComposeFile": ["compose.yaml", "aw.compose.yaml"],
+  "service": "app",
+  "initializeCommand": "bin/aw containers claim solo",
+}
+-- .devcontainer/compose.yaml --
+services:
+  app:
+    image: alpine
