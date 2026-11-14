@@ -118,6 +118,9 @@ func newConfigGetCmd() *cobra.Command {
 }
 
 func unknownKey(p config.Path) error {
+	if keys := config.KeysEnding(p); len(keys) > 0 && len(keys) <= 5 {
+		return fmt.Errorf("%s is not a configuration key on its own → did you mean %s? A <name> is the name of a project, server or other entry", p, strings.Join(keys, " or "))
+	}
 	return fmt.Errorf("%s is not a configuration key → see docs/reference/config.md for the keys", p)
 }
 

@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"maps"
 	"regexp"
 	"slices"
 	"sort"
@@ -721,4 +722,37 @@ func KeysNamed(leaf string) []string {
 	}
 	walk(schema, nil)
 	return out
+}
+
+// KeysEnding lists the schema's keys that end with p, written as the documentation writes them
+// (projects.<name>.accepted_findings), for an error about a key given without the tables it
+// belongs to.
+func KeysEnding(p Path) []string {
+	if len(p) == 0 {
+		return nil
+	}
+	var out []string
+	var walk func(n *node, at Path, depth int)
+	walk = func(n *node, at Path, depth int) {
+		if n == nil || depth > 8 {
+			return
+		}
+		if len(at) > len(p) && slices.Equal(at[len(at)-len(p):], p) {
+			out = append(out, strings.Join(at, "."))
+		}
+		switch n.kind {
+		case kTable:
+			for _, k := range slices.Sorted(maps.Keys(n.fields)) {
+				walk(n.fields[k], at.child(k), depth+1)
+			}
+		case kMap:
+			walk(n.elem, at.child("<name>"), depth+1)
+		case kHook:
+			walk(hookTable, at, depth+1)
+		case kMux:
+			walk(muxTable, at, depth+1)
+		}
+	}
+	walk(schema, nil, 0)
+	return slices.Compact(out)
 }
