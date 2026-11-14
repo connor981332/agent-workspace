@@ -4,18 +4,19 @@ Newest first. A line starting with **Breaking:** is called out by `aw upgrade`.
 
 ## 0.3.0
 
-- `aw rehearse` in the owner checkout no longer passes the caller's session to its lanes. A paired agent that ran it got the same lane twice and lost its pairing.
 - `aw audit` starts an agent that talks through the workspace's configuration with you: what changed in the repositories, what this aw can do that the aw it was written for could not, and what `aw doctor` suggests. It changes nothing until you agree, and then only what you agreed, on a lane's branch for review. `aw onboard --review` now starts the same audit.
 - `[workspace] audited_with` records the aw version that last designed or audited the configuration; the design and audit skills set it. `aw changelog` lists what changed since then, and its `--json` names the configuration keys each item touches.
 - `aw doctor` lists suggestions for the configuration, such as a gitignored local Compose file that `projects.<name>.local_compose` could name, or committed aw devcontainer wiring that aw can now generate. They never fail the doctor. `[audit] declined` keeps one from being raised again until a newer aw changes it. `aw inspect --json` carries the stamp, the suggestions and the changelog since.
+- `aw upgrade` mentions `aw audit` when the versions it skipped touch keys the workspace sets, or there are suggestions.
+- `aw rehearse` in the owner checkout no longer passes the caller's session to its lanes. A paired agent that ran it got the same lane twice and lost its pairing.
 - `aw upgrade` and `aw setup` no longer call an onboarding skill "edited by hand" when it holds a version aw shipped but `.aw/managed` has no hash for it, and they record a missing hash for a skill that is up to date.
 - `aw rehearse`, `aw inspect` and `aw doctor --projects` no longer report the ports in files aw generates, such as `.devcontainer/aw.compose.yaml`, or the localhost URLs in agent harnesses' settings, as fixed ports.
 - A lane's setup no longer blocks its own replacement of a devcontainer built from an older configuration. Another lane's setup protects the container only once it has used it; seats, attached sessions and an unreadable usage check still refuse.
+- `aw config explain` and `aw config get` given a key without its tables, such as `accepted_findings`, name where it belongs: `projects.<name>.accepted_findings`. The reference and the onboarding skills now show an example of `accepted_findings`: under `[projects.web.accepted_findings]`, a line such as `"ci/**" = "CI has its own services"`.
 - `aw finish` hands off a lane whose setup did not complete, with a warning naming `aw setup <lane>`, instead of refusing. Commands that need the failed step still refuse until it is retried.
 - In a lane, `aw options`, `aw config get` and `aw config explain` read the lane's `workspace.toml`, as `aw config validate` and `aw doctor` do, so a proposed option can be previewed before it is merged.
 - `aw config validate <file>` checks every option choice too, as it does for the workspace: a choice nobody picks may no longer name a server that does not exist.
 - `aw inspect` names the tools a hook runs, rather than its first word: `(bundle check || bundle install)` no longer reports the tool `(bundle`.
-- `aw upgrade` mentions `aw audit` when the versions it skipped touch keys the workspace sets, or there are suggestions.
 
 ## 0.2.1
 
