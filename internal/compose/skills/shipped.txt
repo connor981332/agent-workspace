@@ -1,0 +1,11 @@
+# Hashes of every version of each skill that a release of aw has shipped. A skill file that matches
+# one was never edited by hand, whatever .aw/managed records. TestShippedSkills keeps it complete.
+43d648f174c14d43ac7a0077beaf03aa11c5717cab2392160d8a0a9635c13b37  workspace-design
+ad1886b0628d15e2576d0670cd83629ea108f1c986a1bb545800c06bd05535eb  readiness-audit
+b552f038af58d29a65aa98e7208f07f0a065721d3e3f3920e2fd36c0bf645818  workspace-design
+62c157a038a54382f74f58f4dc0d33974c95847aa38665cc248f0e8cbc26fd96  workspace-design
+00b3ad72eccbf13af7eda4782616b163e36eb544e9b20bcb3686c7ebc5e46d39  workspace-design
+785e560a6f8b0cb2bf7418fb51de2765fae617156000097396919542d7d51711  workspace-design
+860082e3df96625496e701c67575f5a85adf384d6a76d9d7b6765fdb7f38b06e  readiness-audit
+36d7a5f5a297bcc2cb05bacfbcfe442efc40325426fd7c73264dc743792b2474  workspace-design
+0638ab7d2d323a62050519f2e3a84b6e1744e89867f5e76d53ef125082012925  workspace-audit

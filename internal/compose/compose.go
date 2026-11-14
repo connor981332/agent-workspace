@@ -354,6 +354,20 @@ func CopyPersonal(owner, laneRoot string) {
 //go:embed skills/*.md
 var skillFiles embed.FS
 
+//go:embed skills/shipped.txt
+var shippedSkills string
+
+// shipped says whether a release of aw has shipped this content for the skill, so that a file
+// holding it was never edited by hand, even when .aw/managed lost or never had its hash.
+func shipped(name, hash string) bool {
+	for _, line := range strings.Split(shippedSkills, "\n") {
+		if f := strings.Fields(line); len(f) == 2 && f[0] == hash && f[1] == name {
+			return true
+		}
+	}
+	return false
+}
+
 // Skills are the framework's onboarding skills, by name.
 var Skills = []string{"workspace-design", "readiness-audit", "workspace-audit"}
 
@@ -376,9 +390,16 @@ func ApplySkills(owner string, take ...string) (changed []string, edited []strin
 				haveSum := sha256.Sum256(have)
 				current := hex.EncodeToString(haveSum[:])
 				if current == hash {
+					// Up to date. Record its hash if it is missing, or a later release would take
+					// the file for one edited by hand.
+					if recordedHash(owner, target) != hash {
+						if err := recordHash(owner, target, hash); err != nil {
+							return nil, nil, err
+						}
+					}
 					continue
 				}
-				if current != recordedHash(owner, target) && !slices.Contains(take, target) {
+				if current != recordedHash(owner, target) && !shipped(name, current) && !slices.Contains(take, target) {
 					edited = append(edited, target)
 					continue
 				}
