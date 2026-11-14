@@ -136,6 +136,31 @@ func Scan(name, dir, rel string) (*Project, error) {
 	return p, err
 }
 
+// shellWords are builtins and keywords, which name no program to install.
+var shellWords = []string{"if", "then", "else", "elif", "fi", "for", "while", "until", "do", "done", "case", "esac", "in", "cd", "test", "[", "[[", "echo", "printf", "true", "false", "export", "set", "unset", "exit", "return", "source", ".", ":", "exec", "command", "env", "time", "eval", "read", "shift", "trap", "wait", "type"}
+
+var commandSeparator = regexp.MustCompile(`&&|\|\||[;|&\n()]|\{ |\}`)
+
+// commandTools are the programs a shell command runs: the first word of each command in a list or
+// pipeline, past grouping, negation, variable assignments and exec. A word naming a path or holding
+// a variable is not a tool to look up.
+func commandTools(cmd string) []string {
+	var out []string
+	for _, part := range commandSeparator.Split(cmd, -1) {
+		for _, w := range strings.Fields(part) {
+			w = strings.Trim(w, "{}!")
+			if w == "" || (strings.Contains(w, "=") && !strings.HasPrefix(w, "=")) || slices.Contains([]string{"exec", "command", "env", "time", "if", "then", "else", "elif", "while", "until", "do"}, w) {
+				continue
+			}
+			if !slices.Contains(shellWords, w) && !strings.ContainsAny(w, "/$`'\"\\*?") {
+				out = append(out, w)
+			}
+			break
+		}
+	}
+	return out
+}
+
 // stackTools are the programs a project of each stack is likely to need.
 var stackTools = map[string][]string{"node": {"node"}, "ruby": {"ruby", "bundle"}, "go": {"go"}, "python": {"python3"}, "rust": {"cargo"}, "php": {"php", "composer"}, "java": {"java"}}
 
@@ -168,9 +193,7 @@ func Preflight(ctx context.Context, owner string, c *config.Config, projects []*
 			}
 		}
 		for _, h := range hooks {
-			if f := strings.Fields(h); len(f) > 0 && !strings.ContainsAny(f[0], "/=$") {
-				tools = append(tools, f[0])
-			}
+			tools = append(tools, commandTools(h)...)
 		}
 		slices.Sort(tools)
 		for _, t := range slices.Compact(tools) {

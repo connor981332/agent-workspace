@@ -3,6 +3,7 @@ package inspect
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 )
 
@@ -40,5 +41,21 @@ func TestHardcodedPortSkipsAWAndHarnessFiles(t *testing.T) {
 	want := map[string]bool{"src/server.ts": true, "config/app.yml": true}
 	if len(got) != len(want) || !got["src/server.ts"] || !got["config/app.yml"] {
 		t.Errorf("hardcoded-port findings in %v, want exactly %v", got, want)
+	}
+}
+
+func TestCommandTools(t *testing.T) {
+	for cmd, want := range map[string][]string{
+		"(bundle check || bundle install)": {"bundle", "bundle"},
+		"npm ci":                           {"npm"},
+		"cd api && RAILS_ENV=test bin/rails db:prepare": nil,
+		"exec yarn install --frozen-lockfile":           {"yarn"},
+		"{ pnpm install; } | tee log":                   {"pnpm", "tee"},
+		"if [ -f Gemfile ]; then bundle install; fi":    {"bundle"},
+		"$HOME/bin/setup":                               nil,
+	} {
+		if got := commandTools(cmd); !slices.Equal(got, want) {
+			t.Errorf("commandTools(%q) = %q, want %q", cmd, got, want)
+		}
 	}
 }
