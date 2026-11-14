@@ -433,7 +433,9 @@ type rehearsal struct {
 func (r *rehearsal) aw(ctx context.Context, dir string, args ...string) (string, error) {
 	c := exec.CommandContext(ctx, r.exe, args...)
 	c.Dir = dir
-	c.Env = append(os.Environ(), "AW_LAUNCHED=1", "PWD="+dir)
+	// The rehearsal's lanes are nobody's session: with the caller's identity, attach would return
+	// the caller's lane for both claims, and the hook would move the caller onto it.
+	c.Env = rehearsalEnv(r.exe, dir)
 	var buf, errBuf bytes.Buffer
 	c.Stdout, c.Stderr = &buf, &errBuf
 	if err := c.Run(); err != nil {
@@ -524,6 +526,10 @@ a workspace may do this for its own lane.`,
 				l := <-done
 				if l.err != nil {
 					failed = l.err
+					continue
+				}
+				if slices.ContainsFunc(lanesMade, func(m laneRun) bool { return m.dir == l.dir || m.name == l.name }) {
+					failed = fmt.Errorf("both claims returned lane %s, so the two lanes could not be compared → run aw rehearse from a terminal that is not an agent session, and report this as a bug in aw", ui.Clean(l.name))
 					continue
 				}
 				lanesMade = append(lanesMade, l)

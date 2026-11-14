@@ -111,7 +111,7 @@ func runRestoreHooks(ctx context.Context, w *writeContext, m *lanes.Manager, b *
 			return err
 		}
 		log := filepath.Join(dir, "logs", "setup", project+".restore.log")
-		argv, err := hookInContainer(ctx, w, project, where.Dir, append(append([]string{}, where.Env...), lifecycle.HookEnv(lifecycle.PhaseRestore, true)...), hook.Run, log)
+		argv, err := hookInContainer(ctx, w, setupLane{l.Number, l.Generation}, project, where.Dir, append(append([]string{}, where.Env...), lifecycle.HookEnv(lifecycle.PhaseRestore, true)...), hook.Run, log)
 		if err != nil {
 			release()
 			return err

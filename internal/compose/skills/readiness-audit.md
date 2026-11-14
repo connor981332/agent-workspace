@@ -20,6 +20,14 @@ Agents propose, the tool verifies, a human approves. You are writing a proposal.
    - **aw should handle it.** A gap or a bug in aw, which the project should not work around. It becomes a request for aw, in your report, not a project change.
    - **A real lane problem in the project.** Something that would go wrong in lanes even with a perfect aw, such as a gitignore missing a rule for local env files, so per-lane env files show as untracked. Only these become project changes.
    - **Accept it.** Reviewed and fine, such as a Compose file the configuration never starts. Record it in the project's `accepted_findings`, with the reason.
+
+     ```toml
+     [projects.web.accepted_findings]
+     "compose.legacy.yaml" = "the configuration never starts it; lanes use the shared database"
+     "ci/**" = "CI has its own services"
+     ```
+
+     The key is a path relative to the project (`dir/**` matches a directory), and the value says why it is fine.
 4. Present the project changes to the human as options, each with its tradeoff, and make only those the human chooses, on this lane's branch, one finding at a time, with a test where one is practical.
 5. Open the chosen fixes with `bin/aw changeset`: the same branch in each affected project, linked merge requests and a merge order. The publication policy applies.
 6. Propose a lane guard for the most important fixes, so that branches from before the fix are refused.

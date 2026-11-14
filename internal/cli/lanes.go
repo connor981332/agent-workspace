@@ -362,6 +362,9 @@ uncommitted work, is not on the lane's branch, or changes while it runs.`,
 				fmt.Fprintf(cmd.OutOrStdout(), "Lane %s was already handed off at these heads.\n", f.Lane.Name)
 				return nil
 			}
+			if f.Incomplete {
+				fmt.Fprintf(cmd.ErrOrStderr(), "aw: warning: lane %s's setup had not completed; its work is handed off as committed → to work in it again, run aw setup %s\n", ui.Clean(f.Lane.Name), ui.Clean(f.Lane.Name))
+			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Lane %s is ready for review. It stays protected until its work is proven merged.\n", f.Lane.Name)
 			warnOpenNotes(cmd, w, l)
 			return nil

@@ -190,7 +190,7 @@ func installOwner(cmd *cobra.Command, ws *workspace.Workspace, c *config.Config,
 		}
 		log := filepath.Join(stateDir, "owner", "logs", "setup", name+".install.log")
 		env := append(append([]string{}, where.Env...), lifecycle.HookEnv(lifecycle.PhaseInstall, false)...)
-		argv, err := hookInContainer(ctx, w, name, where.Dir, env, p.Install, log)
+		argv, err := hookInContainer(ctx, w, setupLane{}, name, where.Dir, env, p.Install, log)
 		if err != nil {
 			fail(name, err)
 			continue

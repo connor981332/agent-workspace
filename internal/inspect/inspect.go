@@ -136,6 +136,31 @@ func Scan(name, dir, rel string) (*Project, error) {
 	return p, err
 }
 
+// shellWords are builtins and keywords, which name no program to install.
+var shellWords = []string{"if", "then", "else", "elif", "fi", "for", "while", "until", "do", "done", "case", "esac", "in", "cd", "test", "[", "[[", "echo", "printf", "true", "false", "export", "set", "unset", "exit", "return", "source", ".", ":", "exec", "command", "env", "time", "eval", "read", "shift", "trap", "wait", "type"}
+
+var commandSeparator = regexp.MustCompile(`&&|\|\||[;|&\n()]|\{ |\}`)
+
+// commandTools are the programs a shell command runs: the first word of each command in a list or
+// pipeline, past grouping, negation, variable assignments and exec. A word naming a path or holding
+// a variable is not a tool to look up.
+func commandTools(cmd string) []string {
+	var out []string
+	for _, part := range commandSeparator.Split(cmd, -1) {
+		for _, w := range strings.Fields(part) {
+			w = strings.Trim(w, "{}!")
+			if w == "" || (strings.Contains(w, "=") && !strings.HasPrefix(w, "=")) || slices.Contains([]string{"exec", "command", "env", "time", "if", "then", "else", "elif", "while", "until", "do"}, w) {
+				continue
+			}
+			if !slices.Contains(shellWords, w) && !strings.ContainsAny(w, "/$`'\"\\*?") {
+				out = append(out, w)
+			}
+			break
+		}
+	}
+	return out
+}
+
 // stackTools are the programs a project of each stack is likely to need.
 var stackTools = map[string][]string{"node": {"node"}, "ruby": {"ruby", "bundle"}, "go": {"go"}, "python": {"python3"}, "rust": {"cargo"}, "php": {"php", "composer"}, "java": {"java"}}
 
@@ -168,9 +193,7 @@ func Preflight(ctx context.Context, owner string, c *config.Config, projects []*
 			}
 		}
 		for _, h := range hooks {
-			if f := strings.Fields(h); len(f) > 0 && !strings.ContainsAny(f[0], "/=$") {
-				tools = append(tools, f[0])
-			}
+			tools = append(tools, commandTools(h)...)
 		}
 		slices.Sort(tools)
 		for _, t := range slices.Compact(tools) {
@@ -267,6 +290,31 @@ func source(name string) bool {
 	return slices.Contains(sourceExt, filepath.Ext(name))
 }
 
+// harnessConfig are agent harnesses' own settings. A localhost URL in them is a permission or a tool
+// setting, never a port the application listens on.
+var harnessConfig = []string{".claude/", ".codex/", ".opencode/", ".grok/", ".agents/", "opencode.json", "opencode.jsonc"}
+
+func isHarnessConfig(file string) bool {
+	return slices.ContainsFunc(harnessConfig, func(p string) bool {
+		if strings.HasSuffix(p, "/") {
+			return strings.HasPrefix(file, p) || strings.Contains(file, "/"+p)
+		}
+		return file == p || strings.HasSuffix(file, "/"+p)
+	})
+}
+
+// writtenByAW says whether a line is the header aw puts on the files it generates, such as the
+// devcontainer Compose fragment. Their ports are the lanes' own, which aw assigns and checks.
+func writtenByAW(line string) bool {
+	line = strings.TrimSpace(line)
+	for _, c := range []string{"#", "//"} {
+		if rest, ok := strings.CutPrefix(line, c); ok && strings.HasPrefix(strings.TrimSpace(rest), "Written by aw") {
+			return true
+		}
+	}
+	return false
+}
+
 func isTest(file string) bool {
 	return strings.Contains(file, "test") || strings.Contains(file, "spec") || strings.Contains(file, "fixture")
 }
@@ -282,8 +330,12 @@ func scanFile(p *Project, path, file string, env map[string]bool, ports map[int]
 	}
 	s := bufio.NewScanner(f)
 	s.Buffer(make([]byte, 64*1024), 1024*1024)
+	ownPorts := isHarnessConfig(file)
 	for n := 1; s.Scan(); n++ {
 		line := s.Text()
+		if n == 1 && writtenByAW(line) {
+			ownPorts = true
+		}
 		for _, m := range envRead.FindAllStringSubmatch(line, -1) {
 			for _, g := range m[1:] {
 				if g != "" {
@@ -294,7 +346,7 @@ func scanFile(p *Project, path, file string, env map[string]bool, ports map[int]
 		if isTest(file) {
 			continue
 		}
-		if m := hardcodedPort.FindStringSubmatch(line); m != nil && !strings.Contains(line, "ENV") && !strings.Contains(line, "process.env") {
+		if m := hardcodedPort.FindStringSubmatch(line); m != nil && !ownPorts && !strings.Contains(line, "ENV") && !strings.Contains(line, "process.env") {
 			port := 0
 			for _, c := range m[1] {
 				port = port*10 + int(c-'0')

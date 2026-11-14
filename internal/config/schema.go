@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"maps"
 	"regexp"
 	"slices"
 	"sort"
@@ -213,7 +214,8 @@ var schema = table("",
 				"copied, as a clone where the file system can. Use secrets for anything an agent should not read."),
 			"accepted_findings", mapOf("Readiness findings a person has reviewed, by file: the key is a path relative to the project "+
 				"(dir/** matches a directory), and the value says why it is fine. aw rehearse and aw doctor --projects skip them; rehearsal "+
-				"still refuses a script that names the Compose project of an accepted Compose file, since starting it would reach the real one.",
+				"still refuses a script that names the Compose project of an accepted Compose file, since starting it would reach the real one. "+
+				`For example: [projects.web.accepted_findings] followed by ".claude/settings.local.json" = "personal permissions, not server configuration".`,
 				acceptedRE, "name a file relative to the project, e.g. \".env.template\" or \"ci/**\"", str("")),
 			"post_checkout", str("run: the repository's own post-checkout hook runs as a setup step of each lane, which can be retried. skip: it does not run in lanes.").
 				oneOf("run", "skip").withDefault("run"),
@@ -721,4 +723,37 @@ func KeysNamed(leaf string) []string {
 	}
 	walk(schema, nil)
 	return out
+}
+
+// KeysEnding lists the schema's keys that end with p, written as the documentation writes them
+// (projects.<name>.accepted_findings), for an error about a key given without the tables it
+// belongs to.
+func KeysEnding(p Path) []string {
+	if len(p) == 0 {
+		return nil
+	}
+	var out []string
+	var walk func(n *node, at Path, depth int)
+	walk = func(n *node, at Path, depth int) {
+		if n == nil || depth > 8 {
+			return
+		}
+		if len(at) > len(p) && slices.Equal(at[len(at)-len(p):], p) {
+			out = append(out, strings.Join(at, "."))
+		}
+		switch n.kind {
+		case kTable:
+			for _, k := range slices.Sorted(maps.Keys(n.fields)) {
+				walk(n.fields[k], at.child(k), depth+1)
+			}
+		case kMap:
+			walk(n.elem, at.child("<name>"), depth+1)
+		case kHook:
+			walk(hookTable, at, depth+1)
+		case kMux:
+			walk(muxTable, at, depth+1)
+		}
+	}
+	walk(schema, nil, 0)
+	return slices.Compact(out)
 }

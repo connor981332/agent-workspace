@@ -1,0 +1,29 @@
+# aw config validate cross-checks each option's choices as merged, whether it checks the workspace
+# or a team file it is given: a server a choice runs after must exist, even in a choice nobody picks.
+# req: R6 R7
+# source: feedback 2026-11-13 (mortgage 0.2.0 upgrade)
+# milestone: M12
+
+owner-may-change
+workspace shop --init
+exec sh -c 'cat $WORK/option >> workspace.toml'
+! exec aw config validate
+stdout 'with option monolith = on'
+stdout 'projects.web.servers.app.after\[0\]: there is no server named "nope"'
+! exec aw config validate workspace.toml
+stdout 'workspace.toml, with option monolith = on'
+stdout 'there is no server named "nope"'
+
+-- option --
+
+[projects.web.servers.app]
+command = "true"
+port = 41300
+
+[options.monolith]
+default = "off"
+
+[options.monolith.choices.off]
+
+[options.monolith.choices.on.projects.web.servers.app]
+after = ["nope"]

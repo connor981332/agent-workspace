@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -122,6 +123,9 @@ type Finished struct {
 	Summary string            `json:"summary"`
 	Plan    string            `json:"plan,omitempty"`
 	Already bool              `json:"already"` // the same heads were already handed off
+	// Incomplete says the lane's setup had not completed. The work is handed off as it is: its
+	// branches are what is reviewed, and setup is for working in the lane.
+	Incomplete bool `json:"incomplete,omitempty"`
 }
 
 // Finish hands a lane off for review (R78): it records the exact head of every repository and the
@@ -132,8 +136,13 @@ func (m *Manager) Finish(ctx context.Context, l state.Lane, o FinishOptions) (*F
 	if strings.TrimSpace(o.Summary) == "" {
 		return nil, fmt.Errorf(`aw finish needs a summary of the work → aw finish --summary "what changed, and what to verify"`)
 	}
+	steps, err := state.Steps(m.Store.DB(), l.Number, l.Generation)
+	if err != nil {
+		return nil, err
+	}
+	incomplete := l.State == state.LaneIncomplete || slices.ContainsFunc(steps, func(s state.Step) bool { return !s.Finished() })
 	switch l.State {
-	case state.LaneWorking, state.LaneReady, state.LaneParked:
+	case state.LaneWorking, state.LaneReady, state.LaneParked, state.LaneIncomplete:
 	default:
 		return nil, fmt.Errorf("lane %s is %s, so it cannot be finished", Dir(l.Number, m.Cfg.Lanes.Max), l.State)
 	}
@@ -210,7 +219,7 @@ func (m *Manager) Finish(ctx context.Context, l state.Lane, o FinishOptions) (*F
 	if err != nil {
 		return nil, err
 	}
-	return &Finished{Lane: l, Heads: heads, Summary: o.Summary, Plan: plan}, nil
+	return &Finished{Lane: l, Heads: heads, Summary: o.Summary, Plan: plan, Incomplete: incomplete}, nil
 }
 
 func repoKey(r state.LaneRepo) string {

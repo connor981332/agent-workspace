@@ -338,8 +338,12 @@ A keeper records that group, with its start time, next to the server's log; if i
 next state-changing command stops the recorded group through `docker exec`, after confirming the
 start time.
 
-**A container is in use (R49)** when a lane or the owner holds a seat on one of its servers, a setup is
-running, or any exec session is live in it, which covers VS Code, terminals, `aw run` and servers.
+**A container is in use (R49)** when a lane or the owner holds a seat on one of its servers, a lane's
+setup in progress has used it, or any exec session is live in it, which covers VS Code, terminals,
+`aw run` and servers. A setup records its first use of each container under the container's start
+lock, in `lanes/<NN>/containers/<project>` with its generation; one that cannot be read counts as a
+use. The setup asking for the container is not a use of it, so a lane's install can replace an
+outdated container that nothing else uses.
 `aw containers recreate` and `down` then refuse, and list what they found. There is no override.
 
 Git always runs on the host, because worktree `.git` files name host paths.

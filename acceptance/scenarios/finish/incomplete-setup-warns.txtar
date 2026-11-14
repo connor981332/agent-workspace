@@ -1,0 +1,50 @@
+# A lane whose setup did not complete can still be handed off: its work is on its branches, so aw
+# finish warns and names how to set it up, rather than refusing. Commands that need the failed
+# step still refuse, and aw setup completes it later.
+# req: R78 R31
+# source: feedback 2026-11-13 (mortgage 0.2.0 upgrade)
+# milestone: M5
+
+workspace shop --init
+exec aw attach 'add feature flag'
+lane-commit 01 web/flag.txt 'flag'
+# aw run waits for the background setup, which fails.
+cd .worktrees/01
+! exec aw run web true
+stderr 'setup incomplete'
+cd ../..
+exec aw --json
+json stdout .lanes[0].state incomplete
+cd .worktrees/01
+exec aw finish --summary 'Adds the flag.' --json
+json stdout .lane.state ready
+json stdout .incomplete true
+exec aw finish --summary 'Adds the flag, again.'
+stderr 'warning: lane feature-flag''s setup had not completed; its work is handed off as committed → to work in it again, run aw setup feature-flag'
+stdout 'is ready for review'
+! exec aw run web true
+stderr 'setup incomplete'
+cd ../..
+exec touch .git/fixed
+exec aw setup feature-flag
+stdout 'Lane feature-flag is set up'
+cd .worktrees/01
+exec aw run web true
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[projects.web]
+directory = "web"
+
+[projects.web.lifecycle]
+setup = 'test -e "$AW_OWNER/.git/fixed" || exit 3'
+
+[projects.api]
+directory = "api"
