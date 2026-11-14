@@ -108,6 +108,11 @@ an agent to ask you when it tries one. Run the steps below yourself.
 
    It names the fix for every problem it finds and writes nothing, so it is safe to run any time.
 
+Later, `aw audit` starts an agent that talks the configuration through with you against the
+repositories and what newer `aw` versions offer. It changes only what you agree to, on a lane
+branch for review, and records the version it audited with. Add `--focus "question"` to start with
+one topic.
+
 Commit `workspace.toml`, `.aw/` and `bin/aw` so your team gets the same setup.
 
 ### Joining a workspace someone else set up
@@ -309,6 +314,8 @@ aw upgrade
 `aw upgrade` updates the pin, migrates `workspace.toml`, regenerates the files `aw` manages, and runs
 `aw doctor`. Commit the result and review it as a merge request. Files you edited by hand are never
 overwritten. You choose to keep them (`--eject`) or replace them (`--take`).
+When the versions you skipped change keys your workspace sets, `aw upgrade` points you to
+`aw audit` to go through what is new together.
 
 ## Building from source
 
