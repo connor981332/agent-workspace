@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/rogpeppe/go-internal/testscript"
 )
@@ -100,13 +101,30 @@ const gitConfig = `[user]
 	detachedHead = false
 `
 
-// Condition adds the suite's conditions: [root] (running as root, which can write anywhere).
+// Condition adds the suite's conditions: [root] (running as root, which can write anywhere) and
+// [git-content] (a Git that can compare a lane's content with its base: 2.38 or later).
 func Condition(cond string) (bool, error) {
 	switch cond {
 	case "root":
 		return os.Geteuid() == 0, nil
+	case "git-content":
+		return gitContent(), nil
 	}
 	return false, fmt.Errorf("unknown condition %q", cond)
+}
+
+var (
+	gitContentOnce sync.Once
+	gitContentOK   bool
+)
+
+// gitContent reports whether this Git's merge-tree has --write-tree.
+func gitContent() bool {
+	gitContentOnce.Do(func() {
+		out, _ := exec.Command("git", "merge-tree", "-h").CombinedOutput()
+		gitContentOK = strings.Contains(string(out), "--write-tree")
+	})
+	return gitContentOK
 }
 
 // Commands returns the custom commands.
@@ -124,6 +142,7 @@ func Commands() map[string]func(ts *testscript.TestScript, neg bool, args []stri
 		"lane-commit":      cmdLaneCommit,
 		"git-merge":        mergeCmd("merge"),
 		"git-squash":       mergeCmd("squash"),
+		"git-revert":       cmdGitRevert,
 		"git-cherry-pick":  mergeCmd("cherry-pick"),
 		"forge-reply":      cmdForgeReply,
 		"session":          cmdSession,

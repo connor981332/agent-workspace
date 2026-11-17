@@ -177,8 +177,9 @@ All of these only read.
   own environment. `aw try --back` puts everything back.
 - `aw changeset` opens the lane's linked merge requests in merge order.
 - `aw sweep` shows which lanes are proven merged, and `aw sweep --apply` recycles them. A lane counts
-  as merged only when its heads are in the base branch, its commits are patch-equivalent, or the forge
-  reports that exact head merged. A deleted remote branch is not enough.
+  as merged only when its heads are in the base branch, its commits are patch-equivalent, merging it
+  would change nothing (as after a squash merge), or the forge reports that exact head merged. A
+  deleted remote branch is not enough. A tip proven any way but the first is archived first.
 - `aw park <lane>` protects a lane from cleanup until `aw unpark`.
 - `aw discard <lane>` abandons a lane's work. Every branch is archived under `refs/aw/archive/` first,
   so nothing committed is lost.

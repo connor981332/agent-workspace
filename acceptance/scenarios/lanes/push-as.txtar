@@ -22,7 +22,7 @@ stdout '^aw/feature-flag$'
 exec git rev-parse --abbrev-ref '@{upstream}'
 stdout '^origin/team/KEY-1$'
 
-exec git commit -q --allow-empty -m 'more lane work'
+exec sh -c 'echo more > more.txt && git add more.txt && git commit -qm "more lane work"'
 exec aw push
 stdout '^web: pushed aw/feature-flag to origin/team/KEY-1$'
 exec git ls-remote origin refs/heads/team/KEY-1

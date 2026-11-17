@@ -146,6 +146,8 @@ var schema = table("",
 		"max", integer("Most lanes that may exist at once.").between(1, 999).withDefault(int64(10)),
 		"pool", integer("Clean lanes kept warm for reuse.").atLeast(0).withDefault(int64(3)),
 		"retention", duration("Pooled lanes older than this are destroyed.").withDefault("14d"),
+		"archive_retention", duration("Archived tips (refs/aw/archive, from aw discard, aw reset-branch and recycling a lane not "+
+			"proven by ancestry) older than this are removed by aw sweep --apply. 0 keeps them for good.").withDefault("30d"),
 		"hostname", str("Each lane's hostname. {lane} is the lane number, {namespace} the namespace.").
 			withDefault("lane-{lane}.localhost").checked(func(v any) (string, string) {
 			if !strings.Contains(v.(string), "{lane}") {

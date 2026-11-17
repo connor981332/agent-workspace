@@ -9,6 +9,8 @@ exec aw attach 'add feature flag'
 lane-commit 01 a.txt 'first'
 lane-commit 01 b.txt 'second'
 git-squash . aw/feature-flag
+# Reverted afterwards, so that only the forge can say it was merged (merging it again would change the base).
+git-revert .
 stubs gh glab
 owner-may-change
 

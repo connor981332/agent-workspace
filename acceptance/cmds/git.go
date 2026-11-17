@@ -77,3 +77,19 @@ func mergeCmd(how string) func(ts *testscript.TestScript, neg bool, args []strin
 		st.snap = takeSnapshot(ts)
 	}
 }
+
+// git-revert <repo>
+//
+// The human reverts the last commit of the owner checkout's branch and pushes, as after a merge
+// that had to be undone. A squash merge reverted this way leaves the base without the lane's
+// changes, so only a forge can still say that the lane was merged.
+func cmdGitRevert(ts *testscript.TestScript, neg bool, args []string) {
+	if neg || len(args) != 1 {
+		ts.Fatalf("usage: git-revert <repo>")
+	}
+	st := needWorkspace(ts, "git-revert")
+	dir := ownerRepo(ts, st, args[0])
+	git(ts, dir, "revert", "--no-edit", "HEAD")
+	git(ts, dir, "push", "-q")
+	st.snap = takeSnapshot(ts)
+}

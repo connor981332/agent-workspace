@@ -11,7 +11,8 @@ lane-commit 01 file.txt 'work'
 
 exec aw sweep --json
 json stdout .lanes[0].action keep
-json stdout .lanes[0].reason 'solo: not proven merged: 1 commit not in refs/remotes/origin/main: its head is not there, and no commit there has the same patch; no forge was asked, since origin is not on one'
+[git-content] json stdout .lanes[0].reason 'solo: not proven merged: 1 commit not in refs/remotes/origin/main: its head is not there, no commit there has the same patch, and merging it would change 1 file; no forge was asked, since origin is not on one'
+[!git-content] json stdout .lanes[0].reason 'solo: not proven merged: 1 commit not in refs/remotes/origin/main: its head is not there, no commit there has the same patch, and this Git cannot compare content (Git 2.38 or later can); no forge was asked, since origin is not on one'
 exec aw sweep
 stdout '^01  feature-flag  keep  solo: not proven merged'
 stdout '^To recycle a kept lane:'
