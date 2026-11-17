@@ -11,6 +11,9 @@ workspace solo --single --init
 cp $WORK/stamped.toml workspace.toml
 exec aw audit --harness claude --focus 'should solo keep two lanes?'
 stderr '^aw audit: setting up this workspace'
+# The person gets one line about what lanes will need; the agent gets the findings (plans/dogfood-0.3.md 3.3).
+stderr '^checking the projects for what lanes will need: '
+stdout '^Setting up the workspace$'
 stderr 'run bin/aw rehearse without asking'
 exists .claude/skills/aw-workspace-audit/SKILL.md
 exists .agents/skills/aw-workspace-audit/SKILL.md
