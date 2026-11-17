@@ -13,11 +13,12 @@ exec git clone -q $WORK/remotes/shop.git $WORK/fresh/shop
 cd $WORK/fresh/shop
 exec sh -c 'rm -rf "$XDG_CACHE_HOME/agent-workspace" "$XDG_CONFIG_HOME/agent-workspace/shop.toml"'
 exec bin/aw setup --harness codex
-stdout 'Cloning .*web.git'
-stdout 'Cloning .*api.git'
+stdout '^Cloning .*web.git: into web$'
+stdout '^Cloning .*api.git: into api$'
 stdout 'Wrote .*shop.toml'
 stderr 'secret file .env is missing'
-stdout 'web: installing dependencies'
+# Off a terminal, each step is one line once it is done (plans/dogfood-0.3.md 3.3).
+stdout '^web: installing dependencies: done$'
 stdout 'installed the hooks dispatcher'
 exists web/README.md
 exists api/README.md
@@ -25,6 +26,9 @@ exists web/install.log
 exists $XDG_CACHE_HOME/agent-workspace/bin/$AW_VERSION/aw
 grep 'harness = "codex"' $XDG_CONFIG_HOME/agent-workspace/shop.toml
 stdout 'Set up. Next'
+# The last line says what comes next.
+exec sh -c 'bin/aw setup | tail -1'
+stdout '^Set up\. Next'
 exec bin/aw attach 'one'
 stdout 'Claimed lane 01'
 

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -44,12 +46,16 @@ func cloneProjects(ctx context.Context, owner string, c *config.Config, out, std
 			fmt.Fprintf(stderr, "warning: project %s is not cloned, and has no repo in workspace.toml → clone it to %s, or set [projects.%s] repo\n", name, ui.Clean(dir), name)
 			continue
 		}
-		fmt.Fprintf(out, "Cloning %s\n", ui.Clean(p.Repo))
+		step := ui.NewOut(out).Step("Cloning " + p.Repo)
+		var said bytes.Buffer
 		clone := exec.CommandContext(ctx, "git", "clone", "--", p.Repo, dir)
-		clone.Stdout, clone.Stderr = stderr, stderr
+		clone.Stdout, clone.Stderr = &said, &said
 		if err := clone.Run(); err != nil {
+			step.Fail(err.Error())
+			fmt.Fprint(stderr, said.String())
 			return fmt.Errorf("cloning %s failed: %w → check that you have access to it, then run aw setup again", name, err)
 		}
+		step.Done("into " + p.Directory)
 	}
 	return nil
 }
@@ -122,6 +128,8 @@ func installOwner(cmd *cobra.Command, ws *workspace.Workspace, c *config.Config,
 	if quiet {
 		out = errOut
 	}
+	steps := ui.NewOut(out)
+	defer steps.Close()
 	w, err := openForWrite()
 	if err != nil {
 		return err
@@ -195,11 +203,12 @@ func installOwner(cmd *cobra.Command, ws *workspace.Workspace, c *config.Config,
 			fail(name, err)
 			continue
 		}
-		fmt.Fprintf(out, "%s: installing dependencies\n", name)
-		stop := heartbeat(out, name+": still installing dependencies")
+		step := steps.Step(name + ": installing dependencies")
+		stop := followLog(steps, step, log)
 		_, err = lifecycle.Exec(ctx, lifecycle.Command{Dir: where.Dir, Env: where.Env, Run: p.Install, Argv: argv, Log: log, Phase: lifecycle.PhaseInstall})
 		stop()
 		if err != nil {
+			step.Fail(fmt.Sprintf("%v (full log: %s)", err, log))
 			why := fmt.Sprintf("%v (full log: %s)", err, log)
 			if t := lifecycle.Tail(log); t != "" {
 				why += "\nThe end of its log:\n" + t
@@ -207,6 +216,7 @@ func installOwner(cmd *cobra.Command, ws *workspace.Workspace, c *config.Config,
 			fail(name, errors.New(why))
 			continue
 		}
+		step.Done("done")
 		if err := os.WriteFile(stampPath, []byte(stamp), 0o600); err != nil {
 			fail(name, err)
 		}
@@ -214,10 +224,45 @@ func installOwner(cmd *cobra.Command, ws *workspace.Workspace, c *config.Config,
 	return first
 }
 
-// confirm asks a yes-or-no question on a terminal. Anywhere else the answer is no: nothing starts
-// unexpectedly.
-func heartbeat(out io.Writer, what string) (stop func()) {
-	return lanes.Beat(func(line string) { fmt.Fprintln(out, line) }, what)
+// followLog shows, on a terminal, the last line a step's command wrote to its log, so that a long
+// install shows what it is doing rather than a bare spinner. Elsewhere the step's own "still
+// running" lines are enough, and the log has the rest.
+func followLog(o *ui.Out, s *ui.Step, log string) (stop func()) {
+	if !o.Live() {
+		return func() {}
+	}
+	done := make(chan struct{})
+	go func() {
+		t := time.NewTicker(250 * time.Millisecond)
+		defer t.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-t.C:
+				if line := lastLine(log); line != "" {
+					s.Detail(line)
+				}
+			}
+		}
+	}()
+	return func() { close(done) }
+}
+
+// lastLine is the last non-empty line of a file, reading only its end.
+func lastLine(path string) string {
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+	buf := make([]byte, 4096)
+	if info, err := f.Stat(); err == nil && info.Size() > int64(len(buf)) {
+		f.Seek(info.Size()-int64(len(buf)), io.SeekStart)
+	}
+	n, _ := io.ReadFull(f, buf)
+	lines := strings.Split(strings.TrimRight(string(buf[:n]), "\n\r "), "\n")
+	return strings.TrimSpace(lines[len(lines)-1])
 }
 
 func confirm(in io.Reader, out io.Writer, question string) bool {
