@@ -44,6 +44,8 @@ const framework = `## Working in this workspace
 
 This workspace runs several agents in parallel, each in its own lane.
 
+- What the human tells you in the conversation comes first, then the team's instructions, then aw's.
+- Working on your own, you claim a lane and hand the work off from it. In a pair session, which only the human grants (` + "`aw pair`" + `), you work in the owner checkout with them: they review the diff, and ` + "`bin/aw move-to-lane \"<purpose>\"`" + ` gives the work a branch of its own when one is wanted.
 - The checkout you start in belongs to the human. Reading needs nothing, here or from a lane. Before changing anything, run ` + "`bin/aw attach \"<what you are working on>\"`" + ` and work in the lane root it prints.
 - If your working directory stays where it was, start each shell command with ` + "`cd <lane root> &&`" + ` and use absolute paths inside the lane for file tools.
 - ` + "`bin/aw lanes`" + ` lists the lanes, and ` + "`bin/aw whoami`" + ` shows where you are. ` + "`bin/aw run <project> <command>`" + ` runs a command with the lane's environment.

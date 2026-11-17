@@ -54,15 +54,17 @@ lanes will need, and starts an agent to design the configuration. Nothing has to
 If setup or creating a lane fails, the agent starts anyway, with the failure in front of it, to fix
 it, skip it or ask you.
 
-The agent's result stays on a lane's branch until you review it. A workspace kept as plain files has
-no branch to review, so there the agent works in the owner checkout as a pair session. Before you
-merge, run `aw rehearse`, which creates two lanes at once and reports anything that collides.
+The agent works with you as a pair session in the owner checkout, and its result is there for you to
+review; `aw move-to-lane "<purpose>"` puts it on a branch for a merge request when you want one.
+`aw onboard --lane` has the agent work alone in a lane instead, with its result on the lane's
+branch. Before you merge, run `aw rehearse`, which creates two lanes at once and reports anything
+that collides.
 `aw add project <alias> <url>` adds a repository later.
 
 `aw audit` revisits the configuration later: after an upgrade, when the projects have changed, or
 when you want to discuss an alternative (`aw audit --focus "should api use a devcontainer?"`). An
 agent compares the configuration with the repositories and with what this aw can do, talks it
-through with you, and changes only what you agree on, on a lane's branch for review.
+through with you, and changes only what you agree on, for you to review.
 
 `aw setup` is the part of onboarding that involves no agent. Use it alone on a fresh clone of a
 workspace that is already configured, and `aw setup <lane>` to retry a lane's setup.

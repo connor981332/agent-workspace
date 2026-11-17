@@ -1,0 +1,13 @@
+# The generated instructions say whose word wins, the human in the conversation, then the team, then
+# aw, and the two routes: alone in a lane with a handoff, or with the human in a pair session.
+# req: R60 R78
+# source: plans/dogfood-0.3.md 5.8 (docs/spec/sessions.md, "Routes and precedence")
+# milestone: M12
+
+workspace solo --single --init
+owner-may-change
+exec aw setup
+grep 'What the human tells you in the conversation comes first, then the team''s instructions, then aw''s.' AGENTS.md
+grep 'In a pair session, which only the human grants' AGENTS.md
+grep 'bin/aw move-to-lane' AGENTS.md
+grep 'bin/aw detach' AGENTS.md

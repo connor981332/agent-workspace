@@ -130,6 +130,31 @@ func Plan(c *config.Config, fromPool bool, hooks map[string]string) []Step {
 	return out
 }
 
+// Lazy reports whether projects' own steps wait for their first use ([lanes] setup = "lazy").
+func Lazy(c *config.Config) bool { return c.Lanes.Setup != "eager" }
+
+// claimTime reports whether a step runs when the lane is claimed, even when setup is lazy: the data,
+// the workspace's prepare, and each project's prepare, which writes the env files commands read.
+func claimTime(s Step) bool { return s.Project == "" || s.Phase == PhasePrepare }
+
+// AtClaim returns the steps that run as soon as a lane is claimed: all of them, or with lazy setup
+// only those not specific to one project's use.
+func AtClaim(c *config.Config, steps []Step) []Step {
+	if !Lazy(c) {
+		return steps
+	}
+	return slices.DeleteFunc(slices.Clone(steps), func(s Step) bool { return !claimTime(s) })
+}
+
+// StepProject is the project a recorded step belongs to, or "" for the workspace's own steps.
+func StepProject(step string) string {
+	if step == PhasePrepare || strings.HasPrefix(step, "data.") {
+		return ""
+	}
+	project, _, _ := strings.Cut(step, ".")
+	return project
+}
+
 // checkoutCommand runs a post-checkout hook as Git would after creating a worktree.
 func checkoutCommand(hook string) string {
 	return "exec '" + strings.ReplaceAll(hook, "'", `'\''`) + `' 0000000000000000000000000000000000000000 "$(git rev-parse HEAD)" 1`
@@ -210,41 +235,38 @@ func firstFailed(steps []state.Step, want func(string) bool) *state.Step {
 	return nil
 }
 
-// Await waits for the steps want selects, and refuses when one of them failed. say is told once
-// what is being waited for.
-func Await(ctx context.Context, store *state.Store, lane state.Lane, want func(string) bool, say func(string)) error {
-	said := false
-	for {
-		steps, err := state.Steps(store.DB(), lane.Number, lane.Generation)
-		if err != nil {
-			return err
-		}
-		if f := firstFailed(steps, want); f != nil {
-			return Incomplete(lane.Name, *f)
-		}
-		waiting := ""
-		for _, s := range steps {
-			if want(s.Name) && !s.Finished() {
-				waiting = s.Name
-				break
-			}
-		}
-		if waiting == "" {
-			return nil
-		}
-		if !said {
-			said = true
-			say(waiting)
-		}
-		if err := Recover(ctx, store); err != nil {
-			return err
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(100 * time.Millisecond):
+// Busy reports whether a lane's setup is running, or about to: a live process has it, or the lane
+// is setting up and its background process has not taken it yet.
+func Busy(q state.Querier, l state.Lane) bool {
+	s, err := state.LaneSetup(q, l.Number)
+	if err != nil || s.Generation != l.Generation {
+		return false
+	}
+	return alive(s) || (s.PID == 0 && l.State == state.LaneSettingUp && s.Age() < StartWindow)
+}
+
+// Unstarted returns the projects whose steps want selects and that have not finished, when nothing
+// is running them: what a lazy setup leaves for the first command that needs it. "" stands for the
+// steps at claim time.
+func Unstarted(q state.Querier, l state.Lane, want func(string) bool) ([]string, error) {
+	steps, err := state.Steps(q, l.Number, l.Generation)
+	if err != nil {
+		return nil, err
+	}
+	// A project with a failed step is not started again: that is aw setup's, which says why.
+	failed := map[string]bool{}
+	for _, s := range steps {
+		if s.Status == state.StepFailed {
+			failed[StepProject(s.Name)] = true
 		}
 	}
+	var out []string
+	for _, s := range steps {
+		if p := StepProject(s.Name); want(s.Name) && !s.Finished() && !failed[p] && !slices.Contains(out, p) {
+			out = append(out, p)
+		}
+	}
+	return out, nil
 }
 
 // Recover notices setups whose process has gone (a crash or a reboot): what was running failed, and
@@ -344,6 +366,14 @@ type Runner struct {
 	After func(ctx context.Context) error
 	// Out is told about each step. It may be nil.
 	Out io.Writer
+	// Projects limits a lazy setup to the steps at claim time and these projects' own; nil runs
+	// every step whatever [lanes] setup says, as aw setup <lane> does.
+	Projects []string
+}
+
+// runs reports whether this run runs step s.
+func (r *Runner) runs(s Step) bool {
+	return r.Projects == nil || claimTime(s) || slices.Contains(r.Projects, s.Project)
 }
 
 func (r *Runner) say(format string, args ...any) {
@@ -363,9 +393,11 @@ func (r *Runner) Run(ctx context.Context) error {
 	var serial []Step
 	projects := map[string][]Step{}
 	for _, s := range steps {
-		if s.Project == "" || s.Phase == PhasePrepare {
+		switch {
+		case !r.runs(s):
+		case claimTime(s):
 			serial = append(serial, s)
-		} else {
+		default:
 			projects[s.Project] = append(projects[s.Project], s)
 		}
 	}
@@ -569,7 +601,9 @@ func (r *Runner) finish() error {
 		failed = firstFailed(steps, func(string) bool { return true })
 		pending := false
 		for _, s := range steps {
-			pending = pending || !s.Finished()
+			// A lazy setup leaves the projects it was not asked for until they are first used.
+			ran := r.Projects == nil || StepProject(s.Name) == "" || slices.Contains(r.Projects, StepProject(s.Name))
+			pending = pending || (ran && !s.Finished())
 		}
 		if err := state.SetSetupRunner(tx, r.Lane.Number, 0, ""); err != nil {
 			return err

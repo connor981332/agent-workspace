@@ -90,6 +90,7 @@ type Lanes struct {
 	Pool             int              `json:"pool"`
 	Retention        Duration         `json:"retention"`
 	ArchiveRetention Duration         `json:"archive_retention"`
+	Setup            string           `json:"setup"` // lazy or eager
 	Hostname         string           `json:"hostname"`
 	ServerCapacity   int              `json:"server_capacity"`
 	PortStride       int              `json:"port_stride"`

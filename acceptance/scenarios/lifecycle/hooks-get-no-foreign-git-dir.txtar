@@ -9,6 +9,7 @@
 
 workspace shop --init
 owner-may-change
+exec sh -c 'printf "\n[lanes]\nsetup = \"eager\"\n" >> workspace.toml'
 exec sh $WORK/hook.sh
 exec aw setup
 exec env GIT_DIR=$WORK/elsewhere/.git GIT_INDEX_FILE=$WORK/elsewhere/.git/index aw attach 'hooked work'

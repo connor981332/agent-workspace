@@ -13,7 +13,7 @@ exec aw inspect
 stdout 'not aw''s.*old-hook'
 
 # On by default: onboarding does not change how the workspace's agents behave.
-exec aw onboard --harness claude
+exec aw onboard --lane --harness claude
 stderr 'not aw''s and they run in the lane too'
 stderr 'old-hook'
 grep 'old-hook' .worktrees/01/.claude/settings.json
@@ -22,7 +22,7 @@ exec aw discard 01 --yes
 ! exists .worktrees/01
 
 # Off when asked, in that lane only.
-exec aw onboard --harness claude --without-other-hooks
+exec aw onboard --lane --harness claude --without-other-hooks
 stderr 'turning off hooks that are not aw''s'
 ! grep 'old-hook' .worktrees/01/.claude/settings.json
 grep 'hook claude pre-tool-use' .worktrees/01/.claude/settings.json
@@ -33,7 +33,7 @@ exec aw discard 01 --yes
 # Off too when both sets of hooks are already committed, so nothing else is copied into the lane.
 exec git add -A
 exec git commit -qm 'aw and the old hooks'
-exec aw onboard --harness claude --review --without-other-hooks
+exec aw onboard --lane --harness claude --review --without-other-hooks
 ! grep 'old-hook' .worktrees/01/.claude/settings.json
 grep 'hook claude pre-tool-use' .worktrees/01/.claude/settings.json
 exec aw discard 01 --yes

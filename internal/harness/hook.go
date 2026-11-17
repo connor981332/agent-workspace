@@ -298,6 +298,25 @@ func resolveScope(p Payload, version string, t *timing.Recorder) (*policy.Scope,
 			scope.ProjectPublication[dir] = pr.Publication
 		}
 	}
+	// Projects whose setup waits for their first use, so that a command run there directly is told.
+	if cfg.Lanes.Setup != "eager" {
+		if steps, err := state.Steps(s.DB(), n, lane.Generation); err == nil {
+			for _, st := range steps {
+				project, _, _ := strings.Cut(st.Name, ".")
+				if st.Status != state.StepPending || st.Name == "prepare" || project == "data" || strings.HasSuffix(st.Name, ".prepare") {
+					continue
+				}
+				for _, r := range repos {
+					if r.Project == project {
+						if scope.Unprepared == nil {
+							scope.Unprepared = map[string]string{}
+						}
+						scope.Unprepared[shell.Resolve(r.Path)] = project
+					}
+				}
+			}
+		}
+	}
 	if role, ok := cfg.RoleNamed(lane.Role); ok {
 		scope.RoleAllow, scope.RoleDeny = role.Allow, role.Deny
 		scope.RoleName, scope.RoleInstructions = lane.Role, role.Instructions

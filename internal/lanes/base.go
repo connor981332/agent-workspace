@@ -97,7 +97,7 @@ func (m *Manager) OwnerConfigDrift(ctx context.Context) []string {
 		}
 	}
 	if status, err := g.Run(ctx, "--no-optional-locks", "status", "--porcelain", "--", "workspace.toml"); err == nil && strings.TrimSpace(status) != "" {
-		out = append(out, "workspace.toml has uncommitted changes, which new lanes already use → commit them through a lane and a merge request, or git restore workspace.toml")
+		out = append(out, "workspace.toml has uncommitted changes: aw sets new lanes up with them, but each lane's own copy of the workspace repository starts from origin's default branch, so its hooks and instructions will not match until the change is merged there → commit it through a lane and a merge request, or git restore workspace.toml")
 	}
 	return out
 }

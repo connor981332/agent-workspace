@@ -152,24 +152,25 @@ func doctorProjects(cmd *cobra.Command, asJSON bool) error {
 }
 
 func newOnboardCmd() *cobra.Command {
-	var review, dropOtherHooks bool
+	var review, dropOtherHooks, inLane bool
 	var harness string
 	cmd := &cobra.Command{
-		Use:   "onboard [--harness h] [--without-other-hooks]",
+		Use:   "onboard [--harness h] [--lane] [--without-other-hooks]",
 		Short: "Set this workspace up, and have an agent design its configuration for you to review",
 		Long: `The one command to start with. It runs everything aw setup does, reports what aw inspect finds, and
 then starts a harness with the workspace-design skill. If setup or creating the lane fails, the agent
 still starts, in the owner checkout with the failure in front of it, to fix it, skip it or ask you.
 
-Nothing needs to be committed first. The agent works in a lane when the workspace repository has a
-commit to start from, and its result stays on the lane's branch for review. In a workspace kept as
-plain files it works in the owner checkout as a pair session.
+Nothing needs to be committed first. The agent is a pair session in the owner checkout, working with
+you: its changes are there for you to review, and aw move-to-lane gives them a branch and a merge
+request when you want one. With --lane it works in a lane of its own instead, when the workspace
+repository has a commit to start from, and its result stays on the lane's branch for review; it may
+run aw rehearse there without a permission prompt (aw adds that one rule to the lane's own
+gitignored Claude Code settings, and it goes away with the lane).
 
-The agent may run aw rehearse in its lane without a permission prompt: aw adds that one rule to the
-lane's own gitignored Claude Code settings, and it goes away with the lane.
-
-Hooks that are not aw's are turned off in the onboarding lane, because another system's guard can
-refuse everything in a lane, and the agent is told which ones. Your checkout keeps them.
+With --lane, hooks that are not aw's are turned off in the onboarding lane when you pass
+--without-other-hooks, because another system's guard can refuse everything in a lane. Your checkout
+keeps them.
 
 Hooks see your environment, so VARIABLE=value aw onboard reaches them. To keep a setting, put it in
 workspace.toml under [projects.<name>.env].
@@ -179,16 +180,17 @@ To revisit a configuration that already exists, use aw audit.`,
 		RunE: run(func(cmd *cobra.Command, _ []string) error {
 			if review {
 				fmt.Fprintln(cmd.ErrOrStderr(), "aw onboard: --review is now aw audit, which also compares the configuration with what this aw can do. Starting it.")
-				return startConfigAgent(cmd, auditAgent("", harness, dropOtherHooks))
+				return startConfigAgent(cmd, auditAgent("", harness, dropOtherHooks, inLane))
 			}
 			return startConfigAgent(cmd, configAgent{
-				name: "aw onboard", purpose: lanes.PurposeOnboard, harness: harness, dropOtherHooks: dropOtherHooks,
+				name: "aw onboard", purpose: lanes.PurposeOnboard, harness: harness, dropOtherHooks: dropOtherHooks, lane: inLane,
 				prompt: func(*workspace.Workspace, *config.Config) string {
 					return "Use the aw-workspace-design skill to design this workspace, then stop and report."
 				},
 			})
 		}),
 	}
+	cmd.Flags().BoolVar(&inLane, "lane", false, "start the agent in a lane of its own, to work alone, instead of as a pair session with you")
 	cmd.Flags().BoolVar(&review, "review", false, "the same as aw audit, which replaces it")
 	_ = cmd.Flags().MarkHidden("review")
 	cmd.Flags().StringVar(&harness, "harness", "", "the harness to launch")
@@ -203,13 +205,17 @@ type configAgent struct {
 	purpose        string // the lane's
 	harness        string
 	dropOtherHooks bool
+	// lane starts the agent in a lane of its own (--lane), to work alone; otherwise it is a pair
+	// session in the owner checkout, with the developer (docs/spec/sessions.md, "Routes").
+	lane bool
 	// prompt is the agent's task, from the configuration as setup left it.
 	prompt func(ws *workspace.Workspace, c *config.Config) string
 }
 
 // startConfigAgent runs everything aw setup does, reports what aw inspect finds, and starts the
-// agent in a lane, or in the owner checkout as a pair session when there can be no lane. A failure
-// in setup goes to the agent instead of ending the command.
+// agent as a pair session in the owner checkout, or with --lane in a lane of its own (in the owner
+// checkout still, when there can be no lane). A failure in setup goes to the agent instead of
+// ending the command.
 func startConfigAgent(cmd *cobra.Command, a configAgent) error {
 	errOut := cmd.ErrOrStderr()
 	fmt.Fprintf(errOut, "%s: setting up this workspace, then starting an agent. On a large project this can take a few minutes, and progress is shown here.\n", a.name)
@@ -218,7 +224,10 @@ func startConfigAgent(cmd *cobra.Command, a configAgent) error {
 		return err
 	}
 	// Whether a lane can be had is known before setup, which can take minutes: say so first.
-	full := noFreeLane(ws, c, a.purpose)
+	var full error
+	if a.lane {
+		full = noFreeLane(ws, c, a.purpose)
+	}
 	if full != nil {
 		ui.NewOut(errOut).Warn("%s: no lane is free for this (%v). After setup, the agent starts in the owner checkout, as a pair session, to sort that out with you first.", a.name, full)
 	}
@@ -255,10 +264,12 @@ func startConfigAgent(cmd *cobra.Command, a configAgent) error {
 	if others := sandbox.OtherHooks(ws.Owner); len(others) > 0 {
 		list := strings.Join(others, "\n")
 		ownerNote = "\n\nThese hooks are not aw's, and they run in this checkout. If one refuses your tool calls, say so and ask the human to remove it:\n" + list
-		if a.dropOtherHooks {
+		switch {
+		case !a.lane:
+		case a.dropOtherHooks:
 			fmt.Fprintf(errOut, "%s: turning off hooks that are not aw's, in the onboarding lane only, as asked. Your checkout keeps them:\n  %s\n", a.name, strings.Join(others, "\n  "))
 			laneNote = "\n\nThese hooks are not aw's, and aw turned them off in this lane only. Decide whether the workspace should keep each one, and change the harness files on your branch to match:\n" + list
-		} else {
+		default:
 			fmt.Fprintf(errOut, "%s: these hooks are not aw's and they run in the lane too. If one refuses everything there, run %s --without-other-hooks:\n  %s\n", a.name, a.name, strings.Join(others, "\n  "))
 			laneNote = "\n\nThese hooks are not aw's, and they run in this lane too:\n" + list
 		}
@@ -266,12 +277,16 @@ func startConfigAgent(cmd *cobra.Command, a configAgent) error {
 	m := &lanes.Manager{WS: ws, Cfg: c}
 	var failed error
 	steps.Heading("Starting the agent")
-	if m.CanReview(cmd.Context()) {
+	canReview := m.CanReview(cmd.Context())
+	if canReview && a.lane {
 		fmt.Fprintf(errOut, "%s: letting this lane's agent run %s without asking, in this lane only, so that it can test its own proposal in a throwaway copy\n", a.name, sandbox.RehearseCommand)
 	}
-	if !m.CanReview(cmd.Context()) {
+	switch {
+	case !canReview:
 		prompt += ownerNote + "\n\nThis workspace is not in a Git repository with a commit, so there is no lane branch to review: you are a pair session in the owner checkout. Leave your changes there, and report them."
-	} else {
+	case !a.lane:
+		prompt += ownerNote + "\n\nYou are a pair session in the owner checkout, working with the developer, who is here: make the agreed changes here, and they review the diff. If they want the work on a branch with a merge request, bin/aw move-to-lane \"<purpose>\" moves it to a lane of its own."
+	default:
 		if full = noFreeLane(ws, c, a.purpose); full != nil {
 			failed = full
 		} else if failed = startLaneSession(cmd, a.purpose, harness, "", "", false, a.dropOtherHooks, true, launch.PromptArgs(harness, prompt+laneNote)); failed == nil {

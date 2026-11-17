@@ -1,4 +1,4 @@
-# aw onboard runs the design skill in a lane, so that its result goes through review. It is the
+# aw onboard --lane runs the design skill in a lane, so that its result goes through review. It is the
 # human's to start.
 # req: R85 R88
 # source: onboarding.md, "Review and commit"
@@ -7,12 +7,12 @@
 owner-may-change
 stubs claude
 workspace solo --single --init
-exec aw onboard
+exec aw onboard --lane
 grep 'claude .*aw-workspace-design' $STUB_LOG
 exists .worktrees/01
 exec git -C .worktrees/01 rev-parse --abbrev-ref HEAD
 stdout '^aw/'
-exec aw onboard --review
+exec aw onboard --lane --review
 stderr 'is now aw audit'
 grep 'aw-workspace-audit' $STUB_LOG
 rm .claude/settings.json .codex/hooks.json

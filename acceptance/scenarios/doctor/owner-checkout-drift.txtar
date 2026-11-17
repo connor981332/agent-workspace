@@ -30,5 +30,5 @@ exec git switch -q main
 exec git merge -q --ff-only origin/main
 exec sh -c 'echo "# trying something" >> workspace.toml'
 exec aw doctor
-stdout '^! owner checkout: workspace.toml has uncommitted changes, which new lanes already use'
+stdout '^! owner checkout: workspace.toml has uncommitted changes: aw sets new lanes up with them, but each lane.s own copy'
 ! stdout 'behind'
