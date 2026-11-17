@@ -48,6 +48,9 @@ type Options struct {
 	Ours      []string
 	// ExpectBranch is the branch the worktree must be on.
 	ExpectBranch string
+	// DetachedAt, when set, is the one commit a detached HEAD may be at: a repository that an
+	// earlier recycle of the lane had already reset to its base before another one failed.
+	DetachedAt string
 }
 
 // Check examines one worktree.
@@ -61,7 +64,11 @@ func Check(ctx context.Context, path, baseRef string, o Options) Repo {
 
 	branch, err := g.Line(ctx, "symbolic-ref", "--quiet", "--short", "HEAD")
 	if err != nil {
-		return unknown("the worktree is on a detached HEAD, not on its branch")
+		head, herr := g.Line(ctx, "rev-parse", "--verify", "HEAD^{commit}")
+		if o.DetachedAt == "" || herr != nil || head != o.DetachedAt {
+			return unknown("the worktree is on a detached HEAD, not on its branch")
+		}
+		branch = "" // already reset by an earlier recycle; its proof and cleanliness still decide
 	}
 	r.Branch = branch
 	if o.ExpectBranch != "" && branch != o.ExpectBranch {

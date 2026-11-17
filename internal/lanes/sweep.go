@@ -84,8 +84,15 @@ func (m *Manager) Sweep(ctx context.Context, o SweepOptions) (*SweepReport, erro
 		rep.Open = []state.JournalEntry{}
 	}
 	failedLanes := map[int]state.JournalEntry{}
+	retryLane := 0
 	for _, e := range open {
 		failedLanes[e.Lane] = e
+		if e.ID == o.Retry {
+			retryLane = e.Lane
+		}
+	}
+	if o.Retry > 0 && retryLane == 0 {
+		return nil, fmt.Errorf("no unfinished cleanup has the number %d → aw sweep lists the unfinished ones", o.Retry)
 	}
 
 	m.forges, m.forgeDeadline = map[string]*forge.Client{}, o.Now.Add(30*time.Second)
@@ -136,6 +143,10 @@ func (m *Manager) Sweep(ctx context.Context, o SweepOptions) (*SweepReport, erro
 	}
 	for _, d := range rep.Lanes {
 		if d.Action != ActionRecycle && d.Action != ActionDestroy {
+			continue
+		}
+		if retryLane != 0 && d.Number != retryLane {
+			d.Result = "skipped" // --retry acts on its own lane only
 			continue
 		}
 		if err := m.apply(ctx, d, o); err != nil {
@@ -308,6 +319,9 @@ func repoLabel(r state.LaneRepo) string {
 // links and .aw/owner.
 func (m *Manager) evidenceOptions(r state.LaneRepo) evidence.Options {
 	o := evidence.Options{ExpectBranch: r.Branch}
+	if r.Branch == "" {
+		o.DetachedAt = r.BaseSHA // reset by a recycle that did not finish
+	}
 	if r.Project == "" {
 		o.Generated = append(o.Generated, m.Cfg.Workspace.Generated...)
 		o.Ours = append(o.Ours, append([]string{".aw/owner", workspace.MaterializedPath}, sandbox.Ours(r.Path)...)...)
@@ -418,20 +432,32 @@ func (m *Manager) recycle(ctx context.Context, d *Decision) error {
 	if err := m.authorizeRefs(ctx); err != nil {
 		return err
 	}
-	var repos []state.LaneRepo
-	for i, r := range d.stored {
+	// Each repository is recorded as it is reset, so that a recycle that fails part way leaves a
+	// record of what it did, and a retry continues from there instead of finding a detached HEAD.
+	repos := slices.Clone(d.stored)
+	var done []string
+	for i, r := range repos {
 		ev := d.Repos[i]
 		// The post-checkout hook is a setup step of the next lane, which honours post_checkout.
 		g := run.In(r.Path, noHooks...)
 		removeMaterialized(r.Path) // a copy that replaced a tracked file must not travel to the base
+		failed := func(err error) error {
+			if len(done) == 0 {
+				return fmt.Errorf("%s: %w", repoLabel(r), err)
+			}
+			return fmt.Errorf("%s: %w (already reset: %s; a retry continues from here)", repoLabel(r), err, strings.Join(done, ", "))
+		}
 		if _, err := g.Run(ctx, "switch", "--quiet", "--detach", ev.Base); err != nil {
-			return err
+			return failed(err)
 		}
 		if err := deleteBranch(ctx, g, r.Branch, ev); err != nil {
-			return err
+			return failed(err)
 		}
-		r.Branch, r.BaseSHA = "", ev.Base
-		repos = append(repos, r)
+		repos[i].Branch, repos[i].BaseSHA = "", ev.Base
+		if err := m.Store.Write(ctx, func(tx *sql.Tx) error { return state.SetLaneRepos(tx, d.Number, repos) }); err != nil {
+			return failed(err)
+		}
+		done = append(done, repoLabel(r))
 	}
 	return m.Store.Write(ctx, func(tx *sql.Tx) error {
 		l := d.lane
@@ -525,6 +551,10 @@ func (m *Manager) destroy(ctx context.Context, l state.Lane, stored []state.Lane
 			return err
 		}
 		if err := state.ForgetSetup(tx, l.Number); err != nil {
+			return err
+		}
+		// What failed on this lane earlier is over with it: the lane is gone.
+		if err := state.CloseLaneJournal(tx, l.Number, "the lane was removed"); err != nil {
 			return err
 		}
 		return state.DeleteLane(tx, l.Number)

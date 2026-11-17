@@ -38,6 +38,13 @@ func EndJournal(tx *sql.Tx, id int, status, detail string) error {
 	return err
 }
 
+// CloseLaneJournal ends a lane's unfinished entries, saying why, once the lane itself is gone.
+func CloseLaneJournal(tx *sql.Tx, lane int, why string) error {
+	_, err := tx.Exec(`UPDATE journal SET status = ?, detail = CASE WHEN detail = '' THEN ? ELSE detail || ' (then ' || ? || ')' END,
+		ended = ? WHERE lane = ? AND status != ?`, JournalDone, why, why, now(), lane, JournalDone)
+	return err
+}
+
 // OpenJournal returns the operations that did not finish: failed, or still running (a crash).
 func OpenJournal(q Querier) ([]JournalEntry, error) {
 	rows, err := q.Query(`SELECT id, kind, coalesce(lane, 0), step, status, detail, started, coalesce(ended, '') FROM journal

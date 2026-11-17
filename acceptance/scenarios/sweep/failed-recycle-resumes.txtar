@@ -1,0 +1,50 @@
+# A recycle that fails part way records each repository it has already reset, says which, and keeps
+# the lane. --retry carries on from there, acting only on its own lane, and discarding a lane closes
+# its unfinished entries, so a lane that is gone leaves nothing behind in the journal.
+# req: R25 R31
+# source: dogfood of 0.3.0 (plans/dogfood-0.3.md 1.3, 1.4)
+# milestone: M12
+
+workspace shop --init
+exec aw attach 'one'
+git-fail '^never$'
+exec sh -c 'echo "switch --quiet --detach $(git -C web rev-parse origin/main)" >> "$WORK/.git-fail/patterns"'
+! exec aw sweep --apply --json
+json stdout .lanes[0].action recycle
+json stdout .lanes[0].result failed
+stdout 'web: .*already reset: .*api.*a retry continues from here'
+json stdout .unfinished[0].id 1
+
+# The lanes that become recyclable meanwhile are left alone by --retry.
+exec aw attach 'two'
+exec rm $WORK/.git-fail/patterns
+exec touch $WORK/.git-fail/patterns
+exec aw sweep --apply --retry 1 --json
+json stdout .lanes[0].result done
+json stdout .lanes[1].action recycle
+json stdout .lanes[1].result skipped
+! json stdout .unfinished[0]
+exists .worktrees/02
+exec git -C web rev-parse --verify --quiet refs/heads/aw/two
+! exec aw sweep --apply --retry 7
+stderr 'no unfinished cleanup has the number 7'
+
+# A lane discarded after a failed cleanup takes its journal entry with it.
+exec sh -c 'echo "switch --quiet --detach $(git -C api rev-parse origin/main)" >> "$WORK/.git-fail/patterns"'
+! exec aw sweep --apply --json
+json stdout .unfinished[0].lane 2
+exec aw discard two --yes
+exec aw sweep --json
+! json stdout .unfinished[0]
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 2
+
+[projects.web]
+[projects.api]
