@@ -9,12 +9,12 @@ recorded as the principles in [AGENTS.md](../AGENTS.md). This plan turns those d
 
 ## Status
 
-**State:** PARTIALLY IMPLEMENTED
+**State:** FULLY IMPLEMENTED
 
-**Updated:** 2026-11-16
+**Updated:** 2026-11-17
 
 **Branches / MRs:** #96 and #97 (AGENTS.md and this plan), #98 (Phase 1), #99 (Phase 2), #100
-(Phase 3), #101 (Phase 4), #102 and #103 (Phase 5). #104 (Phase 6). Phase 7 is on `feat/dogfood-0.3-phase7`.
+(Phase 3), #101 (Phase 4), #102 and #103 (Phase 5), #104 (Phase 6) and #105 (Phase 7).
 
 **Done:** triage and decisions; AGENTS.md. Phases 1 to 4, each item with a scenario that fails on
 master first. Unit tests, vet, the full acceptance suite (`-count=1`), the coverage check and the
@@ -91,10 +91,10 @@ latency budgets pass locally. Differences from the plan as written:
 - 7.4: lanes with the same unmet prerequisite, or the same step failing with the same first line,
   are one line under *needs you*, naming the lanes.
 
-**In progress:** Phases 6 and 7, waiting on CI.
+**In progress:** nothing.
 
-**Next step:** merge Phases 6 and 7, rebuild the owner's dev binary, and set the plan to IMPLEMENTED.
-Phases 5 and 6 are released together once the owner has used them in a real workspace.
+**Next step:** the owner uses Phases 5 to 7 on the dev binary in a real workspace; then they are
+released together (see Verification).
 
 ## Decisions taken
 
