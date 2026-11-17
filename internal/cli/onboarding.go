@@ -283,7 +283,7 @@ func startConfigAgent(cmd *cobra.Command, a configAgent) error {
 	}
 	defer w.Close()
 	if failed != nil || setupErr != nil {
-		offerDelegation(cmd, w)
+		offerDelegation(cmd, w, setupErr, failed)
 	}
 	return startPairSession(cmd, w, harness, false, launch.PromptArgs(harness, prompt))
 }
@@ -302,9 +302,22 @@ func failureContext(err error, output string) string {
 	return text + "\n\nLook into this yourself first: read the logs it names, and use bin/aw doctor and bin/aw inspect --json. Decide for each problem whether to fix it, skip it or ask the human, and do not ask the human to copy output or commands for you."
 }
 
-// offerDelegation lets the agent rerun aw setup while it works on a failure, if the human says so.
-func offerDelegation(cmd *cobra.Command, w *writeContext) {
-	if !confirm(cmd.InOrStdin(), cmd.ErrOrStderr(), "Let the agent rerun aw setup for the next hour while it works on this?") {
+// offerDelegation lets the agent run aw's maintenance commands while it works on a failure, if the
+// human says so. The question says what failed and what the hour is for: without it, it reads like
+// an offer to rerun the same failing setup.
+func offerDelegation(cmd *cobra.Command, w *writeContext, setupErr, laneErr error) {
+	var why []string
+	if setupErr != nil {
+		why = append(why, "Setup did not finish: "+firstLine(setupErr.Error())+".")
+	}
+	if laneErr != nil {
+		why = append(why, "No lane could be created: "+firstLine(laneErr.Error())+".")
+	}
+	what := "The agent will look into this with you. Let it run aw setup, aw sweep --apply and aw park for the next hour, to try its fixes?"
+	for _, line := range why {
+		fmt.Fprintln(cmd.ErrOrStderr(), ui.Clean(line))
+	}
+	if !confirm(cmd.InOrStdin(), cmd.ErrOrStderr(), what) {
 		return
 	}
 	if err := w.store.Write(cmd.Context(), func(tx *sql.Tx) error { _, err := state.Grant(tx, time.Hour); return err }); err != nil {
@@ -990,4 +1003,10 @@ func (r *rehearsal) dropArchives(ctx context.Context, ws *workspace.Workspace, n
 			g.Run(ctx, "update-ref", "-d", ref)
 		}
 	}
+}
+
+// firstLine is the first line of s, which is what a question has room for.
+func firstLine(s string) string {
+	line, _, _ := strings.Cut(strings.TrimSpace(s), "\n")
+	return line
 }
