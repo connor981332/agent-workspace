@@ -16,6 +16,7 @@ This audits the workspace's configuration. What the projects themselves must cha
    - `bin/aw config explain <key>` for any key you are about to discuss.
 2. Brief the developer. Keep it short, and rank each group by what a change would gain: lanes that start, set up or serve faster first, then fidelity and safety, then tidiness. For each item say what it gains, what it costs, and what you recommend.
    - *The repositories changed*: a new project, server, dependency on data, or gitignored file a lane needs.
+   - *Lanes that would not be recycled*: a remote host `forge = "auto"` does not recognize while the team squash-merges, files a lane's setup leaves that nothing declares `generated`, and slow checkout hooks, from `bin/aw doctor` and `bin/aw rehearse`.
    - *aw changed*: aw's suggestions, and the changelog items since `audited_with` that touch keys or features this workspace uses or could use. Leave out items that do not apply here.
    - *Worth discussing again*: a recorded decision whose premise a newer aw changed. Name the changelog item that changed it. Do not reopen a recorded decision without such a reason, and do not raise what `[audit] declined` lists.
    If there is nothing worth changing, say so plainly. That is a good result.
