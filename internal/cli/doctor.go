@@ -12,7 +12,7 @@ import (
 )
 
 func newDoctorCmd() *cobra.Command {
-	var asJSON, timings, projects bool
+	var asJSON, timings, projects, prerequisites bool
 	cmd := &cobra.Command{
 		Use:   "doctor",
 		Short: "Check the workspace and this machine, and name the fix for every problem",
@@ -30,7 +30,7 @@ It only reads, so it is safe before setup and from any lane. It exits 1 if any c
 			if projects {
 				return doctorProjects(cmd, asJSON)
 			}
-			r := doctor.Run(cwd, frameworkVersion(), timings)
+			r := doctor.RunWith(cwd, frameworkVersion(), doctor.Options{Timings: timings, Prerequisites: prerequisites})
 			out := cmd.OutOrStdout()
 			if asJSON {
 				if err := writeJSON(out, r); err != nil {
@@ -64,5 +64,6 @@ It only reads, so it is safe before setup and from any lane. It exits 1 if any c
 	cmd.Flags().BoolVar(&projects, "projects", false, "audit the projects for what would collide in lanes (it only reads files)")
 	cmd.Flags().BoolVar(&asJSON, "json", false, "print the checks as JSON")
 	cmd.Flags().BoolVar(&timings, "timings", false, "also time each phase, to diagnose a slow workspace")
+	cmd.Flags().BoolVar(&prerequisites, "prerequisites", false, "run the workspace's prerequisite checks again, instead of showing the last results")
 	return cmd
 }

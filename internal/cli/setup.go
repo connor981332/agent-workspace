@@ -103,7 +103,7 @@ func setupWorkspace(cmd *cobra.Command, ws *workspace.Workspace, c *config.Confi
 		return err
 	}
 	installFailed := installOwner(cmd, ws, c, startContainers, asJSON)
-	report := doctor.Run(ws.Owner, frameworkVersion(), false)
+	report := doctor.RunWith(ws.Owner, frameworkVersion(), doctor.Options{Prerequisites: true})
 	var finish error
 	switch {
 	case !report.OK:

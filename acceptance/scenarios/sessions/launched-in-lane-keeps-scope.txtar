@@ -1,0 +1,20 @@
+# A session aw new launches in a lane has the lane as its home: after it releases the lane it may
+# still edit there, as a harness started in the lane by hand may.
+# req: R23
+# source: plans/dogfood-0.3.md 5.3 (docs/spec/sessions.md, "Scope is set when a session starts")
+# milestone: M12
+
+workspace solo --single --init
+stubs claude
+exec aw new 'add feature flag'
+exec sh $WORK/detach-then-write.sh
+stdout 'Released lane feature-flag'
+stdout 'It started there, so it may still edit it'
+
+-- detach-then-write.sh --
+set -e
+id=$(grep -o 'AW_SESSION=claude:[^ ]*' "$STUB_LOG" | head -1 | cut -d: -f2)
+test -n "$id"
+cd "$OWNER/.worktrees/01"
+AW_SESSION="claude:$id" aw detach
+AW_SESSION="claude:$id" awtest-hook -session "$id" write "$OWNER/.worktrees/01/flag.txt"

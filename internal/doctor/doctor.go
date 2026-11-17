@@ -28,6 +28,7 @@ import (
 	"github.com/connor981332/agent-workspace/internal/gitx/run"
 	"github.com/connor981332/agent-workspace/internal/lanes"
 	"github.com/connor981332/agent-workspace/internal/launcher"
+	"github.com/connor981332/agent-workspace/internal/lifecycle"
 	"github.com/connor981332/agent-workspace/internal/platform"
 	"github.com/connor981332/agent-workspace/internal/runners"
 	"github.com/connor981332/agent-workspace/internal/sandbox"
@@ -70,6 +71,19 @@ var ContentGit = [3]int{2, 38, 0}
 
 // Run checks the workspace that contains dir. version is the running binary's.
 func Run(dir, version string, withTimings bool) *Report {
+	return RunWith(dir, version, Options{Timings: withTimings})
+}
+
+// Options are what aw doctor does beyond its usual checks.
+type Options struct {
+	Timings bool
+	// Prerequisites checks the workspace's prerequisites again, instead of reporting the last results.
+	Prerequisites bool
+}
+
+// RunWith is Run with options.
+func RunWith(dir, version string, o Options) *Report {
+	withTimings := o.Timings
 	r := &Report{Suggestions: []audit.Suggestion{}}
 	add := func(c Check) { r.Checks = append(r.Checks, c) }
 	defer func() {
@@ -177,6 +191,7 @@ func Run(dir, version string, withTimings bool) *Report {
 	checkSandboxes(ws.Owner, c, add)
 	checkForge(ws.Owner, c, add)
 	checkOwnerCheckout(ws, c, add)
+	checkPrerequisites(ws, c, stateDir, o.Prerequisites, add)
 	checkLanes(ws, c, stateDir, add)
 	addMachine(add)
 	if withTimings {
@@ -742,4 +757,59 @@ func checkForge(owner string, c *config.Config, add func(Check)) {
 	add(Check{Name: "forge", Status: Warn,
 		Message: fmt.Sprintf("forge = \"auto\" recognizes no forge at %s, so aw sweep cannot ask whether a squash-merged lane was merged", strings.Join(hosts, ", ")),
 		Fix:     `set [workspace] forge = "gitlab" or "github" in workspace.toml, or "none" to say there is no forge`})
+}
+
+// checkPrerequisites reports each prerequisite's last result, without running anything (R2), or with
+// check, runs every check again.
+func checkPrerequisites(ws *workspace.Workspace, c *config.Config, stateDir string, check bool, add func(Check)) {
+	if c == nil || len(c.Prerequisites) == 0 {
+		return
+	}
+	last := map[string]lifecycle.PrereqResult{}
+	if stateDir != "" {
+		last = lifecycle.LastPrereqs(stateDir)
+	}
+	names := make([]string, 0, len(c.Prerequisites))
+	for n := range c.Prerequisites {
+		names = append(names, n)
+	}
+	slices.Sort(names)
+	for _, n := range names {
+		p := c.Prerequisites[n]
+		name := "prerequisite " + n
+		r, ok := last[n]
+		if check {
+			r, ok = lifecycle.CheckPrereq(context.Background(), ws.Owner, stateDir, n, p), true
+		}
+		switch {
+		case !ok:
+			add(Check{Name: name, Status: Info, Message: "not checked yet; a lane's setup checks it when a project needs it", Fix: "aw doctor --prerequisites checks it now"})
+		case r.Met:
+			add(Check{Name: name, Status: OK, Message: "met, " + checkedAgo(r.Checked, check)})
+		default:
+			msg := "not met, " + checkedAgo(r.Checked, check)
+			if p.Message != "" {
+				msg += ": " + p.Message
+			}
+			if r.Output != "" {
+				msg += " (" + r.Output + ")"
+			}
+			fix := p.Fix
+			if fix == "" {
+				fix = "meet it, then aw doctor --prerequisites"
+			}
+			add(Check{Name: name, Status: Warn, Message: msg, Fix: fix})
+		}
+	}
+}
+
+func checkedAgo(at string, now bool) string {
+	if now {
+		return "checked just now"
+	}
+	t, err := time.Parse(time.RFC3339Nano, at)
+	if err != nil {
+		return "when last checked"
+	}
+	return "when last checked, " + time.Since(t).Round(time.Second).String() + " ago (aw doctor --prerequisites checks again)"
 }

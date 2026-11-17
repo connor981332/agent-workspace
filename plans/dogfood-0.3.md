@@ -14,7 +14,7 @@ recorded as the principles in [AGENTS.md](../AGENTS.md). This plan turns those d
 **Updated:** 2026-11-16
 
 **Branches / MRs:** #96 and #97 (AGENTS.md and this plan), #98 (Phase 1), #99 (Phase 2), #100
-(Phase 3), #101 (Phase 4), #102 and #103 (Phase 5). Phase 6 is on `feat/dogfood-0.3-phase6`.
+(Phase 3), #101 (Phase 4), #102 and #103 (Phase 5). #104 (Phase 6). Phase 7 is on `feat/dogfood-0.3-phase7`.
 
 **Done:** triage and decisions; AGENTS.md. Phases 1 to 4, each item with a scenario that fails on
 master first. Unit tests, vet, the full acceptance suite (`-count=1`), the coverage check and the
@@ -82,9 +82,19 @@ latency budgets pass locally. Differences from the plan as written:
 - 6.5: a harness that cannot ask (Codex, OpenCode) refuses what would be asked, and the message
   says so; the parity scenario checks both kinds.
 
-**In progress:** Phase 6, waiting on CI.
+- 7.1: `[prerequisites.<name>]` has `check`, `fix` and `message`; a project lists names under
+  `prerequisites`, and validation refuses an unknown one.
+- 7.2: the cache is `.git/aw/prerequisites.json`, per workspace rather than per machine: a met result
+  is kept for five minutes, an unmet one for ten seconds. A waiting step polls every five seconds and
+  fails after half an hour, naming the fix. Only a project's own steps wait; the steps at claim time
+  name no project.
+- 7.4: lanes with the same unmet prerequisite, or the same step failing with the same first line,
+  are one line under *needs you*, naming the lanes.
 
-**Next step:** merge Phase 6, rebuild the owner's dev binary, then Phase 7 (prerequisites).
+**In progress:** Phases 6 and 7, waiting on CI.
+
+**Next step:** merge Phases 6 and 7, rebuild the owner's dev binary, and set the plan to IMPLEMENTED.
+Phases 5 and 6 are released together once the owner has used them in a real workspace.
 
 ## Decisions taken
 

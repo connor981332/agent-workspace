@@ -209,6 +209,8 @@ var schema = table("",
 			"install_stamp", strList("Files, relative to the project, whose contents decide whether install reruns, e.g. package-lock.json."),
 			"run", str("The default command for aw run <project> with no command."),
 			"needs", strList("Resources the project's commands need."),
+			"prerequisites", strList("Names of [prerequisites] this project's setup needs met on the machine, such as a VPN or a signed-in CLI. "+
+				"aw checks them before the project's setup in a lane, and waits on you while one is not met."),
 			"smoke", str("A quick command that proves the project works in a lane. aw rehearse runs it."),
 			"depends_on", strList("Projects this one consumes. A change set merges those first (R69)."),
 			"publication", strList("Actions pre-authorized in this project, as in [publication] allow.").checked(oneOfEach(publicationActions...)),
@@ -319,6 +321,15 @@ var schema = table("",
 		"offset", integer("Added to every port of this workspace, so two workspaces on one machine do not collide.").
 			between(0, 60000).withDefault(int64(0)),
 	),
+	"prerequisites", mapOf("What the machine must have before a project's setup can work, such as a VPN, a signed-in CLI or a running "+
+		"Docker. A project names those it needs under prerequisites. aw checks one once before a setup that needs it, keeps the result "+
+		"for a few minutes across lanes, and while it is not met, the setups that need it wait on you, keeping their place. aw only "+
+		"prints the fix; the human runs it. aw doctor shows the last result, and aw doctor --prerequisites checks again.", nameRE, nameFix,
+		table("",
+			"check", str("A command that exits 0 when the prerequisite is met. It runs from the owner checkout, with a 20-second limit, and should not change anything."),
+			"fix", str("What the human does to meet it: a command to run, or an instruction, e.g. \"connect the VPN\" or \"gcloud auth login\"."),
+			"message", str("Why it is needed, e.g. \"the api's install downloads from the internal registry\"."),
+		)),
 	"roles", mapOf("Team roles (R65). A lane takes one with aw new --role. No role can override path confinement, secrets, destructive "+
 		"Git or owner-only commands. implementer is built in, and denies publish and merge.", nameRE, nameFix,
 		table("",
