@@ -89,18 +89,28 @@ report, and --apply, to them.`,
 				if len(rep.Lanes) == 0 {
 					fmt.Fprintln(out, "No lanes.")
 				}
+				// One row a lane; on a narrow terminal the reason gives way (aw sweep <lane> and
+				// --json have it whole), and anywhere else it is printed in full.
+				o := ui.NewOut(out)
+				table := [][]string{}
 				for _, d := range rep.Lanes {
 					name := d.Name
 					if name == "" {
 						name = "(pool)"
 					}
-					result := ""
+					reason := d.Reason
 					if d.Result != "" {
-						result = " [" + d.Result + "]"
+						reason += " [" + d.Result + "]"
 					}
-					fmt.Fprintf(out, "%s %-20s %-8s %s%s\n", d.Dir, ui.Clean(name), d.Action, ui.Clean(d.Reason), result)
+					table = append(table, []string{d.Dir, name, d.Action, reason})
+				}
+				if len(rep.Lanes) == 1 {
+					o = ui.Plain(out) // one lane asked for by name: its reason, whole
+				}
+				o.Table(table, 3)
+				for _, d := range rep.Lanes {
 					if d.Error != "" {
-						fmt.Fprintf(out, "   error: %s\n", ui.Clean(d.Error))
+						o.Error("%s: %s", d.Dir, ui.Clean(d.Error))
 					}
 				}
 				var next []*lanes.Decision
