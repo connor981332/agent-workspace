@@ -13,10 +13,10 @@ recorded as the principles in [AGENTS.md](../AGENTS.md). This plan turns those d
 
 **Updated:** 2026-11-16
 
-**Branches / MRs:** #96 and #97 (AGENTS.md and this plan), #98 (Phase 1), #99 (Phase 2), all
-merged. Phase 3 is on `feat/dogfood-0.3-phase3`.
+**Branches / MRs:** #96 and #97 (AGENTS.md and this plan), #98 (Phase 1), #99 (Phase 2), #100
+(Phase 3). Phase 4 is on `feat/dogfood-0.3-phase4`.
 
-**Done:** triage and decisions; AGENTS.md. Phases 1 to 3, each item with a scenario that fails on
+**Done:** triage and decisions; AGENTS.md. Phases 1 to 4, each item with a scenario that fails on
 master first. Unit tests, vet, the full acceptance suite (`-count=1`), the coverage check and the
 latency budgets pass locally. Differences from the plan as written:
 - 1.1: the dispatcher drops only `GIT_DIR` and `GIT_WORK_TREE` for a team hook in a lane, which is
@@ -40,12 +40,20 @@ latency budgets pass locally. Differences from the plan as written:
   off one, nothing is cut. `aw lanes` also says how to clear lanes. `aw upgrade` counts the notes.
   `aw audit` and `aw onboard` have headings, and preflight findings go to the agent in full while
   the person gets a count. `aw setup` steps through clones and installs and ends with a summary.
+- 4.1: the content proof also covers histories with merge commits, which patch equivalence cannot.
+  A lane made only of empty commits is, rightly, proven by it. An unproven lane's reason says how
+  many files merging it would change, or that it would conflict.
+- 4.2: removing a proven lane, when the pool is full, archives it too, not only recycling it.
+  `[lanes] archive_retention` (default 30 days, 0 keeps them) is applied by a full
+  `aw sweep --apply`, not by one aimed at lanes or a retry.
+- 4.3: Git 2.34 to 2.37 is a doctor warning, since everything but the content proof works. The
+  scenarios that rely on it use a new `[git-content]` condition, as CI runs sweep on Git 2.34.
 - CI: the acceptance step runs with `-timeout 18m`, since macos-15-intel comes close to go test's
   default ten minutes.
 
 **In progress:** nothing.
 
-**Next step:** merge Phase 3 after CI, rebuild the owner's dev binary, then Phase 4.
+**Next step:** merge Phase 4 after CI, rebuild the owner's dev binary, then Phase 5, which starts with its design note (5.1).
 
 ## Decisions taken
 
