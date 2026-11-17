@@ -534,11 +534,21 @@ func (m *Manager) destroy(ctx context.Context, l state.Lane, stored []state.Lane
 			return err
 		}
 	}
-	lifecycle.Stop(ctx, m.Store, l.Number)
-	if err := m.teardown(ctx, l); err != nil {
+	// Each step says what it does, and a slow one says it is still at it: removing a large lane
+	// can take minutes, and silence looks like a hang.
+	step := func(what string, fn func() error) error {
+		m.say("%s", what)
+		stop := Beat(m.Progress, "still "+what)
+		defer stop()
+		return fn()
+	}
+	if err := step("stopping its servers", func() error { lifecycle.Stop(ctx, m.Store, l.Number); return nil }); err != nil {
 		return err
 	}
-	if err := m.Data().DropLane(ctx, m.ProviderLane(l)); err != nil {
+	if err := step("running its teardown", func() error { return m.teardown(ctx, l) }); err != nil {
+		return err
+	}
+	if err := step("dropping its data", func() error { return m.Data().DropLane(ctx, m.ProviderLane(l)) }); err != nil {
 		return err
 	}
 	slices.SortFunc(stored, func(a, b state.LaneRepo) int { return strings.Compare(b.Project, a.Project) }) // the root ("") last
@@ -550,7 +560,10 @@ func (m *Manager) destroy(ctx context.Context, l state.Lane, stored []state.Lane
 				m.removeRootLinks(r.Path)
 			}
 			removeMaterialized(r.Path)
-			if _, err := worktreeGit(ctx, g, "", "worktree", "remove", r.Path); err != nil {
+			if err := step(repoLabel(r)+": removing its worktree", func() error {
+				_, err := worktreeGit(ctx, g, "", "worktree", "remove", r.Path)
+				return err
+			}); err != nil {
 				return err
 			}
 		} else if _, err := worktreeGit(ctx, g, "", "worktree", "prune"); err != nil {

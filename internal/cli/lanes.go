@@ -195,6 +195,7 @@ archived the same way, and a worktree with uncommitted files is left alone.`,
 			if err := newBroker(w).ReleaseLane(cmd.Context(), l.Number); err != nil {
 				return err
 			}
+			m.Progress = func(s string) { fmt.Fprintf(cmd.ErrOrStderr(), "aw: %s: %s\n", l.Name, s) }
 			archived, err := m.Discard(cmd.Context(), l, time.Now())
 			if err != nil {
 				return err

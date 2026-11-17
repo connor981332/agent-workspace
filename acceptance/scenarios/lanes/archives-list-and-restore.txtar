@@ -2,7 +2,7 @@
 # net can be found without knowing ref names. --restore makes a branch from an archive in every
 # repository it holds, which a new lane can start from; it is the human's, as is retrying a sweep.
 # req: R27 R34 R60
-# source: dogfood of 0.3.0 (plans/dogfood-0.3.md 2.3)
+# source: dogfood of 0.3.0 (plans/dogfood-0.3.md 2.3, 2.4)
 # milestone: M12
 
 workspace shop --init
@@ -11,6 +11,8 @@ stdout 'Nothing is archived'
 exec aw attach 'add feature flag'
 lane-commit 01 web/flag.txt 'flag work'
 exec aw discard feature-flag --yes
+# Discarding says what it is doing, step by step.
+stderr '^aw: feature-flag: web: removing its worktree$'
 exec aw archives
 stdout '^feature-flag/[0-9]{8}-[0-9]{6}$'
 stdout '^   web: [0-9a-f]{12} flag work$'
