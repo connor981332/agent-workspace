@@ -5,6 +5,7 @@
 # source: dogfood of 0.3.0 (plans/dogfood-0.3.md 4.1, 4.2)
 # milestone: M12
 
+[!git-content] skip 'this Git cannot compare content (git merge-tree --write-tree needs 2.38)'
 workspace solo --single --init
 exec aw attach 'add feature flag'
 lane-commit 01 a.txt 'first'

@@ -20,7 +20,7 @@ invocations from many agents stay consistent.
  │  config ─────────── load + merge three layers, locks, provenance, compiled cache     │
  │  state ──────────── SQLite store, schema versions, migrations, journal               │
  │  lanes ──────────── lane records, worktrees per project, warm pool, change sets      │
- │  evidence ───────── merge proof: ancestry, patch equivalence, forge exact head       │
+ │  evidence ───────── merge proof: ancestry, patch, content, forge exact head          │
  │  broker ─────────── resources, seats, queue, leases, preemption, eviction, recovery  │
  │  procs ──────────── starting, tracking and stopping servers (process groups)         │
  │  providers ──────── per-lane data: built-in postgres, redis; external via protocol   │

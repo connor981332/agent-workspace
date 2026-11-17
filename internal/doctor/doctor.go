@@ -65,6 +65,9 @@ type Report struct {
 // MinGit is the oldest Git aw supports (plan §9, confirmed by the ref-hook spike).
 var MinGit = [3]int{2, 34, 0}
 
+// ContentGit is the Git that can prove a lane merged by content (git merge-tree --write-tree).
+var ContentGit = [3]int{2, 38, 0}
+
 // Run checks the workspace that contains dir. version is the running binary's.
 func Run(dir, version string, withTimings bool) *Report {
 	r := &Report{Suggestions: []audit.Suggestion{}}
@@ -662,6 +665,10 @@ func addMachine(add func(Check)) {
 		if less(v, MinGit) {
 			add(Check{Name: "git", Status: Fail, Message: fmt.Sprintf("Git %d.%d.%d is older than %d.%d, which aw needs", v[0], v[1], v[2], MinGit[0], MinGit[1]),
 				Fix: fmt.Sprintf("install Git %d.%d or newer", MinGit[0], MinGit[1])})
+		} else if less(v, ContentGit) {
+			// Every aw command works; a squash-merged lane is just never proven by content.
+			add(Check{Name: "git", Status: Warn, Message: fmt.Sprintf("Git %d.%d.%d cannot compare a lane's content with its base (git merge-tree --write-tree), so a squash-merged lane is proven merged only through a forge", v[0], v[1], v[2]),
+				Fix: fmt.Sprintf("install Git %d.%d or newer", ContentGit[0], ContentGit[1])})
 		} else {
 			add(Check{Name: "git", Status: OK, Message: strings.TrimSpace(out)})
 		}

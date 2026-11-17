@@ -212,7 +212,16 @@ A lane becomes `recyclable` only when every repository in it is clean and has on
 
 1. Its head is an ancestor of the base branch.
 2. Its commits are patch-equivalent to commits on the base, for histories without merge commits.
-3. A forge reports exactly one merged change from the same repository at exactly this head.
+3. Merging its head into the base would leave the base's tree as it is (`git merge-tree
+   --write-tree`, Git 2.38 or later): every change it made is already there, as after a squash or a
+   rebase merge. This proves that nothing would be lost, not who merged it. A conflict or any
+   difference proves nothing.
+4. A forge reports exactly one merged change from the same repository at exactly this head.
+
+Proven any way but the first, the lane's commits are not in the base though their changes are, so
+the tip is archived under `refs/aw/archive/<name>/<time>` before the lane is recycled or removed,
+as `aw discard` archives. `aw sweep --apply` removes archives older than `[lanes]
+archive_retention` (30 days by default). A lane kept as unproven says every check that was tried.
 
 A deleted remote branch, a handoff and a quiet session prove nothing. Ignored files that a project
 (or, for the workspace repository, `[workspace]`) does not list as `generated` block recycling,

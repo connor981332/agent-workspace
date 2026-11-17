@@ -22,7 +22,7 @@ stderr 'nothing-by-that-name'
 lane-commit 01 more.txt 'unmerged'
 exec git remote set-url origin https://git.example.org/team/solo.git
 exec aw sweep one
-stdout 'its head is not there, no commit there has the same patch, and merging it would change 1 file; no forge was asked, since forge = "auto" does not recognize git.example.org'
+stdout 'its head is not there, no commit there has the same patch, and (merging it would change 1 file|this Git cannot compare content \(Git 2\.38 or later can\)); no forge was asked, since forge = "auto" does not recognize git.example.org'
 stdout 'set \[workspace\] forge = "gitlab" or "github"'
 exec aw sweep one --json
 json stdout .unrecognized_forges[0] git.example.org
