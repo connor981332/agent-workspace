@@ -1,0 +1,23 @@
+# When an install fails, aw setup says so in the step's own line, names the step's log and the run's
+# log, which holds everything the run did, and ends with what is not set up and what to do.
+# req: R12 R25
+# source: dogfood of 0.3.0 (plans/dogfood-0.3.md 3.2, 3.3)
+# milestone: M12
+
+owner-may-change
+workspace solo --single --init
+! exec aw setup --harness codex
+stdout '^error: solo: installing dependencies: .*exit status 3 \(full log: .*solo\.install\.log\)$'
+stdout '^Everything this setup did is in .*/logs/runs/setup-.*\.log\.$'
+stdout '^Not set up: solo did not install: .* → fix it, then run aw setup again\.$'
+exec sh -c 'grep -l "FAILED solo: installing dependencies" .git/aw/logs/runs/setup-*.log'
+
+-- workspace.toml --
+[workspace]
+name = "Solo"
+namespace = "solo"
+schema = 1
+
+[projects.solo]
+directory = "."
+install = "echo resolving; exit 3"

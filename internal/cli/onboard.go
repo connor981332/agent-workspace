@@ -128,13 +128,15 @@ func installOwner(cmd *cobra.Command, ws *workspace.Workspace, c *config.Config,
 	if quiet {
 		out = errOut
 	}
-	steps := ui.NewOut(out)
-	defer steps.Close()
 	w, err := openForWrite()
 	if err != nil {
 		return err
 	}
 	defer w.Close()
+	steps := ui.NewOut(out)
+	defer steps.Close()
+	// The run's own log holds every step and detail; the newest 50 runs, a week at most, are kept.
+	runLog := steps.LogTo(filepath.Join(filepath.Dir(w.store.Path()), "logs", "runs"), "setup", 50, 7*24*time.Hour)
 	m := manager(w)
 	var containers []string
 	names := make([]string, 0, len(c.Projects))
@@ -220,6 +222,9 @@ func installOwner(cmd *cobra.Command, ws *workspace.Workspace, c *config.Config,
 		if err := os.WriteFile(stampPath, []byte(stamp), 0o600); err != nil {
 			fail(name, err)
 		}
+	}
+	if first != nil && runLog != "" {
+		steps.Line("Everything this setup did is in %s.", runLog)
 	}
 	return first
 }
