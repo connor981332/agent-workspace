@@ -54,6 +54,12 @@ state database it cannot read, a payload it does not recognize and a missing bin
 only reads (with the `secrets` safeguard on, even then). In your own checkout, an unattached session
 is asked instead.
 
+**An invalid configuration still leaves the way back out.** While the configuration cannot be
+read, every session may still run `aw doctor`, `aw config validate` and the Git commands that only
+read what Git tracks (`git status`, `git log`, `git diff`, `git show`). A pair session may also
+switch branch (without forcing) and run `aw upgrade`. Everything else is refused, with a message
+saying what still works.
+
 **Pair sessions** are agents you have invited into your own checkout with `aw pair`. aw's own rules
 do not apply to them: they may edit there and in lanes, change the workspace's own instructions,
 hooks and configuration, and run your `aw` commands, such as `aw upgrade` or `aw discard`. Your

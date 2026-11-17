@@ -1,0 +1,39 @@
+# With the configuration unreadable, the guards still fail closed, except on the way back out:
+# aw's diagnostics and Git commands that only read what Git tracks work for every session, and a
+# pair session, acting for the human, may also switch branch and upgrade aw. The refusal says what
+# still works.
+# req: R55 R61
+# source: dogfood of 0.3.0 (plans/dogfood-0.3.md 1.7)
+# milestone: M12
+
+workspace shop --init
+owner-may-change
+exec aw attach 'add feature flag'
+exec aw pair --session claude:pair-1
+exec sh -c 'printf "not [valid toml\n" > "$OWNER/workspace.toml"'
+
+cd .worktrees/01
+! exec awtest-hook bash 'echo hi > notes.txt'
+stderr 'guards cannot decide'
+stderr 'bin/aw doctor, bin/aw config validate, git status, git log and git diff still work'
+! exec awtest-hook bash 'cat web/.env'
+exec awtest-hook bash 'git status'
+! stdout .
+exec awtest-hook bash 'cd web && git log --oneline -1 && git diff HEAD'
+! stdout .
+exec awtest-hook bash 'bin/aw doctor'
+! stdout .
+! exec awtest-hook bash 'git diff --no-index a b'
+! exec awtest-hook bash 'git switch main'
+! exec awtest-hook bash 'git status > out.txt'
+
+cd $OWNER
+! exec awtest-hook -session unpaired bash 'git switch -c fix'
+exec awtest-hook -session pair-1 bash 'git switch -c fix'
+! stdout .
+! exec awtest-hook -session pair-1 bash 'git checkout -f main'
+! exec awtest-hook -session pair-1 bash 'git checkout -- workspace.toml'
+exec awtest-hook -session pair-1 bash 'bin/aw upgrade --to 0.3.0'
+! stdout .
+! exec awtest-hook -session pair-1 write workspace.toml
+stderr 'git switch, bin/aw upgrade still work'
