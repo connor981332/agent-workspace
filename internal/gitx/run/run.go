@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/connor981332/agent-workspace/internal/gitx/gitenv"
 	"github.com/connor981332/agent-workspace/internal/workspace"
 )
 
@@ -148,7 +149,7 @@ func (g Git) RunInput(ctx context.Context, stdin []byte, args ...string) (string
 	cmd := exec.CommandContext(ctx, "git", full...)
 	cmd.Dir = g.Dir
 	// Never prompt, never page, and read plain output.
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_PAGER=cat", "LC_ALL=C", "GIT_OPTIONAL_LOCKS=0")
+	cmd.Env = append(gitenv.Without(os.Environ()), "GIT_TERMINAL_PROMPT=0", "GIT_PAGER=cat", "LC_ALL=C", "GIT_OPTIONAL_LOCKS=0")
 	cmd.Env = append(cmd.Env, ExtraEnv...)
 	cmd.Env = append(cmd.Env, g.Env...)
 	if stdin != nil {

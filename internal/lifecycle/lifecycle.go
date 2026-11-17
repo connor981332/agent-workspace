@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/connor981332/agent-workspace/internal/config"
+	"github.com/connor981332/agent-workspace/internal/gitx/gitenv"
 	"github.com/connor981332/agent-workspace/internal/gitx/run"
 	"github.com/connor981332/agent-workspace/internal/platform"
 	"github.com/connor981332/agent-workspace/internal/procs"
@@ -636,7 +637,8 @@ func Exec(ctx context.Context, c Command) (int, error) {
 		cmd = exec.Command(c.Argv[0], c.Argv[1:]...)
 	}
 	cmd.Dir, cmd.Stdout, cmd.Stderr = c.Dir, log, log
-	cmd.Env = append(append(os.Environ(), c.Env...), HookEnv(c.Phase, c.Fresh)...)
+	// aw starts the hook itself, so Git's repository-local variables in its own environment are not the hook's.
+	cmd.Env = append(append(gitenv.Without(os.Environ()), c.Env...), HookEnv(c.Phase, c.Fresh)...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if err := cmd.Start(); err != nil {
 		return 0, err

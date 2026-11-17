@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/connor981332/agent-workspace/internal/gitx/gitenv"
 	"github.com/connor981332/agent-workspace/internal/state"
 	"github.com/connor981332/agent-workspace/internal/workspace"
 )
@@ -261,7 +262,7 @@ func execTeamHook(name string, args []string, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "aw: the team's %s hook cannot be found (%v), so it is refused\n", name, err)
 		return Deny
 	}
-	err = syscall.Exec(abs, append([]string{abs}, args...), os.Environ())
+	err = syscall.Exec(abs, append([]string{abs}, args...), worktreeHookEnv())
 	fmt.Fprintf(stderr, "aw: the team's %s hook cannot start (%v), so it is refused\n", name, err)
 	return Deny
 }
@@ -282,7 +283,7 @@ func runTeamHook(name string, args []string, input []byte, stdout, stderr io.Wri
 		fmt.Fprintf(stderr, "aw: %v\n", err)
 		return Deny
 	}
-	proc, err := os.StartProcess(abs, append([]string{abs}, args...), &os.ProcAttr{Files: []*os.File{r, os.Stdout, os.Stderr}})
+	proc, err := os.StartProcess(abs, append([]string{abs}, args...), &os.ProcAttr{Files: []*os.File{r, os.Stdout, os.Stderr}, Env: worktreeHookEnv()})
 	r.Close()
 	if err != nil {
 		w.Close()
@@ -302,4 +303,11 @@ func runTeamHook(name string, args []string, input []byte, stdout, stderr io.Wri
 		return Deny
 	}
 	return Allow
+}
+
+// worktreeHookEnv is the environment a team hook gets: Git's, without what only a linked worktree
+// adds (gitenv.ForWorktreeHook).
+func worktreeHookEnv() []string {
+	cwd, _ := os.Getwd()
+	return gitenv.ForWorktreeHook(os.Environ(), cwd)
 }
