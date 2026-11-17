@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -23,6 +24,8 @@ import (
 	"github.com/connor981332/agent-workspace/internal/audit"
 	"github.com/connor981332/agent-workspace/internal/compose"
 	"github.com/connor981332/agent-workspace/internal/config"
+	"github.com/connor981332/agent-workspace/internal/forge"
+	"github.com/connor981332/agent-workspace/internal/gitx/run"
 	"github.com/connor981332/agent-workspace/internal/lanes"
 	"github.com/connor981332/agent-workspace/internal/launcher"
 	"github.com/connor981332/agent-workspace/internal/platform"
@@ -169,6 +172,7 @@ func Run(dir, version string, withTimings bool) *Report {
 		}
 	}
 	checkSandboxes(ws.Owner, c, add)
+	checkForge(ws.Owner, c, add)
 	checkOwnerCheckout(ws, c, add)
 	checkLanes(ws, c, stateDir, add)
 	addMachine(add)
@@ -702,4 +706,33 @@ func less(a, b [3]int) bool {
 		}
 	}
 	return false
+}
+
+// checkForge warns when forge = "auto" recognizes no forge for a repository's origin: aw sweep then
+// cannot ask whether a squash-merged lane was merged, and nothing else said so. It reads Git's
+// configuration only; it never contacts the forge.
+func checkForge(owner string, c *config.Config, add func(Check)) {
+	if c == nil || c.Workspace.Forge != "auto" {
+		return
+	}
+	dirs := map[string]bool{".": true}
+	for _, p := range c.Projects {
+		dirs[p.Directory] = true
+	}
+	var hosts []string
+	for _, dir := range slices.Sorted(maps.Keys(dirs)) {
+		raw, err := run.In(filepath.Join(owner, dir)).Line(context.Background(), "config", "--get", "remote.origin.url")
+		if err != nil {
+			continue
+		}
+		if host, _, ok := forge.ParseRemote(raw); ok && forge.For("auto", host, time.Time{}) == nil && !slices.Contains(hosts, host) {
+			hosts = append(hosts, host)
+		}
+	}
+	if len(hosts) == 0 {
+		return
+	}
+	add(Check{Name: "forge", Status: Warn,
+		Message: fmt.Sprintf("forge = \"auto\" recognizes no forge at %s, so aw sweep cannot ask whether a squash-merged lane was merged", strings.Join(hosts, ", ")),
+		Fix:     `set [workspace] forge = "gitlab" or "github" in workspace.toml, or "none" to say there is no forge`})
 }
