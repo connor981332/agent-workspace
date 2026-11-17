@@ -185,13 +185,13 @@ func finishUpgrade(cmd *cobra.Command, from string, eject, take []string) error 
 		return fmt.Errorf("the workspace pins aw %s, but this is aw %s, so it changed nothing → run aw upgrade again without AW_TOOL_PATH", ui.Clean(pinned), to)
 	}
 	if from != to {
-		fmt.Fprintf(out, "aw %s → %s\n", ui.Clean(from), to)
-		notes, breaking := upgrade.Changes(from, to)
-		if notes != "" {
-			fmt.Fprintln(out, notes)
-		}
+		// The notes are a count and where to read them: printed in full, they buried what the
+		// upgrade itself had to say. Breaking changes are still printed, one each.
+		_, breaking := upgrade.Changes(from, to)
+		fmt.Fprintf(out, "aw %s → %s: %s\n", ui.Clean(from), to, changeCount(upgrade.Entries(from, to)))
+		fmt.Fprintf(out, "aw changelog --since %s lists them.\n", ui.Clean(from))
 		for _, b := range breaking {
-			fmt.Fprintf(errOut, "breaking: %s\n", b)
+			ui.NewOut(errOut).Warn("breaking: %s", b)
 		}
 	}
 
@@ -358,4 +358,19 @@ func count(n int, one, many string) string {
 		return "1 " + one
 	}
 	return fmt.Sprintf("%d %s", n, many)
+}
+
+// changeCount says how many changes, in how many releases, an upgrade brings.
+func changeCount(entries []upgrade.Entry) string {
+	releases := map[string]bool{}
+	for _, e := range entries {
+		releases[e.Version] = true
+	}
+	switch {
+	case len(entries) == 0:
+		return "no listed changes"
+	case len(releases) == 1:
+		return fmt.Sprintf("%d change%s", len(entries), plural(len(entries)))
+	}
+	return fmt.Sprintf("%d changes in %d releases", len(entries), len(releases))
 }

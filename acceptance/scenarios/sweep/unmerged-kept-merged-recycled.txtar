@@ -13,7 +13,7 @@ exec aw sweep --json
 json stdout .lanes[0].action keep
 json stdout .lanes[0].reason 'solo: not proven merged: 1 commit not in refs/remotes/origin/main: its head is not there, and no commit there has the same patch; no forge was asked, since origin is not on one'
 exec aw sweep
-stdout '^01 feature-flag +keep +solo: not proven merged'
+stdout '^01  feature-flag  keep  solo: not proven merged'
 stdout '^To recycle a kept lane:'
 stdout '^   solo: merge its work \(aw changeset opens the merge requests\), or aw resume feature-flag to keep working on it$'
 

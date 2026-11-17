@@ -220,14 +220,15 @@ func startConfigAgent(cmd *cobra.Command, a configAgent) error {
 	// Whether a lane can be had is known before setup, which can take minutes: say so first.
 	full := noFreeLane(ws, c, a.purpose)
 	if full != nil {
-		fmt.Fprintf(errOut, "%s: no lane is free for this (%v). After setup, the agent starts in the owner checkout, as a pair session, to sort that out with you first.\n", a.name, full)
+		ui.NewOut(errOut).Warn("%s: no lane is free for this (%v). After setup, the agent starts in the owner checkout, as a pair session, to sort that out with you first.", a.name, full)
 	}
+	ui.NewOut(cmd.OutOrStdout()).Heading("Setting up the workspace")
 	var output bytes.Buffer
 	cmd.SetErr(io.MultiWriter(errOut, &output))
 	setupErr := setupWorkspace(cmd, ws, c, a.harness, false, false)
 	cmd.SetErr(errOut)
 	if setupErr != nil {
-		fmt.Fprintf(errOut, "%s: setup did not finish (%v). The agent will start with this in front of it.\n", a.name, setupErr)
+		ui.NewOut(errOut).Warn("%s: setup did not finish (%v). The agent will start with this in front of it.", a.name, setupErr)
 	}
 	if fresh, err := config.Load(ws.Owner); err == nil {
 		c = fresh
@@ -236,7 +237,8 @@ func startConfigAgent(cmd *cobra.Command, a configAgent) error {
 	if harness == "" {
 		harness = c.User.Harness
 	}
-	fmt.Fprintf(errOut, "%s: checking the projects for what lanes will need\n", a.name)
+	steps := ui.NewOut(errOut)
+	steps.Heading("What lanes will need")
 	preflight := reportPreflight(cmd, ws, c, errOut)
 
 	prompt := a.prompt(ws, c)
@@ -263,6 +265,7 @@ func startConfigAgent(cmd *cobra.Command, a configAgent) error {
 	}
 	m := &lanes.Manager{WS: ws, Cfg: c}
 	var failed error
+	steps.Heading("Starting the agent")
 	if m.CanReview(cmd.Context()) {
 		fmt.Fprintf(errOut, "%s: letting this lane's agent run %s without asking, in this lane only, so that it can test its own proposal in a throwaway copy\n", a.name, sandbox.RehearseCommand)
 	}
@@ -329,23 +332,36 @@ func offerDelegation(cmd *cobra.Command, w *writeContext, setupErr, laneErr erro
 
 // reportPreflight prints what lanes will need and do not have, and returns it for the agent.
 func reportPreflight(cmd *cobra.Command, ws *workspace.Workspace, c *config.Config, out io.Writer) string {
+	o := ui.NewOut(out)
+	step := o.Step("checking the projects for what lanes will need")
 	projects, err := scanProjects(ws, c)
 	if err != nil {
-		fmt.Fprintf(out, "aw: warning: the projects could not be inspected: %v\n", err)
+		step.Fail(err.Error())
 		return ""
 	}
 	inspect.Preflight(cmd.Context(), ws.Owner, c, projects)
+	// The findings are the agent's to go through with the person: they go into its prompt in full,
+	// and the person is told how many there are and where, rather than shown a wall of file names.
 	var b strings.Builder
+	var where []string
+	n := 0
 	for _, p := range projects {
-		for _, line := range p.PreflightLines() {
+		lines := p.PreflightLines()
+		for _, line := range lines {
 			fmt.Fprintf(&b, "%s: %s\n", p.Name, line)
 		}
+		if len(lines) > 0 {
+			n += len(lines)
+			where = append(where, p.Name)
+		}
 	}
-	text := strings.TrimRight(b.String(), "\n")
-	if text != "" {
-		fmt.Fprintln(out, text)
+	switch n {
+	case 0:
+		step.Done("nothing found")
+	default:
+		step.Done(fmt.Sprintf("%d finding%s in %s, for the agent to go through with you (aw inspect shows them)", n, plural(n), strings.Join(where, ", ")))
 	}
-	return text
+	return strings.TrimRight(b.String(), "\n")
 }
 
 func newAddProjectCmd() *cobra.Command {

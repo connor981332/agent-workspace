@@ -154,6 +154,7 @@ func setupWorkspace(cmd *cobra.Command, ws *workspace.Workspace, c *config.Confi
 		fmt.Fprintln(out, "Lanes work with these files as they are; commit them when you are ready. Codex asks once to trust project hooks, and Grok to trust the folder (/hooks-trust).")
 	}
 	problems := 0
+	warn := ui.NewOut(cmd.ErrOrStderr())
 	for _, c := range report.Checks {
 		if c.Status == doctor.Warn || c.Status == doctor.Fail {
 			problems++
@@ -161,15 +162,30 @@ func setupWorkspace(cmd *cobra.Command, ws *workspace.Workspace, c *config.Confi
 			if c.Fix != "" {
 				line += " → " + ui.Clean(c.Fix)
 			}
-			fmt.Fprintf(cmd.ErrOrStderr(), "doctor: %s\n", line)
+			if c.Status == doctor.Fail {
+				warn.Error("doctor: %s", line)
+			} else {
+				warn.Warn("doctor: %s", line)
+			}
 		}
 	}
-	if problems == 0 {
-		fmt.Fprintln(out, "aw doctor found nothing wrong.")
+	// The last lines say whether anything needs the person, which is what a terminal shows last.
+	var summary []string
+	switch {
+	case problems == 0:
+		summary = append(summary, "aw doctor found nothing wrong.")
+	case problems == 1:
+		summary = append(summary, "aw doctor found 1 problem, above.")
+	default:
+		summary = append(summary, fmt.Sprintf("aw doctor found %d problems, above.", problems))
+	}
+	if installFailed != nil {
+		summary = append(summary, "Not set up: "+ui.Clean(firstLine(installFailed.Error()))+" → fix it, then run aw setup again.")
 	}
 	if finish == nil {
-		fmt.Fprintln(out, "Set up. Next: aw new \"<purpose>\", or start a harness here.")
+		summary = append(summary, "Set up. Next: aw new \"<purpose>\", or start a harness here.")
 	}
+	ui.NewOut(out).Summary(summary...)
 	return finish
 }
 

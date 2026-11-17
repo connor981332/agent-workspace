@@ -1,5 +1,6 @@
 # aw lanes ends with how to continue a lane no session runs in: aw resume names the lanes whose last
-# session can be reopened, and aw open starts a fresh one from the handoff. Only the human in the
+# session can be reopened, and aw open starts a fresh one from the handoff; and with how to clear
+# lanes: aw sweep, and aw discard. Only the human in the
 # owner checkout sees it: not an agent session, not a lane, not --json.
 # req: R64
 # source: dogfood, RideTracker: "I'm not really sure what to do next here"
@@ -10,7 +11,8 @@ stubs codex
 session s-1 codex
 exec aw attach 'add feature flag'
 exec aw lanes
-stdout '^01 feature-flag'
+stdout '^01    feature-flag  '
+! stdout 'Clear lanes'
 ! stdout 'Continue a lane'
 end-session s-1
 
@@ -18,6 +20,10 @@ exec aw lanes
 stdout '^Continue a lane:$'
 stdout '^   aw resume <lane>   reopen its last session where it stopped \(feature-flag\)$'
 stdout '^   aw open <lane>     start a fresh session that begins with the lane''s latest handoff$'
+# And how to clear lanes, which frees room for new ones (plans/dogfood-0.3.md 3.3).
+stdout '^Clear lanes:$'
+stdout '^   aw sweep           see which lanes are proven merged; aw sweep --apply recycles them$'
+stdout '^   aw discard <lane>  abandon a lane''s work; its branches are archived first$'
 exec aw lanes --json
 ! stdout 'Continue'
 

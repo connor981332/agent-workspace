@@ -12,6 +12,10 @@ exec sh -c 'grep -v "aw-workspace-design/SKILL.md" .aw/managed > m && mv m .aw/m
 env AW_MIRROR=$AW_NEW_MIRROR
 ! exec aw upgrade --to $AW_NEW_VERSION
 stderr '.claude/skills/aw-workspace-design/SKILL.md was edited by hand'
+# The release notes are a count and where to read them, not the notes themselves (plans/dogfood-0.3.md 3.3).
+stdout '^aw .* → .*: (no listed changes|[0-9]+ changes?( in [0-9]+ releases)?)$'
+stdout '^aw changelog --since .* lists them\.$'
+! stdout '^## '
 
 ! exec aw upgrade --to $AW_NEW_VERSION --take no/such/file.md
 stderr 'aw does not generate that file'
