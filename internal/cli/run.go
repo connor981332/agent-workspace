@@ -142,7 +142,7 @@ func startLaneSession(cmd *cobra.Command, purpose, harness, branch, role string,
 		pid = 0 // the harness's own process is recorded by its first hook call
 	}
 	c, err := m.Claim(cmd.Context(), lanes.ClaimRequest{Purpose: purpose, Branch: branch,
-		Who: lanes.Identity{Harness: harness, Session: id, PID: pid}})
+		Who: lanes.Identity{Harness: harness, Session: id, PID: pid}, StartsInLane: true})
 	if err != nil {
 		return err
 	}

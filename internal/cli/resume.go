@@ -401,7 +401,7 @@ func claimForOpen(ctx context.Context, w *writeContext, l state.Lane, h *state.H
 	}
 	now := state.Now()
 	return w.store.Write(ctx, func(tx *sql.Tx) error {
-		if _, err := state.SaveSession(tx, state.Session{Harness: harnessName, HarnessSession: id, Lane: l.Number, LaneGeneration: l.Generation,
+		if _, err := state.SaveSession(tx, state.Session{Harness: harnessName, HarnessSession: id, Lane: l.Number, LaneGeneration: l.Generation, Home: state.HomeLane,
 			Purpose: l.Purpose, State: state.SessionActive, Started: now, LastActivity: now, PID: pid, PIDStart: start}); err != nil {
 			return err
 		}

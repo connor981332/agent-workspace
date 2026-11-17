@@ -57,6 +57,9 @@ type ClaimRequest struct {
 	Purpose string
 	Branch  string // an existing branch to start on (--branch), instead of a new one
 	Who     Identity
+	// StartsInLane says the session is launched in the lane (aw new), which is then its home: it
+	// keeps the lane's scope after releasing it (docs/spec/sessions.md).
+	StartsInLane bool
 }
 
 // Claimed is the result of a claim.
@@ -197,7 +200,7 @@ func (m *Manager) Claim(ctx context.Context, req ClaimRequest) (*Claimed, error)
 				return err
 			}
 		}
-		return m.attach(tx, req.Who, lane, purpose)
+		return m.attach(tx, req.Who, lane, purpose, req.StartsInLane)
 	})
 	if err != nil {
 		return nil, err
@@ -342,13 +345,16 @@ func (m *Manager) waitBuilt(ctx context.Context, n int, reused bool) (*Claimed, 
 }
 
 // attach records the session as attached to the lane.
-func (m *Manager) attach(tx *sql.Tx, who Identity, lane state.Lane, purpose string) error {
+func (m *Manager) attach(tx *sql.Tx, who Identity, lane state.Lane, purpose string, home bool) error {
 	if !who.known() {
 		return nil
 	}
 	now := state.Now()
 	s := state.Session{Harness: who.Harness, HarnessSession: who.Session, Lane: lane.Number,
 		LaneGeneration: lane.Generation, Purpose: purpose, State: state.SessionActive, Started: now, LastActivity: now, PID: who.PID}
+	if home {
+		s.Home = state.HomeLane
+	}
 	if who.PID > 0 {
 		s.PIDStart, _ = platform.ProcessIdentity(who.PID)
 	}
