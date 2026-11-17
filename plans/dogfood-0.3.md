@@ -14,7 +14,7 @@ recorded as the principles in [AGENTS.md](../AGENTS.md). This plan turns those d
 **Updated:** 2026-11-17
 
 **Branches / MRs:** #96 and #97 (AGENTS.md and this plan), #98 (Phase 1), #99 (Phase 2), #100
-(Phase 3), #101 (Phase 4), #102 and #103 (Phase 5). #104 (Phase 6), #105 (Phase 7).
+(Phase 3), #101 (Phase 4), #102 and #103 (Phase 5), #104 (Phase 6) and #105 (Phase 7).
 
 **Done:** triage and decisions; AGENTS.md. Phases 1 to 4, each item with a scenario that fails on
 master first. Unit tests, vet, the full acceptance suite (`-count=1`), the coverage check and the
