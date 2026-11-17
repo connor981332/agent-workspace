@@ -297,6 +297,25 @@ func (m *Manager) attach(tx *sql.Tx, who Identity, lane state.Lane, purpose stri
 	return err
 }
 
+// Full says, without changing anything, why a lane for purpose could not be claimed now because
+// every lane is in use, or returns nil: when the pool has a lane, a lane already has this purpose,
+// or there is room for another.
+func Full(q state.Querier, max int, purpose string) error {
+	lanes, err := state.Lanes(q)
+	if err != nil {
+		return nil // whoever claims will find out, and say why
+	}
+	for _, l := range lanes {
+		if l.State == state.LanePool || l.Purpose == purpose {
+			return nil
+		}
+	}
+	if len(lanes) < max {
+		return nil
+	}
+	return maxLanesError(max, lanes)
+}
+
 func maxLanesError(max int, lanes []state.Lane) error {
 	var parked, ready []string
 	for _, l := range lanes {
