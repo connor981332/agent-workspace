@@ -1,5 +1,5 @@
 # A recycle that fails part way records each repository it has already reset, says which, and keeps
-# the lane. --retry carries on from there, acting only on its own lane, and discarding a lane closes
+# the lane, still showing each repository's proof. --retry carries on from there, acting only on its own lane, and discarding a lane closes
 # its unfinished entries, so a lane that is gone leaves nothing behind in the journal.
 # req: R25 R31
 # source: dogfood of 0.3.0 (plans/dogfood-0.3.md 1.3, 1.4)
@@ -14,6 +14,12 @@ json stdout .lanes[0].action recycle
 json stdout .lanes[0].result failed
 stdout 'web: .*already reset: .*api.*a retry continues from here'
 json stdout .unfinished[0].id 1
+
+# Kept because its recycle failed, it still shows each repository's proof.
+exec aw sweep --json
+json stdout .lanes[0].action keep
+stdout 'an earlier recycle failed'
+json stdout .lanes[0].repos[2].proof ancestor
 
 # The lanes that become recyclable meanwhile are left alone by --retry.
 exec aw attach 'two'

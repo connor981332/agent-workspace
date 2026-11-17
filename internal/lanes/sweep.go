@@ -100,14 +100,16 @@ func (m *Manager) Sweep(ctx context.Context, o SweepOptions) (*SweepReport, erro
 	for _, l := range lanes {
 		d := &Decision{Number: l.Number, Dir: Dir(l.Number, m.Cfg.Lanes.Max), Name: l.Name, State: l.State, lane: l}
 		rep.Lanes = append(rep.Lanes, d)
-		if e, ok := failedLanes[l.Number]; ok && o.Retry != e.ID {
-			d.Action, d.Reason = ActionKeep, fmt.Sprintf("an earlier %s failed (%s) → fix the cause, then aw sweep --apply --retry %d", e.Kind, e.Detail, e.ID)
-			continue
-		}
 		if l.State == state.LanePool {
 			continue // decided below, once the recyclable lanes are known
 		}
 		m.decide(ctx, d, sessions, o.Caller)
+		// The proof is still worked out, so that whoever fixes the failure can see whether the lane
+		// is safe to recycle.
+		if e, ok := failedLanes[l.Number]; ok && o.Retry != e.ID {
+			d.Action, d.Reason = ActionKeep, fmt.Sprintf("an earlier %s failed (%s) → fix the cause, then aw sweep --apply --retry %d", e.Kind, e.Detail, e.ID)
+			d.Next = nil
+		}
 	}
 
 	// The pool keeps [lanes] pool lanes; the rest, and lanes past retention, are destroyed. A
@@ -169,33 +171,36 @@ func firstNote(notes []state.Note) string {
 }
 
 func (m *Manager) decide(ctx context.Context, d *Decision, sessions []state.Session, caller int) {
-	keep := func(format string, args ...any) { d.Action, d.Reason = ActionKeep, fmt.Sprintf(format, args...) }
+	// A reason to keep the lane that is not about its repositories still leaves their proof to be
+	// worked out and reported, without asking the forge: it would not change the decision.
+	var held string
+	keep := func(format string, args ...any) {
+		d.Action, d.Reason = ActionKeep, fmt.Sprintf(format, args...)
+		if held != "" {
+			d.Reason, d.Next = held, nil
+		}
+	}
 	l := d.lane
 	switch l.State {
 	case state.LaneClaiming, state.LaneSettingUp:
 		keep("it is being set up")
-		return
+		return // its worktrees may not exist yet
 	case state.LaneIncomplete:
-		keep("its setup is incomplete")
-		return
+		held = "its setup is incomplete"
 	case state.LaneParked:
-		keep("parked")
-		return
+		held = "parked"
 	}
-	if l.Number == caller {
-		keep("this command runs in it")
-		return
+	if held == "" && l.Number == caller {
+		held = "this command runs in it"
 	}
 	for _, s := range sessions {
-		if s.Lane == l.Number && s.LaneGeneration == l.Generation && s.State == state.SessionActive && Live(s) {
-			keep("session %s (%s) is attached", s.HarnessSession, s.Harness)
-			return
+		if held == "" && s.Lane == l.Number && s.LaneGeneration == l.Generation && s.State == state.SessionActive && Live(s) {
+			held = fmt.Sprintf("session %s (%s) is attached", s.HarnessSession, s.Harness)
 		}
 	}
 	// An open note is work the lane's agent left outside it, which no merge proves done.
-	if notes, err := state.OpenNotes(m.Store.DB(), l.Number, l.Generation); err != nil || len(notes) > 0 {
-		keep("it has %d open note%s, such as %q → do them, or mark them done with aw note --done <n> in the lane", len(notes), plural(len(notes)), firstNote(notes))
-		return
+	if notes, err := state.OpenNotes(m.Store.DB(), l.Number, l.Generation); held == "" && (err != nil || len(notes) > 0) {
+		held = fmt.Sprintf("it has %d open note%s, such as %q → do them, or mark them done with aw note --done <n> in the lane", len(notes), plural(len(notes)), firstNote(notes))
 	}
 	root := m.Root(l.Number)
 	if info, err := os.Lstat(root); err != nil {
@@ -223,11 +228,13 @@ func (m *Manager) decide(ctx context.Context, d *Decision, sessions []state.Sess
 			return
 		}
 		ev := evidence.Check(ctx, r.Path, r.BaseRef, m.evidenceOptions(r))
-		if !ev.Unknown && ev.Clean && ev.Proof == "" {
+		if held == "" && !ev.Unknown && ev.Clean && ev.Proof == "" {
 			m.forgeProof(ctx, owner, r, &ev)
 		}
 		d.Repos = append(d.Repos, ev)
 		switch {
+		case ev.Unknown && held != "":
+			continue // kept anyway; the other repositories' proof is still worth showing
 		case ev.Unknown:
 			keep("%s: %s, so it is protected", repoLabel(r), ev.Reason)
 			return
@@ -238,6 +245,10 @@ func (m *Manager) decide(ctx context.Context, d *Decision, sessions []state.Sess
 			reasons = append(reasons, repoLabel(r)+": "+ev.Reason)
 			d.Next = append(d.Next, fmt.Sprintf("%s: merge its work (aw changeset opens the merge requests), or aw resume %s to keep working on it", repoLabel(r), l.Name))
 		}
+	}
+	if held != "" {
+		keep("%s", held)
+		return
 	}
 	if len(reasons) > 0 {
 		prefix := ""
