@@ -13,10 +13,10 @@ recorded as the principles in [AGENTS.md](../AGENTS.md). This plan turns those d
 
 **Updated:** 2026-11-16
 
-**Branches / MRs:** #96 and #97 (AGENTS.md and this plan), #98 (Phase 1), all merged. Phase 2 is on
-`feat/dogfood-0.3-phase2`.
+**Branches / MRs:** #96 and #97 (AGENTS.md and this plan), #98 (Phase 1), #99 (Phase 2), all
+merged. Phase 3 is on `feat/dogfood-0.3-phase3`.
 
-**Done:** triage and decisions; AGENTS.md. Phases 1 and 2, each item with a scenario that fails on
+**Done:** triage and decisions; AGENTS.md. Phases 1 to 3, each item with a scenario that fails on
 master first. Unit tests, vet, the full acceptance suite (`-count=1`), the coverage check and the
 latency budgets pass locally. Differences from the plan as written:
 - 1.1: the dispatcher drops only `GIT_DIR` and `GIT_WORK_TREE` for a team hook in a lane, which is
@@ -32,12 +32,20 @@ latency budgets pass locally. Differences from the plan as written:
 - 2.6: rehearse resets one lane, recycles it with `aw sweep --apply` and claims it back; with
   `[lanes] pool = 0` the lane is removed instead, which also counts as proven.
 - 2.7: the reasons are printed before the question, which only a terminal is asked.
+- 3.1: `ui.Out` decides live or plain from the writer (a terminal) and the harnesses' environment
+  markers; it does not walk the process tree as the guards do, which would cost every command a
+  process lookup. Plain output prints a step when it ends, and "still running" every 30 seconds.
+- 3.2: the run log is `.git/aw/logs/runs/<command>-<time>.log`; setup uses it so far.
+- 3.3: on a terminal, `aw lanes` and `aw sweep` are tables in which the purpose or reason gives way;
+  off one, nothing is cut. `aw lanes` also says how to clear lanes. `aw upgrade` counts the notes.
+  `aw audit` and `aw onboard` have headings, and preflight findings go to the agent in full while
+  the person gets a count. `aw setup` steps through clones and installs and ends with a summary.
 - CI: the acceptance step runs with `-timeout 18m`, since macos-15-intel comes close to go test's
   default ten minutes.
 
 **In progress:** nothing.
 
-**Next step:** merge Phase 2 after CI, rebuild the owner's dev binary, then Phase 3.
+**Next step:** merge Phase 3 after CI, rebuild the owner's dev binary, then Phase 4.
 
 ## Decisions taken
 
