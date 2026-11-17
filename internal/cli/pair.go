@@ -82,8 +82,12 @@ func refuseAgent(cmd *cobra.Command, args []string) error {
 	sweeping := false
 	if name == "sweep" {
 		apply, _ := cmd.Flags().GetBool("apply")
-		retry, _ := cmd.Flags().GetBool("retry")
-		sweeping = apply || retry
+		retry, _ := cmd.Flags().GetInt("retry")
+		sweeping = apply || retry > 0
+	}
+	if name == "archives" {
+		restore, _ := cmd.Flags().GetString("restore")
+		sweeping = restore != "" // listing only reads; restoring makes branches in the owner's repositories
 	}
 	if !policy.OwnerOnly(name) && !sweeping {
 		return nil

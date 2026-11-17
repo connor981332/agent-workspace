@@ -38,6 +38,7 @@ The CLI is part of the design, not an afterthought. Most of the tool's value is 
 | `aw finish --summary "…"` | agent | Hand off as ready for review |
 | `aw park` / `aw unpark` / `aw discard` | human | Shelve, restore or abandon work |
 | `aw sweep [--apply] [lane…]` | human | Recycle lanes proven merged, all of them or the ones named |
+| `aw archives [--restore <name>[/<time>] [--branch b]]` | both; `--restore` human | List what discard and reset archived; make a branch from one to start a lane on |
 | `aw pull` | human | Fetch origin in every owner checkout, fast-forwarding those on the default branch, so new lanes start from the newest work |
 | `aw pair` / `aw move-to-lane` / `aw try` | human | Work in the owner checkout ([owner-checkout.md](owner-checkout.md)) |
 | `aw setup` / `aw doctor` / `aw inspect` / `aw rehearse` | human; an agent may rehearse its own onboarding lane | Onboarding and diagnosis |
