@@ -161,30 +161,34 @@ func TestBoundary(t *testing.T) {
 		{"bin/aw whoami --json", Allow, ""},
 		{"bin/aw attach x && rm -rf y", Deny, "boundary"},
 		{"bin/aw run web npm test", Deny, "boundary"},
-		{"git status", Deny, "boundary"},
+		{"git status", Allow, ""}, // a read from the wrong directory is a warning (the warn tier)
 		{"cd {lane} && git status", Allow, ""},
 		{"cd {lane} && cat ../../AGENTS.md", Allow, ""},
 		{"cd {lane} && rm ../../AGENTS.md", Deny, "boundary"},
 		{"cat {owner}/AGENTS.md", Allow, ""}, // an absolute path says which file it means
-		{"ls", Deny, "boundary"},
-		{"cd {owner} && git status", Deny, "boundary"},
+		{"ls", Allow, ""},
+		{"cd {owner} && git status", Allow, ""},
+		{"touch x", Deny, "boundary"},
 	})
 	for _, tc := range []struct {
 		paths []string
 		want  Verdict
 	}{
 		{[]string{filepath.Join(f.lane, "x")}, Allow},
-		{[]string{"x"}, Deny},
-		{nil, Deny},
+		{[]string{"x"}, Allow}, // with a note naming the lane's copy
+		{nil, Allow},
 		{[]string{filepath.Join(f.owner, "x")}, Allow}, // an absolute path says which file it means
 	} {
 		if d := Decide(s, Call{Tool: Read, Cwd: f.owner, Paths: tc.paths}); d.Verdict != tc.want {
 			t.Errorf("from the owner checkout, reading %v: %v", tc.paths, d)
 		}
 	}
-	// The working directory itself.
-	if d := Decide(s, Call{Tool: Shell, Cwd: f.owner, Command: "ls"}); d.Verdict != Deny || d.Rule != "boundary" {
-		t.Errorf("a lane session in the owner checkout: %v", d)
+	// The working directory itself: a read goes through with a note, a write does not.
+	if d := Decide(s, Call{Tool: Shell, Cwd: f.owner, Command: "ls"}); d.Verdict != Allow || !strings.Contains(d.Note, "read the owner's files") {
+		t.Errorf("a lane session reading in the owner checkout: %v", d)
+	}
+	if d := Decide(s, Call{Tool: Write, Cwd: f.owner, Paths: []string{"x"}}); d.Verdict != Deny || d.Rule != "boundary" {
+		t.Errorf("a lane session writing a relative path in the owner checkout: %v", d)
 	}
 	// From a project worktree, by its real path.
 	if d := Decide(s, Call{Tool: Shell, Cwd: filepath.Join(f.owner, "api", ".worktrees", "01"), Command: "cat src/x.go"}); d.Verdict != Allow {
@@ -375,9 +379,9 @@ func TestPairBypassesAwsOwnRules(t *testing.T) {
 	s.Safeguards = allSafeguards
 	s.Guards = []TeamGuard{{Name: "schema", Paths: []string{"api/schema.graphql"}, Message: "generated"}}
 	run(t, s, f.owner, []tcase{
-		{"git push --force origin main", Deny, "git"},
-		{"pkill node", Deny, "processes"},
-		{"cat api/.env", Deny, "secrets"},
+		{"git push --force origin main", Ask, "git"},
+		{"pkill node", Ask, "processes"},
+		{"cat api/.env", Ask, "secrets"},
 		{"echo x > api/schema.graphql", Deny, "team-guard"},
 		{"git push origin main", Ask, "publication"},
 		{"echo x > workspace.toml", Allow, ""},
@@ -490,7 +494,7 @@ func TestUnattachedClassification(t *testing.T) {
 		{"git -C api branch --list 'aw/*'", Allow, ""},
 		{"git -C api log --oneline -3", Allow, ""},
 		{"git -C api status", Allow, ""},
-		{"git branch --list -D x", Deny, "git"},
+		{"git branch --list -D x", Ask, "git"},
 		{"curl -sI https://example.com/graphql", Allow, ""},
 		{"curl -fsSL -H 'Accept: application/json' https://example.com", Allow, ""},
 		{"curl -sI -m 5 https://example.com", Allow, ""},

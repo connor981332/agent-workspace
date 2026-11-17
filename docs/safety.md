@@ -24,7 +24,7 @@ that says what to do instead, or passed to you for approval.
 |---|---|
 | Your checkout | A lane agent changes files only in its lane: file tools and shell commands that would change your checkout or another lane are refused. It may read anywhere, and is told when what it read is your copy of a file its lane has too. An agent that has not claimed a lane may read, but not change anything. |
 | Your branches and tags | Git's `reference-transaction` hook refuses ref updates from a lane outside that lane's own branches. It runs inside Git, so `--no-verify` does not skip it. |
-| Shared Git configuration | In a lane, `git config` writes and `-c core.hooksPath=…` are refused. `git worktree` commands are refused everywhere, because `aw` manages worktrees. |
+| Shared Git configuration | In a lane, `git config` writes go to you, and `-c core.hooksPath=…` is refused. `git worktree` commands are refused everywhere, because `aw` manages worktrees. |
 | Your servers | Configured servers are started through `aw serve`, so that they take a seat. |
 | Who may do what | A team role can remove publishing or merging from a lane, such as the implementer role. Pre-authorizing narrow publication and delegating routine maintenance are time-limited or reviewed configuration. |
 | Your decisions | Owner-only commands, such as `aw discard` and `aw pair`, go to you for approval. |
@@ -42,11 +42,11 @@ enable = ["git-safety", "publication", "secrets", "processes", "containers"]
 
 | Group | What it does |
 |---|---|
-| `git-safety` | Refuses force pushes and deleting remote or local branches. Destructive commands such as `git reset --hard` ask in a lane and are refused elsewhere. |
+| `git-safety` | Asks you before force pushes, deleting remote or local branches, and destructive commands such as `git reset --hard`. |
 | `publication` | Asks before pushing, forge writes and publishing packages or images. `[publication] allow` pre-authorizes a lane's own push, merge request and merge. |
-| `secrets` | Refuses reading or echoing a project's secret files, the environment, or a process's environment. |
-| `processes` | Refuses `kill`, `pkill` and the like. |
-| `containers` | Refuses commands that create, restart or remove containers. |
+| `secrets` | Asks you before an agent reads or changes a project's secret files, and refuses printing the environment, naming the one variable to print instead. |
+| `processes` | Asks you before `kill`, `pkill` and the like. |
+| `containers` | Asks you before commands that create, restart or remove containers. |
 
 **Guards fail closed where a rule depends on the answer.** That covers an invalid configuration, a
 state database it cannot read, a payload it does not recognize and a missing binary. A command or path
@@ -65,6 +65,22 @@ do not apply to them: they may edit there and in lanes, change the workspace's o
 hooks and configuration, and run your `aw` commands, such as `aw upgrade` or `aw discard`. Your
 team's guards and the safeguards you turned on still apply, and so do your harness's own permission
 prompts.
+
+## Tiers
+
+Each protection is in the tier of whoever has to act (AGENTS.md, "How a protection should behave").
+A harness that cannot ask (Codex and OpenCode today) refuses what would be asked, and says so.
+
+| Tier | Who acts | The guards' rules in it |
+|---|---|---|
+| Silent | nobody | Reads anywhere; edits inside the session's own lane; a pair session's work |
+| Warn | nobody | A lane session reading from the owner checkout, through a relative path or a command run there: it goes through, with a note naming the lane's copy. A command run directly in a project the lane has not set up yet (lazy setup). |
+| Redirect | the agent | A lane writing outside itself, or from the owner checkout by a relative path or command; an unattached session writing in the owner checkout (`aw attach`); a new or renamed branch in a lane; `git worktree`; starting a configured server directly (`aw serve`); printing the environment; a pre-authorized push or merge that is not the lane's own; a team role's limits; a team guard set to deny |
+| Guard | the human | `git-safety`'s force pushes, deleted branches and discarded work; `git config` and `git remote` changes; stopping processes; changing shared containers; reading or changing a secret file; publishing beyond `[publication] allow`; the human's own commands (`aw discard`, `aw sweep --apply`, …); a command an unattached session runs that aw cannot classify; a team guard set to ask |
+| Hard stop | nobody | Turning the guards off (`git -c core.hooksPath=…`, `core.fsmonitor`, `core.sshcommand`, aliases); running a command in a multiplexer pane outside the lane; a call aw could not check: an unreadable payload, a command, path, directory or option whose value aw cannot determine, a team guard's missing file, and anything but the way back out while the configuration is invalid |
+
+While a guard's question is open, `aw` shows the lane under *needs you* as waiting on you, until the
+session's next tool call.
 
 ## What the guards do not do
 

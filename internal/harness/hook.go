@@ -97,6 +97,14 @@ func hook(args []string, version string, stdin io.Reader, stdout, stderr io.Writ
 	d := policy.Decide(*scope, p.Call)
 	t.Mark("decide")
 	code := a.reply(p, d, stdout, stderr)
+	// A question for the human shows as waiting on you until the session's next call (best effort).
+	switch {
+	case notes.session == 0:
+	case d.Verdict == policy.Ask:
+		_ = state.RecordSessionWaiting(notes.stateDir, notes.session, waitingText(d.Message))
+	case notes.waiting != "":
+		_ = state.RecordSessionWaiting(notes.stateDir, notes.session, "")
+	}
 	if d.Verdict == policy.Allow && a.notify != nil && (len(notes.pending) > 0 || d.Note != "") {
 		var text []string
 		if d.Note != "" {
@@ -124,6 +132,8 @@ type pendingNotes struct {
 	stateDir string
 	touch    int          // the lane whose leases to mark active, or 0
 	open     []state.Note // the lane's open notes, read when a session starts
+	session  int          // the session's record, or 0
+	waiting  string       // what the session last asked the human
 }
 
 // activityEvery is how often a tool call records activity on the lane's leases.
@@ -225,17 +235,19 @@ func resolveScope(p Payload, version string, t *timing.Recorder) (*policy.Scope,
 	t.Mark("state")
 
 	n, attached := 0, false
+	own := pendingNotes{stateDir: stateDir}
 	if s != nil {
 		at, err := attachment(s, stateDir, p)
 		if err != nil {
 			return nil, pendingNotes{}, err
 		}
+		own.session, own.waiting = at.id, at.waiting
 		if ws.LaneRoot == "" && state.DelegationActive(s.DB()) {
 			scope.Delegated, scope.DelegatedCommands = true, cfg.Delegation.Maintenance
 		}
 		if at.pair {
 			scope.Role = policy.Pair
-			return scope, pendingNotes{}, nil
+			return scope, own, nil
 		}
 		n, attached = at.lane, at.lane > 0
 		if at.stale && ws.LaneRoot != "" {
@@ -244,7 +256,7 @@ func resolveScope(p Payload, version string, t *timing.Recorder) (*policy.Scope,
 		if at.known && !attached {
 			// Its record says it is not in a lane: where it runs from changes nothing.
 			scope.PreviousLane = at.previous
-			return scope, pendingNotes{}, nil
+			return scope, own, nil
 		}
 	}
 	record := false
@@ -321,7 +333,7 @@ func resolveScope(p Payload, version string, t *timing.Recorder) (*policy.Scope,
 		scope.RoleAllow, scope.RoleDeny = role.Allow, role.Deny
 		scope.RoleName, scope.RoleInstructions = lane.Role, role.Instructions
 	}
-	notes := pendingNotes{stateDir: stateDir}
+	notes := own
 	if notes.pending, err = state.PendingNotifications(s.DB(), n); err != nil {
 		return nil, pendingNotes{}, err
 	}
@@ -348,6 +360,8 @@ type attached struct {
 	stale    bool
 	known    bool
 	previous string
+	id       int    // the session's record
+	waiting  string // what it last asked the human
 }
 
 // recordStart records a session aw has no record of, from where it is now (state.RecordSessionStart).
@@ -388,7 +402,7 @@ func attachment(s *state.Store, stateDir string, p Payload) (attached, error) {
 	if err != nil {
 		return attached{}, err
 	}
-	current := attached{known: true, pair: rec.Pair}
+	current := attached{known: true, pair: rec.Pair, id: rec.ID, waiting: rec.Waiting}
 	if !rec.Pair && (rec.Lane > 0 || rec.LaneGeneration > 0) {
 		// A lane, or one recycled or destroyed since (its number is cleared, its generation kept).
 		l, err := state.LaneByNumber(s.DB(), rec.Lane)
@@ -429,6 +443,15 @@ func attachment(s *state.Store, stateDir string, p Payload) (attached, error) {
 		}
 	}
 	return current, nil
+}
+
+// waitingText is the start of a question for the human, short enough to show on the dashboard.
+func waitingText(msg string) string {
+	what, _, _ := strings.Cut(msg, " → ")
+	if r := []rune(what); len(r) > 120 {
+		return string(r[:120]) + "…"
+	}
+	return what
 }
 
 // maxPurpose is how many characters of a first prompt are kept as a session's purpose.

@@ -56,6 +56,7 @@ type LaneStatus struct {
 	Notes    []state.Note    `json:"notes,omitempty"` // open notes (aw note)
 
 	held, unfinished bool // a session holds it; a session that held it ended without releasing it
+	waiting          string
 }
 
 // SessionStatus is a session as observed now: an active session whose process is gone shows as
@@ -65,6 +66,7 @@ type SessionStatus struct {
 	ID           string `json:"id"`
 	State        string `json:"state"`
 	LastActivity string `json:"last_activity"`
+	Waiting      string `json:"waiting,omitempty"` // what it asked the human, still unanswered
 }
 
 // RepoStatus is one repository of a lane.
@@ -128,12 +130,15 @@ func (m *Manager) Status(ctx context.Context, o StatusOptions) ([]*LaneStatus, e
 				continue
 			case s.Holds(l):
 				ls.held = true
+				if s.Waiting != "" {
+					ls.waiting = s.Waiting
+				}
 			case s.Released != "":
 				st = "released"
 			default:
 				ls.unfinished = true
 			}
-			ls.Sessions = append(ls.Sessions, SessionStatus{Harness: s.Harness, ID: s.HarnessSession, State: st, LastActivity: s.LastActivity})
+			ls.Sessions = append(ls.Sessions, SessionStatus{Harness: s.Harness, ID: s.HarnessSession, State: st, LastActivity: s.LastActivity, Waiting: s.Waiting})
 		}
 		out = append(out, ls)
 	}
@@ -427,6 +432,8 @@ func (m *Manager) classify(ls *LaneStatus, l state.Lane) {
 		ls.Section, ls.Why = NeedsYou, "handoff needs inspection (it cannot be read)"
 	case ls.State == state.LaneParked:
 		ls.Section, ls.Why = Parked, "parked"
+	case ls.State == Working && ls.waiting != "":
+		ls.Section, ls.Why = NeedsYou, "waiting on you: "+ls.waiting
 	case ls.State == Working:
 		ls.Section, ls.Why = Running, "session running"
 	case proven && len(ls.Notes) > 0:

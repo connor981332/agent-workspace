@@ -35,9 +35,10 @@ stderr 'outside lane'
 stderr 'aw manages'
 ! exec awtest-hook bash 'git checkout -b other'
 stderr 'only on its own branch'
-! exec awtest-hook bash 'git config user.name x'
-! exec awtest-hook bash 'echo x > web/.env'
-stderr 'not changed from a lane'
+exec awtest-hook bash 'git config user.name x'
+stdout '"permissionDecision":"ask"'
+exec awtest-hook bash 'echo x > web/.env'
+stdout '"permissionDecision":"ask"'
 cd ../..
 
 # The instructions say nothing about what is not guarded, until it is.

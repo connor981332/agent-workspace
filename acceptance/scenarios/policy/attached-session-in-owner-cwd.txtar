@@ -18,9 +18,10 @@ exec awtest-hook -session s-1 bash 'bin/aw attach "add feature flag"'
 exec awtest-hook -session s-1 bash 'bin/aw whoami --json'
 ! exec awtest-hook -session s-1 bash 'bin/aw attach x && rm -rf y'
 stderr 'start it with cd '
-! exec awtest-hook -session s-1 bash 'git status'
-stderr 'this session belongs to lane feature-flag'
-! exec awtest-hook -session s-1 bash 'cat AGENTS.md'
+exec awtest-hook -session s-1 bash 'git status'
+stdout 'additionalContext'
+exec awtest-hook -session s-1 bash 'cat AGENTS.md'
+stdout 'additionalContext'
 exec sh $WORK/in-lane.sh
 exec awtest-hook -session s-1 -cwd $LANE bash 'git status'
 exec awtest-hook -session s-1 write $LANE/web/x.txt
@@ -28,7 +29,8 @@ exec awtest-hook -session s-1 write $LANE/web/x.txt
 stderr 'is outside lane feature-flag'
 ! exec awtest-hook -session s-1 write x.txt
 stderr 'would mean the owner''s file'
-! exec awtest-hook -session s-1 read AGENTS.md
+exec awtest-hook -session s-1 read AGENTS.md
+stdout 'AGENTS.md is the owner''s copy'
 
 # Another, unattached session here may read, and is told how to attach before writing.
 env AW_SESSION=
@@ -41,12 +43,12 @@ stderr 'aw pair'
 # The attached session's process ends: it no longer holds the lane, but its scope is still the
 # lane's, whatever its directory (docs/spec/sessions.md).
 end-session s-1
-! exec awtest-hook -session s-1 bash 'git status'
-stderr 'this session belongs to lane feature-flag'
+exec awtest-hook -session s-1 bash 'git status'
+stdout 'this session belongs to lane feature-flag'
 
 -- in-lane.sh --
 set -e
 awtest-hook -session s-1 bash "cd \"$LANE\" && git status"
 if awtest-hook -session s-1 bash "cd \"$LANE\" && rm ../../AGENTS.md" 2>/dev/null; then exit 1; fi
-if awtest-hook -session s-1 bash "cd \"$LANE\" && pkill node" 2>/dev/null; then exit 1; fi
-if awtest-hook -session s-1 bash "cd \"$OWNER\" && git status" 2>/dev/null; then exit 1; fi
+awtest-hook -session s-1 bash "cd \"$LANE\" && pkill node" | grep -q '"permissionDecision":"ask"'
+awtest-hook -session s-1 bash "cd \"$OWNER\" && git status" | grep -q "read the owner's files"

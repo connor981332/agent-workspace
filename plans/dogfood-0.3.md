@@ -14,8 +14,7 @@ recorded as the principles in [AGENTS.md](../AGENTS.md). This plan turns those d
 **Updated:** 2026-11-16
 
 **Branches / MRs:** #96 and #97 (AGENTS.md and this plan), #98 (Phase 1), #99 (Phase 2), #100
-(Phase 3), #101 (Phase 4), #102 (Phase 5, 5.1 to 5.5). The rest of Phase 5 is on
-`feat/dogfood-0.3-phase5b`.
+(Phase 3), #101 (Phase 4), #102 and #103 (Phase 5). Phase 6 is on `feat/dogfood-0.3-phase6`.
 
 **Done:** triage and decisions; AGENTS.md. Phases 1 to 4, each item with a scenario that fails on
 master first. Unit tests, vet, the full acceptance suite (`-count=1`), the coverage check and the
@@ -70,10 +69,22 @@ latency budgets pass locally. Differences from the plan as written:
 - 5.9: `--lane` on `aw audit` and `aw onboard` keeps the previous behaviour; `--without-other-hooks`
   applies only with it.
 
-**In progress:** Phase 5 is done, waiting on CI for its second part.
+- 6.1: the classification is the "Tiers" table in [docs/safety.md](../docs/safety.md).
+- 6.2: the guard tier now asks for `git-safety`'s force pushes, deleted branches and discarded work
+  (in the owner checkout too), `git config` and `git remote`, stopping processes, changing shared
+  containers, and reading or changing secret files. A lane writing outside itself stays a redirect:
+  it is nearly always a mistaken path, and asking would train the human to approve by habit.
+  Printing the environment stays a redirect, since printing one variable works. State schema 15
+  records the open question on the session, so that `aw` shows the lane as waiting on you until the
+  session's next tool call.
+- 6.3: reads from the wrong directory, by file tools or shell commands, go through with a note.
+- 6.4: the messages changed here say what they protect; the rest already did.
+- 6.5: a harness that cannot ask (Codex, OpenCode) refuses what would be asked, and the message
+  says so; the parity scenario checks both kinds.
 
-**Next step:** merge Phase 5's second part, rebuild the owner's dev binary, then Phase 6 (guard
-tiers), starting with the classification (6.1).
+**In progress:** Phase 6, waiting on CI.
+
+**Next step:** merge Phase 6, rebuild the owner's dev binary, then Phase 7 (prerequisites).
 
 ## Decisions taken
 

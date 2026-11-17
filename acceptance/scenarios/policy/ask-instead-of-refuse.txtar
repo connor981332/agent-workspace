@@ -1,6 +1,6 @@
 # A hook cannot see what the human told the agent, so where a person can answer it asks rather than
-# refuses. Force pushes and deleting branches stay refused, and a new workspace lets lanes publish
-# their own work, while a pre-approved merge can only be the lane's own.
+# refuses, force pushes and deleting branches included (the guard tier). A new workspace lets lanes
+# publish their own work, while a pre-approved merge can only be the lane's own.
 # req: R60 R72
 # source: dogfooding RideTracker: agents kept being refused work the human had asked for
 # milestone: M12
@@ -19,18 +19,23 @@ exec awtest-hook bash 'aw discard other --yes'
 stdout '"permissionDecision":"ask"'
 stdout 'only the human does'
 
-# These never do.
+# What cannot be taken back reaches the human too (the guard tier). With pushes pre-approved, a
+# force push is not this lane's own push, and is refused with the command that is. A harness that
+# cannot ask refuses, and says so.
 ! exec awtest-hook bash 'git push --force origin aw/feature-flag'
-stderr 'rewrites the remote'
-! exec awtest-hook bash 'git branch -D main'
-stderr 'deletes a branch'
+stderr 'only this lane''s own branch is pre-approved'
+exec awtest-hook bash 'git branch -D main'
+stdout '"permissionDecision":"ask"'
+stdout 'deletes a branch'
 ! exec awtest-hook -harness codex bash 'git reset --hard'
 stderr 'discards uncommitted work'
+stderr 'this harness cannot ask the human'
 
-# The owner checkout is the human's: destructive Git stays refused there, for a session started there.
+# The owner checkout is the human's: destructive Git there goes to the human as well.
 cd ../..
-! exec awtest-hook -session owner-1 bash 'git reset --hard'
-stderr 'discards uncommitted work'
+exec awtest-hook -session owner-1 bash 'git reset --hard'
+stdout '"permissionDecision":"ask"'
+stdout 'in the owner checkout, which is the human''s'
 
 # A lane's own work is pre-approved.
 cd .worktrees/01

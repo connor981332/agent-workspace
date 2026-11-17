@@ -66,7 +66,11 @@ func pathsRule(s Scope, c shell.Command) Decision {
 	// run there when it says so: after its own cd, or naming every path absolutely.
 	if c.Dir.Known && s.fromOutsideLane(c.Dir.Physical) && len(c.Args) > 0 && c.Name() != "cd" && !isIdentityCommand(c) &&
 		!(reads && (c.Dir.Physical != s.start.Physical || namesPathsAbsolutely(c))) {
-		return deny("boundary", "this session belongs to lane %s, but this command would run in %s → start it with cd %s &&", s.LaneName, quote(c.Dir.Logical), quote(s.LaneRoot))
+		if reads {
+			// Reading the owner checkout disturbs nothing: the warn tier.
+			return allowWith(fmt.Sprintf("aw: this session belongs to lane %s, but this ran in %s, so it read the owner's files → for the lane's, start it with cd %s &&", s.LaneName, quote(c.Dir.Logical), quote(s.LaneRoot)))
+		}
+		return deny("boundary", "this session belongs to lane %s, but this command would run in %s, the owner's, and could change it → start it with cd %s &&", s.LaneName, quote(c.Dir.Logical), quote(s.LaneRoot))
 	}
 	// A command whose writes are known (cp, mv, redirects…) only reads its other paths.
 	targets, understood := unattachedWrites(c)
@@ -480,14 +484,14 @@ func gitRule(s Scope, c shell.Command) Decision {
 			return deny("git", "git -c %s changes how Git runs hooks or commands, which bypasses the workspace's protections → run git without it", key)
 		}
 	}
+	// The guard tier: what cannot be taken back, or is someone else's, goes to the human, who
+	// approves it in place.
 	refused := func(what string) Decision {
 		if !safety {
 			return allow()
 		}
-		return deny("git", "git %s %s, which agents do not do → ask the human to do it, or leave it for review", sub, what)
+		return ask("git", "git %s %s, which cannot be taken back, so the human decides → approve it if you asked for this", sub, what)
 	}
-	// In a lane the work is the agent's own, so the human can approve it there. The owner checkout is
-	// the human's, and force pushes and deleted branches cannot be taken back.
 	destructive := func(what string) Decision {
 		if !safety {
 			return allow()
@@ -495,7 +499,7 @@ func gitRule(s Scope, c shell.Command) Decision {
 		if s.Role == Lane {
 			return ask("git", "git %s %s, in this lane → approve it if you asked for this", sub, what)
 		}
-		return refused(what)
+		return ask("git", "git %s %s in the owner checkout, which is the human's → approve it if you asked for this", sub, what)
 	}
 	switch sub {
 	case "push":
@@ -568,11 +572,11 @@ func gitRule(s Scope, c shell.Command) Decision {
 		}
 	case "config":
 		if shared && gitConfigWrites(args) {
-			return deny("git", "git config writes shared Git configuration, which the owner checkout and every lane use → ask the human")
+			return ask("git", "git config writes shared Git configuration, which the owner checkout and every lane use, so the human decides → approve it if you asked for this")
 		}
 	case "remote":
 		if st, _ := subcommand(args); shared && st != "" && st != "show" && st != "get-url" {
-			return deny("git", "git remote %s changes shared Git configuration → ask the human", st)
+			return ask("git", "git remote %s changes shared Git configuration, which the owner checkout and every lane use, so the human decides → approve it if you asked for this", st)
 		}
 	case "gc", "prune", "repack":
 		if hasArg(args, "--prune") || sub == "prune" {
@@ -663,7 +667,7 @@ func containerRule(s Scope, c shell.Command) Decision {
 	name := c.Name()
 	args := c.Args[1:]
 	refuse := func(what string) Decision {
-		return deny("containers", "%s %s changes shared containers, which agents do not do → aw run runs a command in the lane's container; ask the human for anything else", name, what)
+		return ask("containers", "%s %s changes shared containers, which other lanes and the owner use, so the human decides → approve it if you asked for this; aw run runs a command in the lane's container", name, what)
 	}
 	switch name {
 	case "docker", "podman", "nerdctl":
@@ -703,7 +707,7 @@ func killRule(s Scope, c shell.Command) Decision {
 	name := c.Name()
 	args := c.Args[1:]
 	refuse := func() Decision {
-		return deny("processes", "%s stops processes, which agents do not do: the owner's processes run on the same machine → aw stop <resource> stops a server this lane holds", name)
+		return ask("processes", "%s stops processes, and the owner's run on the same machine, so the human decides → approve it if you asked for this; aw stop <resource> stops a server this lane holds", name)
 	}
 	switch name {
 	case "kill", "pkill", "killall", "skill", "slay", "taskkill":
@@ -774,7 +778,7 @@ func (s Scope) secretLinkWrite(c shell.Command) Decision {
 	}
 	for _, t := range targets {
 		if abs, ok := absolute(t.Text, c.Dir); t.Known && ok && s.isSecret(abs) {
-			return deny("secrets", "%s is a link to the owner's file, which is not changed from a lane → ask the human to change it in the owner checkout", quote(t.Text))
+			return ask("secrets", "%s is a link to the owner's secret file, so the human decides → approve it if you asked for this change", quote(t.Text))
 		}
 	}
 	return allow()
@@ -825,12 +829,12 @@ func secretRule(s Scope, c shell.Command) Decision {
 	}
 	for _, a := range args {
 		if t, ok := mentions(a); ok {
-			return deny("secrets", "this command reads %s, which holds secrets → tools that need it read it themselves; to check a value is set, ask the human", quote(t))
+			return ask("secrets", "this command reads %s, which holds secrets, so the human decides → approve it if you asked for this; otherwise tools that need it read it themselves", quote(t))
 		}
 	}
 	for _, r := range c.Redirs {
 		if t, ok := mentions(r.Target); ok {
-			return deny("secrets", "this command reads or writes %s, which holds secrets → leave the file to the tools that use it", quote(t))
+			return ask("secrets", "this command reads or writes %s, which holds secrets, so the human decides → approve it if you asked for this; otherwise leave the file to the tools that use it", quote(t))
 		}
 	}
 	return allow()

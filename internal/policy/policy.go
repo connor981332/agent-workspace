@@ -164,7 +164,9 @@ func Decide(s Scope, c Call) (d Decision) {
 			d = deny("error", "aw could not check this call (%v), so it is refused → report this to the workspace maintainer", r)
 		}
 		if d.Verdict == Ask && !s.AskSupported {
+			// The guard tier asks the human in place; a harness that cannot ask refuses, and says so.
 			d.Verdict = Deny
+			d.Message += "; this harness cannot ask the human, so aw refuses it instead → ask the human in the conversation to run it themselves"
 		}
 	}()
 	if s.Home == "" {
@@ -189,7 +191,18 @@ func Decide(s Scope, c Call) (d Decision) {
 }
 
 func decideFiles(s Scope, c Call, cwd shell.Dir) Decision {
-	if s.fromOutsideLane(cwd.Physical) {
+	if s.fromOutsideLane(cwd.Physical) && c.Tool == Read {
+		// A read from the owner checkout disturbs nothing: it goes through, with a note when a
+		// relative path means the owner's copy rather than the lane's (the warn tier).
+		for _, p := range c.Paths {
+			if p != "" && !filepath.IsAbs(p) && !strings.HasPrefix(p, "~") {
+				return allowWith(fmt.Sprintf("aw: this session belongs to lane %s, but it runs from the owner checkout, so %s is the owner's copy → for the lane's, use an absolute path inside it, %s", s.LaneName, quote(p), quote(s.LaneRoot)))
+			}
+		}
+		if len(c.Paths) == 0 {
+			return allowWith(fmt.Sprintf("aw: this session belongs to lane %s, but it runs from the owner checkout, so a search without a path looks at the owner's files → pass a path inside the lane, %s", s.LaneName, quote(s.LaneRoot)))
+		}
+	} else if s.fromOutsideLane(cwd.Physical) {
 		// A harness that keeps running from the owner checkout: a relative path would mean the
 		// owner's file, so paths must be absolute, and a search must say where.
 		if len(c.Paths) == 0 {
@@ -223,9 +236,9 @@ func decideFiles(s Scope, c Call, cwd shell.Dir) Decision {
 				continue
 			}
 			if c.Tool == Write {
-				return deny("secrets", "%s is a secret file, linked read-only into the lane; it is not changed from a lane → ask the human to change it in the owner checkout", quote(p))
+				return ask("secrets", "%s is a secret file, the owner's, linked read-only into the lane, so the human decides → approve it if you asked for this change", quote(p))
 			}
-			return deny("secrets", "%s is a secret file, and agents do not read secrets → tools that need it read it themselves (aw run sets up the environment)", quote(p))
+			return ask("secrets", "%s is a secret file, which agents do not read unless the human says so → approve it if you asked for this; otherwise tools that need it read it themselves (aw run sets up the environment)", quote(p))
 		}
 		if c.Tool == Write {
 			if d := s.unattachedWrite(abs); d.Verdict != Allow {
@@ -311,7 +324,7 @@ func (s Scope) boundary(abs, given string) Decision {
 		if lane := s.laneCopy(abs); lane != "" {
 			return deny("boundary", "%s is outside lane %s: it is the owner checkout's copy, and a lane changes only its own → change this lane's copy, %s", quote(given), s.LaneName, quote(lane))
 		}
-		return deny("boundary", "%s is outside lane %s (it resolves to %s, in the owner's workspace) → work inside the lane, under %s", quote(given), s.LaneName, quote(abs), quote(s.LaneRoot))
+		return deny("boundary", "%s is outside lane %s (it resolves to %s): that is the owner's or another lane's work, which this lane does not change → work inside the lane, under %s", quote(given), s.LaneName, quote(abs), quote(s.LaneRoot))
 	}
 	return allow()
 }
