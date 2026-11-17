@@ -100,7 +100,7 @@ The project repositories. The key is the project's name.
 | `accepted_findings` | table of string | — | Readiness findings a person has reviewed, by file: the key is a path relative to the project (dir/** matches a directory), and the value says why it is fine. aw rehearse and aw doctor --projects skip them; rehearsal still refuses a script that names the Compose project of an accepted Compose file, since starting it would reach the real one. For example: [projects.web.accepted_findings] followed by ".claude/settings.local.json" = "personal permissions, not server configuration". |
 | `post_checkout` | one of `"run"`, `"skip"` | `"run"` | run: the repository's own post-checkout hook runs as a setup step of each lane, which can be retried. skip: it does not run in lanes. |
 | `env` | table of string | — | Variables for this project's hooks and aw run commands, such as a switch one of its hooks reads. {lane} and {namespace} are filled in, as in lane_env, so a value such as "lane-{lane}" differs per lane. |
-| `generated` | array of strings | — | Ignored paths (Git pathspecs) that builds create and that do not block recycling a lane, such as node_modules or tmp. Other ignored files may be someone's work, so they keep the lane. |
+| `generated` | array of strings | — | Ignored paths (Git pathspecs) that builds create and that do not block recycling a lane, such as node_modules or tmp; a glob such as *.log or **/rspec.xml matches a name at any depth. Other ignored files may be someone's work, so they keep the lane. |
 
 ### `[projects."<name>".lane_guards.<name>]`
 

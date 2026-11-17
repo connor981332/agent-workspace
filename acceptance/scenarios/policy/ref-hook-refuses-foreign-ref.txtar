@@ -7,10 +7,10 @@
 
 workspace shop --init
 exec aw setup
-stdout '^\.: installed the hooks dispatcher$'
+stdout '^the workspace repository: installed the hooks dispatcher$'
 stdout '^web: installed the hooks dispatcher$'
 exec aw setup
-stdout '^\.: already set up$'
+stdout '^Hooks dispatcher already set up in the workspace repository, api, web$'
 exec git -C web branch keep
 exec git -C web tag v1
 owner-snapshot

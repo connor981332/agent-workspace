@@ -4,6 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
+	"path/filepath"
+	"slices"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -107,15 +111,20 @@ func setupWorkspace(cmd *cobra.Command, ws *workspace.Workspace, c *config.Confi
 		return finish
 	}
 	out := cmd.OutOrStdout()
+	var already []string
 	for _, r := range results {
+		name := ui.Clean(repoName(c, r.Repo))
 		switch {
 		case r.Missing:
-			fmt.Fprintf(errOut, "%s is not cloned yet, so it has no hooks\n", ui.Clean(r.Repo))
+			fmt.Fprintf(errOut, "%s is not cloned yet, so it has no hooks\n", name)
 		case r.Installed:
-			fmt.Fprintf(out, "%s: installed the hooks dispatcher\n", ui.Clean(r.Repo))
+			fmt.Fprintf(out, "%s: installed the hooks dispatcher\n", name)
 		default:
-			fmt.Fprintf(out, "%s: already set up\n", ui.Clean(r.Repo))
+			already = append(already, name)
 		}
+	}
+	if len(already) > 0 {
+		fmt.Fprintf(out, "Hooks dispatcher already set up in %s\n", strings.Join(already, ", "))
 	}
 	changed := false
 	for _, c := range configs {
@@ -162,4 +171,18 @@ func setupWorkspace(cmd *cobra.Command, ws *workspace.Workspace, c *config.Confi
 		fmt.Fprintln(out, "Set up. Next: aw new \"<purpose>\", or start a harness here.")
 	}
 	return finish
+}
+
+// repoName names a repository the way the rest of aw's output does: by its project's name, or as
+// the workspace repository when no project lives at the workspace root.
+func repoName(c *config.Config, dir string) string {
+	for _, name := range slices.Sorted(maps.Keys(c.Projects)) {
+		if filepath.Clean(c.Projects[name].Directory) == filepath.Clean(dir) {
+			return name
+		}
+	}
+	if dir == "." {
+		return "the workspace repository"
+	}
+	return dir
 }
