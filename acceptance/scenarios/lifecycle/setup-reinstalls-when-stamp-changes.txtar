@@ -47,6 +47,9 @@ name = "Solo"
 namespace = "solo"
 schema = 1
 
+[lanes]
+setup = "eager"
+
 [projects.solo]
 directory = "."
 install = 'echo x >> "$WORK/installs"'

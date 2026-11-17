@@ -22,8 +22,9 @@ import (
 func newSetupCmd() *cobra.Command {
 	var asJSON, startContainers bool
 	var harnessName string
+	var projects []string
 	cmd := &cobra.Command{
-		Use:   "setup [lane]",
+		Use:   "setup [lane [--project p]…]",
 		Short: "Set up this workspace after cloning it, or rerun a lane's setup from its first incomplete step",
 		Long: `aw onboard runs this first, so you only need it alone on a fresh clone of a workspace that is already
 configured, or to retry a lane.
@@ -35,11 +36,16 @@ sandbox settings, install dependencies in the owner checkout, and run aw doctor.
 Containers start only if you say so: on a terminal aw asks, and otherwise pass --containers.
 
 With a lane, rerun that lane's setup in the foreground, from its first incomplete step. An agent may
-do this for its own lane.`,
+do this for its own lane. With lazy setup ([lanes] setup = "lazy"), a project's own steps otherwise
+wait for its first aw run, aw serve or team command; --project sets up only the projects named, and
+without it every project is set up.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: run(func(cmd *cobra.Command, args []string) error {
 			if len(args) == 1 {
-				return retrySetup(cmd, args[0])
+				return retrySetup(cmd, args[0], projects)
+			}
+			if len(projects) > 0 {
+				return &usageError{errors.New("--project sets up a project in a lane → name the lane: aw setup <lane> --project <name>")}
 			}
 			ws, c, err := loadConfig()
 			if err != nil {
@@ -51,6 +57,7 @@ do this for its own lane.`,
 	cmd.Flags().BoolVar(&asJSON, "json", false, "print the result as JSON")
 	cmd.Flags().BoolVar(&startContainers, "containers", false, "start the devcontainers without asking")
 	cmd.Flags().StringVar(&harnessName, "harness", "", "the default harness for your individual configuration, without asking")
+	cmd.Flags().StringSliceVar(&projects, "project", nil, "with a lane: set up only this project (repeatable)")
 	return cmd
 }
 

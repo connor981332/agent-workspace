@@ -23,12 +23,16 @@ team.
 They can be invoked from any supported harness, or through `aw onboard`.
 
 `aw onboard` is the single entry point. It runs `aw setup`, reports what `aw inspect` finds, and
-launches the default harness with the right skill. A failure in those deterministic steps does not end
-the command: the agent starts with the failure as context, in the owner checkout as a pair session if
-no lane can be created, and decides whether to fix it, skip it or ask. Nothing has to be committed: a
-lane's root receives what its commit lacks, as copies that do not count as the lane's work until
-they are changed. Hooks that are not aw's are left out of the onboarding lane, and the agent decides
-whether the workspace keeps them, because another system's guard can refuse everything in a lane.
+launches the default harness with the right skill, as a pair session in the owner checkout: the
+developer is there, and their review of the diff is the safeguard (AGENTS.md, principle 7). Its
+changes stay in the owner checkout, and `aw move-to-lane` gives them a branch and a merge request
+when the developer wants one. With `--lane` the agent works in a lane of its own instead. A failure
+in the deterministic steps does not end the command: the agent starts with the failure as context,
+in the owner checkout if no lane can be created, and decides whether to fix it, skip it or ask.
+Nothing has to be committed: a lane's root receives what its commit lacks, as copies that do not
+count as the lane's work until they are changed. With `--lane --without-other-hooks`, hooks that
+are not aw's are left out of the onboarding lane, and the agent decides whether the workspace keeps
+them, because another system's guard can refuse everything in a lane.
 
 ## Facts first: `aw inspect`
 
@@ -114,9 +118,10 @@ The skill iterates until rehearsal passes, then stops and reports.
 
 ## Review and commit
 
-The output goes on a branch and a merge request at the team level, through the normal review for
-changes to the workspace's own configuration (requirement R63). Lifecycle hooks run with the user's
-privileges, so this review matters.
+A person reviews the output, because lifecycle hooks run with the user's privileges (requirement
+R63). In a pair session that is the developer reviewing the diff in the owner checkout; a branch and
+a merge request at the team level follow when they move the work to a lane, or when the agent
+worked in one (`--lane`).
 
 ## Auditing the workspace
 

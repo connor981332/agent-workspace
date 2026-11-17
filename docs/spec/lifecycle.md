@@ -63,7 +63,16 @@ A lane belongs to work. Sessions hold it and release it, crash or end, and the l
 4. Providers create or reset the lane's data.
 5. Lifecycle steps run in order: `prepare`, each project's `install` (skipped when its stamp is
    unchanged), `setup` (or `reset` for a recycled lane). Independent projects run in parallel.
-6. The lane becomes `working`. A command that needs setup waits for exactly the step it depends on.
+   With `[lanes] setup = "lazy"`, the default, only the data and the `prepare` steps run here: a
+   project's own steps run the first time a command needs the project (`aw run`, `aw serve` or a team
+   command there), in the foreground, or with `aw setup <lane> [--project <name>]`. A command an
+   agent runs directly in a project not set up yet is let through with a note that says how.
+   `setup = "eager"` runs every step here, for agents that run projects' commands directly.
+6. The lane is claimed. A command that needs setup waits for exactly the steps it depends on.
+
+When every lane is in use, a claim first recycles the lanes nobody holds whose work is proven merged,
+as `aw sweep --apply` would, archiving as it does, and says which. Only if none can be recycled does
+it fail, naming what is kept.
 
 Before creating worktrees, each project's lane guards run against the branch. A branch that fails
 them (for example, a database configuration that ignores `AW_LANE`) is refused with the fix.

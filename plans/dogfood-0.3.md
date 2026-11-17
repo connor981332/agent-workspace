@@ -14,7 +14,8 @@ recorded as the principles in [AGENTS.md](../AGENTS.md). This plan turns those d
 **Updated:** 2026-11-16
 
 **Branches / MRs:** #96 and #97 (AGENTS.md and this plan), #98 (Phase 1), #99 (Phase 2), #100
-(Phase 3), #101 (Phase 4). Phase 5 is on `feat/dogfood-0.3-phase5` and follow-on branches.
+(Phase 3), #101 (Phase 4), #102 (Phase 5, 5.1 to 5.5). The rest of Phase 5 is on
+`feat/dogfood-0.3-phase5b`.
 
 **Done:** triage and decisions; AGENTS.md. Phases 1 to 4, each item with a scenario that fails on
 master first. Unit tests, vet, the full acceptance suite (`-count=1`), the coverage check and the
@@ -60,11 +61,19 @@ latency budgets pass locally. Differences from the plan as written:
   as holding a lane only when it can find the session's process, so that a hold always ends.
   `aw lanes` derives what it can without reading repositories. Finishing an incomplete lane makes
   it claimed, as finishing used to make it ready. Sweep still says a holding session "is attached".
+- 5.6: `[lanes] setup = "lazy"` (the default) or `"eager"`, kept for teams whose agents run
+  projects' commands directly. A project's prepare runs at claim time, since it writes the env files
+  commands read. A command run directly in a project not set up yet gets a note from the hook.
+  `aw setup <lane> --project <name>` sets up one project.
+- 5.7: the claim runs the human's own sweep, so a full workspace may wait for the forge, within
+  sweep's 30-second deadline, when a lane is not proven locally.
+- 5.9: `--lane` on `aw audit` and `aw onboard` keeps the previous behaviour; `--without-other-hooks`
+  applies only with it.
 
-**In progress:** Phase 5: 5.6 to 5.9.
+**In progress:** Phase 5 is done, waiting on CI for its second part.
 
-**Next step:** lazy per-project setup (5.6), then capacity (5.7), the instructions (5.8) and pair
-sessions for audit and onboard (5.9).
+**Next step:** merge Phase 5's second part, rebuild the owner's dev binary, then Phase 6 (guard
+tiers), starting with the classification (6.1).
 
 ## Decisions taken
 

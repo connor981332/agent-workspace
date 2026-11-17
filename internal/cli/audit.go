@@ -15,19 +15,20 @@ import (
 )
 
 func newAuditCmd() *cobra.Command {
-	var dropOtherHooks bool
+	var dropOtherHooks, inLane bool
 	var harness, focus string
 	cmd := &cobra.Command{
-		Use:   "audit [--focus text] [--harness h] [--without-other-hooks]",
+		Use:   "audit [--focus text] [--harness h] [--lane] [--without-other-hooks]",
 		Short: "Talk through this workspace's configuration with an agent, against the repositories and what this aw can do",
 		Long: `Start an agent that audits the workspace's configuration with you: what has changed in the
 repositories since it was written, what aw can do now that it could not then, and what aw doctor
 suggests. The agent opens with a short brief, ranked by what each change would gain, and then
 discusses it with you. It changes nothing until you agree, and then only what you agreed.
 
-It works in a lane of its own, as aw onboard does, so its changes go on the lane's branch and
-through a merge request. It may run aw rehearse there without a permission prompt. In a workspace
-kept as plain files it works in the owner checkout as a pair session.
+It is a pair session in the owner checkout, working with you, as aw onboard is: its changes are
+there for you to review, and aw move-to-lane gives them a branch and a merge request when you want
+one. With --lane it works in a lane of its own, so its changes go on the lane's branch and through
+a merge request, and it may run aw rehearse there without a permission prompt.
 
 It records the aw version in [workspace] audited_with, so the next audit starts from there, and
 suggestions you decline in [audit] declined, so they are not raised again.
@@ -39,11 +40,12 @@ This audits the workspace's configuration. To find what the projects themselves 
 work in lanes, use aw doctor --projects and the readiness-audit skill.`,
 		Args: cobra.NoArgs,
 		RunE: run(func(cmd *cobra.Command, _ []string) error {
-			return startConfigAgent(cmd, auditAgent(focus, harness, dropOtherHooks))
+			return startConfigAgent(cmd, auditAgent(focus, harness, dropOtherHooks, inLane))
 		}),
 	}
 	cmd.Flags().StringVar(&focus, "focus", "", "a question to start the conversation with")
 	cmd.Flags().StringVar(&harness, "harness", "", "the harness to launch")
+	cmd.Flags().BoolVar(&inLane, "lane", false, "start the agent in a lane of its own, to work alone, instead of as a pair session with you")
 	cmd.Flags().BoolVar(&dropOtherHooks, "without-other-hooks", false, "turn off hooks that are not aw's in the audit's lane")
 	return cmd
 }
@@ -52,9 +54,9 @@ work in lanes, use aw doctor --projects and the readiness-audit skill.`,
 // rest with aw changelog.
 const maxChangelogPrompt = 6 << 10
 
-func auditAgent(focus, harness string, dropOtherHooks bool) configAgent {
+func auditAgent(focus, harness string, dropOtherHooks, inLane bool) configAgent {
 	return configAgent{
-		name: "aw audit", purpose: lanes.PurposeAudit, harness: harness, dropOtherHooks: dropOtherHooks,
+		name: "aw audit", purpose: lanes.PurposeAudit, harness: harness, dropOtherHooks: dropOtherHooks, lane: inLane,
 		prompt: func(ws *workspace.Workspace, c *config.Config) string {
 			return auditPrompt(ws, c, focus)
 		},

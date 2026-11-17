@@ -100,6 +100,9 @@ type Scope struct {
 	// PreviousLane is the purpose of the lane an unattached session released, which attaching
 	// again with the same purpose takes back.
 	PreviousLane string
+	// Unprepared are the lane's projects whose setup waits for its first use (lazy setup), by the
+	// physical directory of their worktree.
+	Unprepared map[string]string
 }
 
 // safeguard reports whether the team turned on an optional group of rules.
@@ -251,7 +254,7 @@ func decideShell(s Scope, src string, cwd shell.Dir) Decision {
 	var asks []Decision
 	var notes []string
 	rules := []func(Scope, shell.Command) Decision{
-		computedRule, pathsRule, ownerOnlyRule, gitRule, containerRule, killRule, serverRule, secretRule, muxRule, unattachedRule, publicationRule, teamGuardRule,
+		computedRule, pathsRule, ownerOnlyRule, gitRule, containerRule, killRule, serverRule, secretRule, muxRule, unattachedRule, publicationRule, teamGuardRule, unpreparedRule,
 	}
 	if s.Role == Pair {
 		rules = pairRules

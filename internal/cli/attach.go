@@ -228,7 +228,19 @@ func waitForSetup(cmd *cobra.Command, lane int, say io.Writer) error {
 			}
 			return fmt.Errorf("lane %s: setup incomplete → aw setup %s", l.Name, l.Name)
 		default:
-			fmt.Fprintf(say, "aw: lane %s is set up (%d steps)\n", ui.Clean(l.Name), len(steps))
+			done, later := 0, 0
+			for _, s := range steps {
+				if s.Finished() {
+					done++
+				} else {
+					later++
+				}
+			}
+			if later > 0 {
+				fmt.Fprintf(say, "aw: lane %s is set up (%d steps); %d more set up their projects on first use\n", ui.Clean(l.Name), done, later)
+			} else {
+				fmt.Fprintf(say, "aw: lane %s is set up (%d steps)\n", ui.Clean(l.Name), done)
+			}
 			return nil
 		}
 		for _, s := range steps {

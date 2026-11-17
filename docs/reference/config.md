@@ -43,6 +43,7 @@ Lanes: the numbered, stable directories agents work in.
 | `pool` | integer, at least 0 | `3` | Clean lanes kept warm for reuse. |
 | `retention` | duration | `"14d"` | Pooled lanes older than this are destroyed. |
 | `archive_retention` | duration | `"30d"` | Archived tips (refs/aw/archive, from aw discard, aw reset-branch and recycling a lane not proven by ancestry) older than this are removed by aw sweep --apply. 0 keeps them for good. |
+| `setup` | one of `"lazy"`, `"eager"` | `"lazy"` | lazy: claiming a lane runs the workspace's own steps, and each project's steps (install, its hooks, its checkout hook) run the first time a command needs the project: aw run, aw serve or a team command there, or aw setup. eager: every step runs in the background as soon as the lane is claimed, for agents that run projects' commands directly rather than through aw run. |
 | `hostname` | string | `"lane-{lane}.localhost"` | Each lane's hostname. {lane} is the lane number, {namespace} the namespace. |
 | `server_capacity` | integer, at least 1 | `2` | Capacity of the implicit resource "servers", which holds every server not listed in a resource. |
 | `port_stride` | integer, at least 1 | `100` | A server in seat k listens on port + port_stride × k. |

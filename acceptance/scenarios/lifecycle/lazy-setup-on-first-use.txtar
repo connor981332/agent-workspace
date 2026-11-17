@@ -1,0 +1,57 @@
+# With lazy setup, claiming a lane runs only the workspace's own steps. A project's own setup runs the
+# first time a command needs it, in the foreground, and the other projects wait for theirs. A command
+# an agent runs directly in a project not set up yet is told how to set it up; aw setup --project
+# sets up one project, and aw setup the rest.
+# req: R5 R31 R32
+# source: plans/dogfood-0.3.md 5.6 (docs/spec/sessions.md, "Lazy per-project setup")
+# milestone: M12
+
+workspace shop --init
+exec aw attach 'add feature flag'
+exec aw lanes --json
+! stdout 'setting-up'
+! exists .git/aw/web-ran
+cd .worktrees/01
+
+# A command runs directly in api, which has not been set up: it is let through, with how to set it up.
+cd api
+exec awtest-hook bash 'make test'
+stdout 'project api is not set up in this lane yet'
+stdout 'bin/aw run api'
+cd ..
+
+exec aw run web cat $OWNER/.git/aw/web-ran
+stderr 'setting up web in lane feature-flag, on its first use'
+stdout 'web set up'
+! exists $OWNER/.git/aw/api-ran
+
+# Once set up, it is not set up again.
+exec aw run web true
+! stderr 'setting up'
+
+exec aw setup feature-flag --project api
+exists $OWNER/.git/aw/api-ran
+cd api
+exec awtest-hook bash 'make test'
+! stdout 'not set up'
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[projects.web]
+directory = "web"
+
+[projects.web.lifecycle]
+setup = 'echo "web set up" > "$AW_OWNER/.git/aw/web-ran"'
+
+[projects.api]
+directory = "api"
+
+[projects.api.lifecycle]
+setup = 'echo "api set up" > "$AW_OWNER/.git/aw/api-ran"'

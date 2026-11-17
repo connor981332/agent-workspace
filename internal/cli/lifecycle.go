@@ -9,8 +9,11 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"slices"
 	"strconv"
+	"strings"
 	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -80,9 +83,75 @@ func awaitSetup(ctx context.Context, w *writeContext, m *lanes.Manager, project 
 	if err != nil {
 		return nil // Locate says what is wrong with a lane with no record
 	}
-	return lifecycle.Await(ctx, w.store, l, lifecycle.Needed(project, after), func(step string) {
-		fmt.Fprintf(stderr, "aw: waiting for %s to finish\n", step)
-	})
+	need := lifecycle.Needed(project, after)
+	said, tried := false, false
+	// With lazy setup, the first command that needs a project sets it up, here in the foreground,
+	// once nothing else is running the lane's setup (docs/spec/sessions.md, "Lazy per-project setup").
+	for {
+		if l, err = state.LaneByNumber(w.store.DB(), n); err != nil {
+			return err
+		}
+		steps, err := state.Steps(w.store.DB(), l.Number, l.Generation)
+		if err != nil {
+			return err
+		}
+		waiting := ""
+		for _, s := range steps {
+			if need(s.Name) && !s.Finished() && s.Status != state.StepFailed {
+				waiting = s.Name
+				break
+			}
+		}
+		if waiting == "" {
+			break // everything it needs has finished, or failed
+		}
+		if lifecycle.Busy(w.store.DB(), l) {
+			if err := lifecycle.Recover(ctx, w.store); err != nil {
+				return err
+			}
+			if !said {
+				said = true
+				fmt.Fprintf(stderr, "aw: waiting for %s to finish\n", waiting)
+			}
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(100 * time.Millisecond):
+			}
+			continue
+		}
+		todo, err := lifecycle.Unstarted(w.store.DB(), l, need)
+		if err != nil {
+			return err
+		}
+		if len(todo) == 0 || tried {
+			break // a second pass would only repeat what the first could not finish
+		}
+		tried = true
+		named := slices.DeleteFunc(slices.Clone(todo), func(p string) bool { return p == "" })
+		if len(named) > 0 {
+			fmt.Fprintf(stderr, "aw: setting up %s in lane %s, on its first use\n", strings.Join(named, ", "), ui.Clean(l.Name))
+		}
+		if err := runSetup(ctx, w, m, l, stderr, named); err != nil && !errors.Is(err, lifecycle.ErrRunning) {
+			return err
+		}
+	}
+	// Nothing is running: whatever is left failed, or did not start.
+	steps, err := state.Steps(w.store.DB(), l.Number, l.Generation)
+	if err != nil {
+		return err
+	}
+	for _, s := range steps {
+		if need(s.Name) && s.Status == state.StepFailed {
+			return lifecycle.Incomplete(l.Name, s)
+		}
+	}
+	for _, s := range steps {
+		if need(s.Name) && !s.Finished() {
+			return fmt.Errorf("lane %s's setup did not get to %s → run aw setup %s", ui.Clean(l.Name), s.Name, ui.Clean(l.Name))
+		}
+	}
+	return nil
 }
 
 // ownHolder is this process holding seats for a lane.
@@ -93,8 +162,9 @@ func ownHolder(l state.Lane) (broker.Holder, error) {
 	return h, err
 }
 
-// runSetup runs what is left of a lane's setup.
-func runSetup(ctx context.Context, w *writeContext, m *lanes.Manager, l state.Lane, out io.Writer) error {
+// runSetup runs what is left of a lane's setup: every step when projects is nil, else the steps at
+// claim time and those projects' own (lazy setup).
+func runSetup(ctx context.Context, w *writeContext, m *lanes.Manager, l state.Lane, out io.Writer, projects []string) error {
 	dir, err := m.StateDir(l.Number)
 	if err != nil {
 		return err
@@ -127,13 +197,14 @@ func runSetup(ctx context.Context, w *writeContext, m *lanes.Manager, l state.La
 		Provision: func(ctx context.Context, data string, fromPool bool) error {
 			return m.Data().Provision(ctx, m.ProviderLane(l), data, fromPool)
 		},
-		After: func(ctx context.Context) error { return m.Data().Discover(ctx, m.ProviderLane(l)) },
+		After:    func(ctx context.Context) error { return m.Data().Discover(ctx, m.ProviderLane(l)) },
+		Projects: projects,
 	}
 	return r.Run(ctx)
 }
 
 // retrySetup is aw setup <lane>: the lane's setup, in the foreground.
-func retrySetup(cmd *cobra.Command, ref string) error {
+func retrySetup(cmd *cobra.Command, ref string, projects []string) error {
 	w, err := openForWrite()
 	if err != nil {
 		return err
@@ -161,7 +232,15 @@ func retrySetup(cmd *cobra.Command, ref string) error {
 	for _, n := range notes {
 		fmt.Fprintf(cmd.ErrOrStderr(), "aw: note: %s\n", ui.Clean(n))
 	}
-	err = runSetup(ctx, w, m, l, cmd.ErrOrStderr())
+	for _, p := range projects {
+		if _, ok := w.cfg.Projects[p]; !ok {
+			return fmt.Errorf("there is no project named %q → aw config get projects lists them", p)
+		}
+	}
+	if len(projects) == 0 {
+		projects = nil // every step
+	}
+	err = runSetup(ctx, w, m, l, cmd.ErrOrStderr(), projects)
 	if errors.Is(err, lifecycle.ErrRunning) {
 		return fmt.Errorf("lane %s's setup is already running → wait for it; aw shows its progress", ui.Clean(l.Name))
 	}
@@ -193,7 +272,11 @@ func newBackgroundSetupCmd() *cobra.Command {
 			}
 			ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
 			defer stop()
-			return runSetup(ctx, w, manager(w), l, nil)
+			var projects []string
+			if lifecycle.Lazy(w.cfg) {
+				projects = []string{} // the steps at claim time; each project's wait for its first use
+			}
+			return runSetup(ctx, w, manager(w), l, nil, projects)
 		}),
 	}
 }

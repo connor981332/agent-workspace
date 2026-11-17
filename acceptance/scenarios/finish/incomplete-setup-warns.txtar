@@ -38,6 +38,7 @@ namespace = "shop"
 schema = 1
 
 [lanes]
+setup = "eager"
 pool = 0
 
 [projects.web]

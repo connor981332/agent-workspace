@@ -1,4 +1,4 @@
-# aw onboard does the setup itself, and needs nothing committed: the lane gets the workspace's files
+# aw onboard --lane does the setup itself, and needs nothing committed: the lane gets the workspace's files
 # as they are, and they do not count as the lane's work.
 # req: R85
 # source: dogfood of 0.1.0-rc.2
@@ -8,7 +8,7 @@ owner-may-change
 stubs claude
 workspace solo --single
 exec aw init
-exec aw onboard --harness claude
+exec aw onboard --lane --harness claude
 stderr 'aw onboard: setting up'
 stderr 'creating its worktree'
 grep 'claude .*aw-workspace-design' $STUB_LOG

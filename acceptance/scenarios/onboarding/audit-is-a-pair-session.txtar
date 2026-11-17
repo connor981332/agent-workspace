@@ -1,0 +1,18 @@
+# aw audit and aw onboard start the agent as a pair session in the owner checkout, with the developer
+# who is there: no lane is claimed, the agent is told it works with them, and aw move-to-lane is
+# how its work gets a branch. --lane starts one that works alone.
+# req: R60 R85 R88
+# source: plans/dogfood-0.3.md 5.9 (docs/spec/sessions.md, "Routes and precedence")
+# milestone: M12
+
+owner-may-change
+stubs claude
+workspace solo --single --init
+exec aw audit --harness claude
+! exists .worktrees/01
+grep '^claude AW_SESSION=claude:pair-' $STUB_LOG
+grep 'You are a pair session in the owner checkout, working with the developer' $STUB_LOG
+grep 'aw move-to-lane' $STUB_LOG
+exec aw onboard --harness claude
+! exists .worktrees/01
+grep 'aw-workspace-design' $STUB_LOG

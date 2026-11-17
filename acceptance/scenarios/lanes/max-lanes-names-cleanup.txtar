@@ -6,6 +6,8 @@
 workspace shop --init
 exec aw attach 'first thing'
 exec aw attach 'second thing'
+lane-commit 01 web/a.txt 'unmerged'
+lane-commit 02 web/b.txt 'unmerged'
 ! exec aw attach 'third thing'
 stderr 'all 2 lanes are in use → run aw sweep to see which lanes are proven merged, then aw sweep --apply; or raise \[lanes\] max'
 ! exists .worktrees/03

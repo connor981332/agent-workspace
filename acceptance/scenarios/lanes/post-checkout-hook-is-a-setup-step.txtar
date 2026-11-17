@@ -7,6 +7,7 @@
 
 workspace shop --init
 owner-may-change
+exec sh -c 'printf "\n[lanes]\nsetup = \"eager\"\n" >> workspace.toml'
 exec sh $WORK/hook.sh
 exec aw inspect
 stdout 'post-checkout hook'

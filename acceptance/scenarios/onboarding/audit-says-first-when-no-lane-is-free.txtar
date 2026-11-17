@@ -1,4 +1,4 @@
-# When every lane is in use, aw audit says so before its setup, which can take minutes, rather than
+# When every lane is in use, aw audit --lane says so before its setup, which can take minutes, rather than
 # after it, and starts the agent in the owner checkout without trying to create a lane.
 # req: R85 R95
 # source: dogfood of 0.3.0 (plans/dogfood-0.3.md 1.9)
@@ -10,10 +10,10 @@ workspace solo --single --init
 cp $WORK/one-lane.toml workspace.toml
 exec aw setup
 exec aw attach 'other work'
-exec aw audit --harness claude
+exec aw audit --lane --harness claude
 stderr -count=1 'no lane is free for this \(all 1 lanes are in use'
 ! stderr 'creating a lane'
-exec sh -c 'aw audit --harness claude 2>&1 | grep -n . | grep -m1 "no lane is free" | cut -d: -f1'
+exec sh -c 'aw audit --lane --harness claude 2>&1 | grep -n . | grep -m1 "no lane is free" | cut -d: -f1'
 stdout '^2$'
 grep 'pair session in the owner checkout' $STUB_LOG
 exec aw lanes --json

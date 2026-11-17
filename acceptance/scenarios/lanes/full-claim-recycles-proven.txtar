@@ -1,0 +1,42 @@
+# When every lane is in use, a claim first recycles the lanes nobody holds whose work is proven
+# merged, as the human's aw sweep --apply would, and says so. A held lane and an unmerged one stay;
+# with nothing to recycle, the claim fails as before, naming what to do.
+# req: R25 R46
+# source: plans/dogfood-0.3.md 5.7 (docs/spec/sessions.md, "Capacity")
+# milestone: M12
+
+workspace shop --init
+exec aw attach 'first thing'
+session s-1 claude
+exec aw attach 'second thing'
+env AW_SESSION=
+env AW_SESSION_PID=
+exec aw attach 'third thing'
+stderr 'lane first-thing, which nobody held and whose work is proven merged, was recycled to make room'
+exec aw lanes
+! stdout first-thing
+stdout second-thing
+stdout third-thing
+
+lane-commit 01 web/x.txt 'unmerged'
+! exec aw attach 'fourth thing'
+stderr 'all 2 lanes are in use'
+exec aw lanes
+stdout second-thing
+stdout third-thing
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+max = 2
+pool = 0
+
+[projects.web]
+directory = "web"
+
+[projects.api]
+directory = "api"

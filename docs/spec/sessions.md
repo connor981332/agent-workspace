@@ -106,9 +106,12 @@ Claiming a lane creates its worktrees, links and copies, and runs the workspace-
 (`prepare`, data providers). A project's own steps (install, its lifecycle hooks, its checkout hook)
 run the first time the lane needs that project: `aw run`, `aw serve` or a team command in it. These
 already wait for the steps they need (`lifecycle.Needed`); they now start them if nothing has.
-`aw setup <lane>` runs everything, as today. The guard's hook cannot start a setup, since it must
-stay fast and read-only, so a first *edit* in a project does not set it up; the first command that
-runs something there does.
+`aw setup <lane>` runs everything, as today, and `--project <name>` one project. The guard's hook
+cannot start a setup, since it must stay fast and read-only, so a first *edit* in a project does not
+set it up; the first command that runs something there does. A command an agent runs directly in a
+project not set up yet is let through with a note naming `bin/aw run <project>` and
+`bin/aw setup <lane> --project <name>` (the warn tier). `[lanes] setup = "eager"` keeps every step
+at claim time, for a team whose agents run projects' commands directly.
 
 ## Capacity
 

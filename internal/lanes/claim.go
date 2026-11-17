@@ -126,6 +126,22 @@ func (m *Manager) Claim(ctx context.Context, req ClaimRequest) (*Claimed, error)
 			return c, err
 		}
 	}
+	// Every lane in use: first recycle those the human's own sweep would, the lanes nobody holds
+	// whose work is proven merged (docs/spec/sessions.md, "Capacity").
+	var recycled []string
+	if Full(m.Store.DB(), m.Cfg.Lanes.Max, purpose) != nil {
+		m.say("every lane is in use: recycling those proven merged")
+		rep, err := m.Sweep(ctx, SweepOptions{Apply: true, Caller: m.CallerLane()})
+		if err != nil {
+			return nil, err
+		}
+		for _, d := range rep.Lanes {
+			if (d.Action == ActionRecycle || d.Action == ActionDestroy) && d.Result == "done" && d.lane.State != state.LanePool {
+				recycled = append(recycled, d.Name)
+			}
+		}
+		t.Mark("recycle")
+	}
 	// Everything that can refuse runs before anything is reserved or created.
 	plans, err := m.plan(ctx, req)
 	if err != nil {
@@ -209,9 +225,12 @@ func (m *Manager) Claim(ctx context.Context, req ClaimRequest) (*Claimed, error)
 		}
 		lane.State, lane.Updated = state.LaneClaimed, state.Now()
 		if steps := lifecycle.Plan(m.Cfg, fromPool, hooks); len(steps) > 0 {
-			lane.State = state.LaneSettingUp
+			// Every step is recorded; with lazy setup a project's own wait for its first use.
 			if err := state.PlanSetup(tx, lane.Number, lane.Generation, fromPool, lifecycle.Names(steps)); err != nil {
 				return err
+			}
+			if len(lifecycle.AtClaim(m.Cfg, steps)) > 0 {
+				lane.State = state.LaneSettingUp
 			}
 		}
 		return state.UpdateLane(tx, lane)
@@ -221,8 +240,12 @@ func (m *Manager) Claim(ctx context.Context, req ClaimRequest) (*Claimed, error)
 	}
 	t.Mark("record")
 	compose.CopyPersonal(m.WS.Owner, m.Root(lane.Number))
-	return &Claimed{Lane: lane, Dir: Dir(lane.Number, m.Cfg.Lanes.Max), Root: m.Root(lane.Number), Repos: repos, FromPool: fromPool,
-		Setup: lane.State == state.LaneSettingUp, Notes: notes(plans)}, nil
+	c := &Claimed{Lane: lane, Dir: Dir(lane.Number, m.Cfg.Lanes.Max), Root: m.Root(lane.Number), Repos: repos, FromPool: fromPool,
+		Setup: lane.State == state.LaneSettingUp, Notes: notes(plans)}
+	for _, name := range recycled {
+		c.Notes = append(c.Notes, fmt.Sprintf("every lane was in use, so lane %s, which nobody held and whose work is proven merged, was recycled to make room", name))
+	}
+	return c, nil
 }
 
 // keepsLane reports whether a session attaching for purpose gets lane l back: the lane it is in,

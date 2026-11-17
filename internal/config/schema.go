@@ -148,6 +148,10 @@ var schema = table("",
 		"retention", duration("Pooled lanes older than this are destroyed.").withDefault("14d"),
 		"archive_retention", duration("Archived tips (refs/aw/archive, from aw discard, aw reset-branch and recycling a lane not "+
 			"proven by ancestry) older than this are removed by aw sweep --apply. 0 keeps them for good.").withDefault("30d"),
+		"setup", str("lazy: claiming a lane runs the workspace's own steps, and each project's steps (install, its hooks, its "+
+			"checkout hook) run the first time a command needs the project: aw run, aw serve or a team command there, or aw setup. "+
+			"eager: every step runs in the background as soon as the lane is claimed, for agents that run projects' commands "+
+			"directly rather than through aw run.").oneOf("lazy", "eager").withDefault("lazy"),
 		"hostname", str("Each lane's hostname. {lane} is the lane number, {namespace} the namespace.").
 			withDefault("lane-{lane}.localhost").checked(func(v any) (string, string) {
 			if !strings.Contains(v.(string), "{lane}") {
