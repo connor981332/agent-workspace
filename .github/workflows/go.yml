@@ -133,7 +133,8 @@ jobs:
           command -v dash bash
       - name: Acceptance suite and coverage check (§3)
         working-directory: acceptance
-        run: go test -count=1 -v ./... 2>&1 | tee "$RUNNER_TEMP/acceptance.log"; exit "${PIPESTATUS[0]}"
+        # Go's default 10m is close to what a slow macOS runner needs; the job's 20m still bounds it.
+        run: go test -count=1 -timeout 18m -v ./... 2>&1 | tee "$RUNNER_TEMP/acceptance.log"; exit "${PIPESTATUS[0]}"
         shell: bash
       - name: Summary
         if: always()
