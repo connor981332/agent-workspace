@@ -369,6 +369,9 @@ type Runner struct {
 	// Projects limits a lazy setup to the steps at claim time and these projects' own; nil runs
 	// every step whatever [lanes] setup says, as aw setup <lane> does.
 	Projects []string
+	// Owner is the owner checkout, where prerequisites' checks run, and CacheDir the workspace's
+	// state directory, which keeps their results for every lane. Without Owner none is checked.
+	Owner, CacheDir string
 }
 
 // runs reports whether this run runs step s.
@@ -434,6 +437,8 @@ func (r *Runner) Run(ctx context.Context) error {
 type begun struct {
 	fromPool bool
 	finished map[string]bool
+	mu       sync.Mutex
+	ready    map[string]bool // projects whose prerequisites this run found met
 }
 
 // begin records the plan and takes the lane's setup for this process.
@@ -443,7 +448,7 @@ func (r *Runner) begin(ctx context.Context) (*begun, error) {
 	if err != nil {
 		return nil, err
 	}
-	b := &begun{finished: map[string]bool{}}
+	b := &begun{finished: map[string]bool{}, ready: map[string]bool{}}
 	err = r.Store.Write(ctx, func(tx *sql.Tx) error {
 		if s, err := state.LaneSetup(tx, r.Lane.Number); err == nil {
 			if alive(s) && s.PID != pid {
@@ -493,6 +498,28 @@ func (r *Runner) step(ctx context.Context, s Step, b *begun) bool {
 		return true
 	}
 	log := filepath.Join(r.StateDir, "logs", "setup", s.Name+".log")
+	if s.Project != "" && !claimTime(s) {
+		b.mu.Lock()
+		ready := b.ready[s.Project]
+		b.mu.Unlock()
+		if !ready {
+			ok, why := r.awaitPrereqs(ctx, s, func(detail string) {
+				r.say("%s: %s", s.Name, detail)
+				_ = r.Store.Write(context.Background(), func(tx *sql.Tx) error {
+					return state.WaitStep(tx, r.Lane.Number, r.Lane.Generation, s.Name, detail)
+				})
+			})
+			if !ok {
+				_ = r.Store.Write(context.Background(), func(tx *sql.Tx) error {
+					return state.EndStep(tx, r.Lane.Number, r.Lane.Generation, s.Name, state.StepFailed, why, nil)
+				})
+				return false
+			}
+			b.mu.Lock()
+			b.ready[s.Project] = true
+			b.mu.Unlock()
+		}
+	}
 	end := func(status, detail string, exit *int) bool {
 		// Recording the end must survive a stop: the context may be why the step ended.
 		if err := r.Store.Write(context.Background(), func(tx *sql.Tx) error {

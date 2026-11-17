@@ -140,7 +140,25 @@ func printSections(out io.Writer, all []*lanes.LaneStatus, width int, detail boo
 			line("  (none)")
 			return
 		}
+		// The same problem in several lanes is reported once (plans/dogfood-0.3.md 7.4).
+		byProblem := map[string][]string{}
 		for _, ls := range these {
+			if ls.Problem != "" {
+				byProblem[ls.Problem] = append(byProblem[ls.Problem], ui.Clean(ls.Name))
+			}
+		}
+		shown := map[string]bool{}
+		for _, ls := range these {
+			if names := byProblem[ls.Problem]; len(names) > 1 && !shown[ls.Problem] {
+				shown[ls.Problem] = true
+				line(fmt.Sprintf("  %-16s %s", fmt.Sprintf("%d lanes", len(names)), ui.Clean(ls.Problem)))
+				line(fmt.Sprintf("  %-16s %s", "", strings.Join(names, ", ")))
+			}
+		}
+		for _, ls := range these {
+			if shown[ls.Problem] {
+				continue
+			}
 			why := ls.Why
 			if ls.Section == lanes.Parked {
 				why = "parked " + ago(ls.Since)

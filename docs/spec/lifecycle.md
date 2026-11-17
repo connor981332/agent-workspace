@@ -77,6 +77,25 @@ it fail, naming what is kept.
 Before creating worktrees, each project's lane guards run against the branch. A branch that fails
 them (for example, a database configuration that ignores `AW_LANE`) is refused with the fix.
 
+## Prerequisites
+
+Some setups need something of the machine that no lane can provide: a VPN for a private registry,
+a signed-in cloud CLI, a running Docker. `[prerequisites.<name>]` declares one, with a `check` that
+exits 0 when it is met, the `fix` the human runs and a `message` saying why; a project lists those
+its setup needs under `prerequisites`.
+
+- aw checks a project's prerequisites once, before its first setup step in a lane, from the owner
+  checkout and with a 20-second limit. The result is kept in `.git/aw/prerequisites.json` for every
+  lane: one that was met for five minutes, one that was not for ten seconds.
+- While one is not met, the setups that need it wait on the human, keeping their place: the step is
+  `waiting`, `aw` shows the lane under *needs you* with the fix, and the setup checks again every
+  five seconds. After half an hour it fails, naming the fix and `aw setup <lane>`. aw only prints the
+  fix; the human runs it.
+- The same unmet prerequisite, or the same setup step failing with the same first line, in several
+  lanes is one line in `aw`, naming the lanes.
+- `aw doctor` reports each prerequisite's last result without running anything; `aw doctor
+  --prerequisites` and `aw setup` check them again.
+
 ## Lifecycle hooks
 
 A worktree is created with the repository's own Git hooks turned off, so a failing hook cannot stop a

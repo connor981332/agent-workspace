@@ -84,7 +84,7 @@ func awaitSetup(ctx context.Context, w *writeContext, m *lanes.Manager, project 
 		return nil // Locate says what is wrong with a lane with no record
 	}
 	need := lifecycle.Needed(project, after)
-	said, tried := false, false
+	said, tried := "", false
 	// With lazy setup, the first command that needs a project sets it up, here in the foreground,
 	// once nothing else is running the lane's setup (docs/spec/sessions.md, "Lazy per-project setup").
 	for {
@@ -95,10 +95,13 @@ func awaitSetup(ctx context.Context, w *writeContext, m *lanes.Manager, project 
 		if err != nil {
 			return err
 		}
-		waiting := ""
+		waiting, why := "", ""
 		for _, s := range steps {
 			if need(s.Name) && !s.Finished() && s.Status != state.StepFailed {
 				waiting = s.Name
+				if s.Status == state.StepWaiting {
+					why = s.Detail
+				}
 				break
 			}
 		}
@@ -109,8 +112,11 @@ func awaitSetup(ctx context.Context, w *writeContext, m *lanes.Manager, project 
 			if err := lifecycle.Recover(ctx, w.store); err != nil {
 				return err
 			}
-			if !said {
-				said = true
+			if why != "" && why != said {
+				said = why
+				fmt.Fprintf(stderr, "aw: %s is %s\n", waiting, why)
+			} else if said == "" {
+				said = waiting
 				fmt.Fprintf(stderr, "aw: waiting for %s to finish\n", waiting)
 			}
 			select {
@@ -199,6 +205,10 @@ func runSetup(ctx context.Context, w *writeContext, m *lanes.Manager, l state.La
 		},
 		After:    func(ctx context.Context) error { return m.Data().Discover(ctx, m.ProviderLane(l)) },
 		Projects: projects,
+		Owner:    w.ws.Owner,
+	}
+	if sd, err := w.ws.StateDir(); err == nil {
+		r.CacheDir = sd
 	}
 	return r.Run(ctx)
 }

@@ -14,6 +14,7 @@ const (
 	StepDone    = "done"
 	StepSkipped = "skipped" // an install whose stamp did not change
 	StepFailed  = "failed"
+	StepWaiting = "waiting" // on the human: a prerequisite is not met (detail says which)
 )
 
 // Step is one setup step of a lane, as the lifecycle journal has it.
@@ -122,10 +123,17 @@ func EndStep(tx *sql.Tx, lane, generation int, step, status, detail string, exit
 	return err
 }
 
-// FailRunningSteps marks a lane's running steps failed, for a setup whose process has gone.
+// FailRunningSteps marks a lane's running and waiting steps failed, for a setup whose process has gone.
 func FailRunningSteps(tx *sql.Tx, lane, generation int, detail string) error {
-	_, err := tx.Exec(`UPDATE lane_steps SET status = ?, detail = ?, ended = ? WHERE lane = ? AND generation = ? AND status = ?`,
-		StepFailed, detail, now(), lane, generation, StepRunning)
+	_, err := tx.Exec(`UPDATE lane_steps SET status = ?, detail = ?, ended = ? WHERE lane = ? AND generation = ? AND status IN (?, ?)`,
+		StepFailed, detail, now(), lane, generation, StepRunning, StepWaiting)
+	return err
+}
+
+// WaitStep records that a step waits on the human, and why.
+func WaitStep(tx *sql.Tx, lane, generation int, step, detail string) error {
+	_, err := tx.Exec(`UPDATE lane_steps SET status = ?, detail = ? WHERE lane = ? AND generation = ? AND step = ?`,
+		StepWaiting, detail, lane, generation, step)
 	return err
 }
 

@@ -35,9 +35,11 @@ type Config struct {
 
 	Devcontainer Devcontainer     `json:"devcontainer"`
 	Roles        map[string]*Role `json:"roles"`
-	Publication  Publication      `json:"publication"`
-	Safeguards   Safeguards       `json:"safeguards"`
-	Delegation   Delegation       `json:"delegation"`
+	// Prerequisites are what the machine must have before a project's setup can work.
+	Prerequisites map[string]*Prerequisite `json:"prerequisites"`
+	Publication   Publication              `json:"publication"`
+	Safeguards    Safeguards               `json:"safeguards"`
+	Delegation    Delegation               `json:"delegation"`
 	// LaneEnv are variables lanes receive, by the module or team that adds them.
 	LaneEnv  map[string]map[string]string `json:"lane_env"`
 	Webhooks map[string]*Webhook          `json:"webhooks"`
@@ -205,8 +207,17 @@ type Project struct {
 	Env          map[string]string     `json:"env"`
 	Generated    []string              `json:"generated"`
 	LaneGuards   map[string]*LaneGuard `json:"lane_guards"`
-	Lifecycle    ProjectLifecycle      `json:"lifecycle"`
-	Servers      map[string]*Server    `json:"servers"`
+	// Prerequisites name the [prerequisites] this project's setup needs.
+	Prerequisites []string           `json:"prerequisites"`
+	Lifecycle     ProjectLifecycle   `json:"lifecycle"`
+	Servers       map[string]*Server `json:"servers"`
+}
+
+// Prerequisite is something the machine must have before a project's setup can work.
+type Prerequisite struct {
+	Check   string `json:"check"`
+	Fix     string `json:"fix"`
+	Message string `json:"message"`
 }
 
 // LaneGuard is a check a branch must pass before a lane is created on it.
@@ -847,6 +858,18 @@ func (c *Config) check(team *doc) Errors {
 		fail(ws.child("schema"), "must be 1 or more", fmt.Sprintf("set schema = %d", SchemaVersion))
 	}
 
+	for _, name := range sortedMap(c.Prerequisites) {
+		if c.Prerequisites[name].Check == "" {
+			fail(Path{"prerequisites", name}, "has no check", `add check = "<a command that exits 0 when it is met>"`)
+		}
+	}
+	for _, name := range sortedMap(c.Projects) {
+		for i, pr := range c.Projects[name].Prerequisites {
+			if _, ok := c.Prerequisites[pr]; !ok {
+				fail(Path{"projects", name, "prerequisites"}.index(i), fmt.Sprintf("there is no prerequisite named %q", pr), "define it under [prerequisites."+pr+"], or remove the name")
+			}
+		}
+	}
 	if c.Lanes.Pool > c.Lanes.Max {
 		fail(Path{"lanes", "pool"}, fmt.Sprintf("is %d, more than lanes.max (%d)", c.Lanes.Pool, c.Lanes.Max), "lower pool or raise max")
 	}

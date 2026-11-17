@@ -57,6 +57,10 @@ type LaneStatus struct {
 
 	held, unfinished bool // a session holds it; a session that held it ended without releasing it
 	waiting          string
+	// Problem names what needs the human when other lanes may need them for the same thing: an
+	// unmet prerequisite, or a setup step that failed with the same first line. The dashboard
+	// reports lanes with the same problem once (plans/dogfood-0.3.md 7.4).
+	Problem string `json:"-"`
 }
 
 // SessionStatus is a session as observed now: an active session whose process is gone shows as
@@ -421,9 +425,25 @@ func (m *Manager) classify(ls *LaneStatus, l state.Lane) {
 	if ls.State == state.LaneClaimed {
 		ls.State = Derive(ls.held, ls.unfinished, ls.Handoff, proven)
 	}
+	// A setup step waiting on the human, for a prerequisite: the lane needs you, whatever else.
+	waitingOn := ""
+	if steps, err := state.Steps(m.Store.DB(), l.Number, l.Generation); err == nil {
+		for _, s := range steps {
+			switch {
+			case s.Status == state.StepWaiting && waitingOn == "":
+				waitingOn = s.Detail
+				ls.Problem = waitingOn
+			case s.Status == state.StepFailed && ls.Problem == "" && ls.State == state.LaneIncomplete:
+				first, _, _ := strings.Cut(strings.TrimSpace(s.Detail), "\n")
+				ls.Problem = fmt.Sprintf("setup incomplete: %s failed the same way in each (%s) → fix the cause once, then aw setup <lane> for each", s.Name, first)
+			}
+		}
+	}
 	switch {
 	case ls.State == state.LanePool:
 		ls.Section, ls.Why = Pool, "warm"
+	case waitingOn != "":
+		ls.Section, ls.Why = NeedsYou, waitingOn
 	case ls.State == state.LaneClaiming || ls.State == state.LaneSettingUp:
 		ls.Section, ls.Why = Running, "setting up"+m.setupProgress(l)
 	case ls.State == state.LaneIncomplete:

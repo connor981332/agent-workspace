@@ -1,0 +1,63 @@
+# A project's setup that needs a prerequisite the machine does not meet waits on the human, keeping
+# its place, and goes on once it is met. aw shows the lane as waiting on you, with the fix, and the
+# same unmet prerequisite in several lanes once. aw doctor reports the last result without checking;
+# aw doctor --prerequisites checks again.
+# req: R5 R31 R2
+# source: plans/dogfood-0.3.md 7.1 to 7.4 (decision 8)
+# milestone: M12
+
+workspace shop --init
+exec aw doctor
+stdout 'prerequisite vpn: not checked yet'
+exec aw attach 'first thing'
+exec aw attach 'second thing'
+cd .worktrees/01
+exec sh -c 'aw run web true > $WORK/one.out 2>&1 &'
+cd ../02
+exec sh -c 'aw run web true > $WORK/two.out 2>&1 &'
+cd ../..
+exec sh $WORK/wait-for.sh 'waiting on you: prerequisite vpn is not met'
+exec aw
+stdout '2 lanes +waiting on you: prerequisite vpn is not met \(the web install needs the private registry\) → connect the VPN'
+stdout 'first-thing, second-thing'
+exec aw doctor
+stdout '! prerequisite vpn: not met'
+stdout '→ connect the VPN'
+
+# Meeting it lets both setups go on.
+exec touch .git/vpn-up
+exec sh $WORK/wait-done.sh
+exec cat $WORK/one.out
+stdout 'web.setup: done'
+exec aw doctor --prerequisites
+stdout 'prerequisite vpn: met, checked just now'
+
+-- wait-for.sh --
+i=0
+until aw 2>/dev/null | grep -q "$1"; do i=$((i + 1)); [ $i -lt 200 ] || { aw; exit 1; }; sleep 0.05; done
+-- wait-done.sh --
+i=0
+until grep -q 'web.setup: done' "$WORK/one.out" && grep -q 'web.setup: done' "$WORK/two.out"; do i=$((i + 1)); [ $i -lt 400 ] || { cat "$WORK/one.out" "$WORK/two.out"; exit 1; }; sleep 0.05; done
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[prerequisites.vpn]
+check = 'test -e .git/vpn-up'
+fix = "connect the VPN"
+message = "the web install needs the private registry"
+
+[projects.web]
+directory = "web"
+prerequisites = ["vpn"]
+
+[projects.web.lifecycle]
+setup = 'true'
+
+[projects.api]
+directory = "api"
