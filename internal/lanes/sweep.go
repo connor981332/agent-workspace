@@ -421,7 +421,8 @@ func (m *Manager) recycle(ctx context.Context, d *Decision) error {
 	var repos []state.LaneRepo
 	for i, r := range d.stored {
 		ev := d.Repos[i]
-		g := run.In(r.Path)
+		// The post-checkout hook is a setup step of the next lane, which honours post_checkout.
+		g := run.In(r.Path, noHooks...)
 		removeMaterialized(r.Path) // a copy that replaced a tracked file must not travel to the base
 		if _, err := g.Run(ctx, "switch", "--quiet", "--detach", ev.Base); err != nil {
 			return err

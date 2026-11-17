@@ -1,0 +1,33 @@
+# Recycling a lane never runs a repository's own post-checkout hook. With post_checkout = "skip" it
+# does not run in lanes at all; with "run" it is a setup step of the lane that takes the warm lane
+# next, never a step of the recycle, where a failure would leave the lane half recycled.
+# req: R25 R26
+# source: dogfood of 0.3.0 (plans/dogfood-0.3.md 1.2)
+# milestone: M12
+
+workspace shop --init
+exec sh $WORK/hook.sh
+exec aw attach 'add feature flag'
+exec aw sweep --apply --json
+json stdout .lanes[0].action recycle
+json stdout .lanes[0].result done
+! exists $WORK/ran
+
+-- hook.sh --
+hook=web/.git/hooks/post-checkout
+cat > "$hook" <<EOS
+#!/bin/sh
+touch "$WORK/ran"
+exit 1
+EOS
+chmod +x "$hook"
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[projects.web]
+post_checkout = "skip"
+
+[projects.api]
