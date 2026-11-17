@@ -1,0 +1,39 @@
+# aw inspect lists only the gitignored files nothing declares, matching generated as aw sweep does,
+# so a file it reports is one that would really keep a lane; when there are too many to list, it
+# says how many it left out. aw setup names repositories by their projects, and reports the ones
+# already set up on one line.
+# req: R67
+# source: dogfood of 0.3.0 (plans/dogfood-0.3.md 1.8)
+# milestone: M12
+
+workspace shop --init
+owner-may-change
+exec sh $WORK/files.sh
+exec aw inspect --json
+stdout '"undeclared_local_files_total": 62'
+exec aw inspect
+stdout '! gitignored files a new lane would not have: notes-01.md, .*notes-50.md, and 12 more'
+! stdout 'rspec.xml'
+! stdout '\.rspec_status'
+
+exec aw setup
+exec aw setup
+stdout '^Hooks dispatcher already set up in the workspace repository, api, web$'
+! stdout '^\.: '
+
+-- files.sh --
+printf 'rspec.xml\n.rspec_status\nnotes-*.md\n' >> web/.gitignore
+git -C web add .gitignore
+git -C web commit -qm ignore
+for g in a b c; do mkdir -p "web/gems/$g" && : > "web/gems/$g/rspec.xml" && : > "web/gems/$g/.rspec_status"; done
+i=0; while [ $i -lt 62 ]; do i=$((i + 1)); : > "web/notes-$(printf %02d $i).md"; done
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[projects.web]
+generated = ["**/rspec.xml", "**/.rspec_status"]
+
+[projects.api]

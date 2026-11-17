@@ -10,6 +10,8 @@ import (
 	"syscall"
 
 	"golang.org/x/term"
+
+	"github.com/connor981332/agent-workspace/internal/gitx/gitenv"
 )
 
 // RunHost runs argv in dir with the extra environment, passing standard input, output and error
@@ -26,7 +28,7 @@ func RunHost(dir string, env, argv []string) (int, error) {
 	}
 	cmd := exec.Command(path, argv[1:]...)
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), env...)
+	cmd.Env = append(gitenv.Without(os.Environ()), env...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	// Off a terminal the command gets its own process group, so that a signal reaches everything it
 	// started. On a terminal it stays in the foreground group, so that it can read the terminal;

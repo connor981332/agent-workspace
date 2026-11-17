@@ -229,7 +229,7 @@ func removeMaterialized(worktree string) {
 		return
 	}
 	// A copy that replaced a tracked file goes back to the commit's version.
-	g, ctx := run.In(worktree), context.Background()
+	g, ctx := run.In(worktree, noHooks...), context.Background()
 	tracked, _ := g.Run(ctx, append([]string{"ls-files", "-z", "--"}, unchanged...)...)
 	if files := strings.FieldsFunc(tracked, func(r rune) bool { return r == 0 }); len(files) > 0 {
 		g.Run(ctx, append([]string{"checkout", "-q", "--"}, files...)...)

@@ -155,16 +155,18 @@ func resolveScope(p Payload, version string, t *timing.Recorder) (*policy.Scope,
 	t.Mark("workspace")
 
 	cfg, err := config.ReadCache(filepath.Join(stateDir, "config.cache"), version)
+	broken := ""
 	if err != nil {
 		if cfg, err = config.Load(ws.Owner); err != nil {
-			return nil, pendingNotes{}, fmt.Errorf("the workspace configuration is invalid, so guards cannot decide: %v", err)
+			// The session's role still comes from the state, so that the way back out is open.
+			broken, cfg = err.Error(), &config.Config{}
 		}
 		t.Mark("config")
 	} else {
 		t.Mark("config-cache")
 	}
 
-	scope := &policy.Scope{Role: policy.Unattached, Owner: ws.Owner, Namespace: cfg.Workspace.Namespace}
+	scope := &policy.Scope{Broken: broken, Role: policy.Unattached, Owner: ws.Owner, Namespace: cfg.Workspace.Namespace}
 	if p.Session != "" {
 		scope.Session = p.Harness + ":" + p.Session
 	}

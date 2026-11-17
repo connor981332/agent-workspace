@@ -1,0 +1,29 @@
+# When a failure's output is too long to show, its error shows the end and names a log that holds
+# all of it, so the first thing that went wrong is never lost.
+# req: R25 R31
+# source: dogfood of 0.3.0 (plans/dogfood-0.3.md 1.5)
+# milestone: M12
+
+workspace solo --single --init
+exec aw attach 'one'
+exec sh $WORK/wrap.sh
+env PATH=$WORK/wrap:$PATH
+! exec aw sweep --apply --json
+stdout 'earlier lines not shown; all of it is in .*/logs/git/git-[0-9.-]*\.log'
+! stdout 'the first thing git said'
+exec sh -c 'grep -l "the first thing git said" .git/aw/logs/git/git-*.log'
+
+-- wrap.sh --
+mkdir -p "$WORK/wrap"
+real=$(command -v git)
+cat > "$WORK/wrap/git" <<EOS
+#!/bin/sh
+case "\$*" in
+*"branch -d aw/one"*)
+	echo 'the first thing git said' >&2
+	i=0; while [ \$i -lt 40 ]; do i=\$((i + 1)); echo "more noise \$i" >&2; done
+	exit 1 ;;
+esac
+exec '$real' "\$@"
+EOS
+chmod +x "$WORK/wrap/git"

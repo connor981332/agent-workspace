@@ -5,7 +5,7 @@
 
 workspace solo --single --init
 exec aw attach 'one'
-git-fail '^branch -d aw/one$'
+git-fail 'branch -d aw/one$'
 ! exec aw sweep --apply --json
 json stdout .lanes[0].result failed
 exec rm $WORK/.git-fail/git

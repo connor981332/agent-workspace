@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/connor981332/agent-workspace/internal/config"
+	gitrun "github.com/connor981332/agent-workspace/internal/gitx/run"
 	"github.com/connor981332/agent-workspace/internal/ui"
 	"github.com/connor981332/agent-workspace/internal/workspace"
 )
@@ -31,6 +32,7 @@ func loadConfig() (*workspace.Workspace, *config.Config, error) {
 		return nil, nil, err
 	}
 	if dir, err := ws.StateDir(); err == nil {
+		gitrun.LogDir = filepath.Join(dir, "logs", "git")
 		if c, err := config.ReadCache(filepath.Join(dir, "config.cache"), frameworkVersion()); err == nil {
 			return ws, c, nil
 		}

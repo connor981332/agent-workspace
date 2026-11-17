@@ -1,0 +1,20 @@
+# aw doctor says when forge = "auto" recognizes no forge at a repository's origin, such as a
+# self-hosted GitLab under a name of its own, since aw sweep then cannot prove a squash merge, and
+# names the setting that fixes it. It reads Git's configuration only.
+# req: R25 R89
+# source: dogfood of 0.3.0 (plans/dogfood-0.3.md 1.10)
+# milestone: M12
+
+workspace solo --single --init
+exec aw doctor
+! stdout 'recognizes no forge'
+exec git remote set-url origin https://git.example.org/team/solo.git
+exec aw doctor
+stdout 'forge = "auto" recognizes no forge at git.example.org'
+stdout 'set \[workspace\] forge = "gitlab" or "github"'
+exec aw doctor --json
+stdout '"name": "forge"'
+owner-may-change
+exec sh -c 'sed "s/^schema = 1$/schema = 1\nforge = \"gitlab\"/" workspace.toml > w && mv w workspace.toml'
+exec aw doctor
+! stdout 'recognizes no forge'

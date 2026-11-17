@@ -48,6 +48,9 @@ type Options struct {
 	Ours      []string
 	// ExpectBranch is the branch the worktree must be on.
 	ExpectBranch string
+	// DetachedAt, when set, is the one commit a detached HEAD may be at: a repository that an
+	// earlier recycle of the lane had already reset to its base before another one failed.
+	DetachedAt string
 }
 
 // Check examines one worktree.
@@ -61,7 +64,11 @@ func Check(ctx context.Context, path, baseRef string, o Options) Repo {
 
 	branch, err := g.Line(ctx, "symbolic-ref", "--quiet", "--short", "HEAD")
 	if err != nil {
-		return unknown("the worktree is on a detached HEAD, not on its branch")
+		head, herr := g.Line(ctx, "rev-parse", "--verify", "HEAD^{commit}")
+		if o.DetachedAt == "" || herr != nil || head != o.DetachedAt {
+			return unknown("the worktree is on a detached HEAD, not on its branch")
+		}
+		branch = "" // already reset by an earlier recycle; its proof and cleanliness still decide
 	}
 	r.Branch = branch
 	if o.ExpectBranch != "" && branch != o.ExpectBranch {
@@ -90,7 +97,7 @@ func Check(ctx context.Context, path, baseRef string, o Options) Repo {
 		}
 		var kept []string
 		for _, e := range strings.Split(strings.TrimRight(listed, "\n"), "\n") {
-			if e == "" || allowed(e, o.Generated, o.Ours) {
+			if e == "" || Declared(e, o.Generated, o.Ours) {
 				continue
 			}
 			// Git lists a wholly ignored directory as one entry. When a declared path lies inside
@@ -101,7 +108,7 @@ func Check(ctx context.Context, path, baseRef string, o Options) Repo {
 					return unknown("listing ignored files failed: %v", err)
 				}
 				for _, f := range strings.Split(strings.TrimRight(inside, "\n"), "\n") {
-					if f != "" && !allowed(f, o.Generated, o.Ours) {
+					if f != "" && !Declared(f, o.Generated, o.Ours) {
 						kept = append(kept, f)
 					}
 				}
@@ -168,11 +175,21 @@ func declaresInside(dir string, lists ...[]string) bool {
 // allowed reports whether an ignored entry (a file, or a directory as "dir/") is a declared
 // generated path, one of aw's own links, or under one of them. A directory Git collapsed above a
 // declared path is not allowed here: Check lists what it holds instead.
-func allowed(entry string, lists ...[]string) bool {
+// Declared reports whether an ignored entry (a path, or a directory ending in /) is covered by one
+// of the lists: the path itself or a directory above it, or a glob. A glob without a slash, or one
+// that starts with **/, matches a name at any depth, as in .gitignore. aw sweep and aw inspect both
+// use it, so a file inspect counts as declared never keeps a lane.
+func Declared(entry string, lists ...[]string) bool {
 	e := strings.TrimSuffix(entry, "/")
 	for _, list := range lists {
 		for _, p := range list {
 			p = strings.TrimSuffix(strings.TrimPrefix(p, "/"), "/")
+			if rest, ok := strings.CutPrefix(p, "**/"); ok && !strings.Contains(rest, "/") {
+				if ok, _ := path.Match(rest, path.Base(e)); ok {
+					return true
+				}
+				continue
+			}
 			if e == p || strings.HasPrefix(e, p+"/") {
 				return true
 			}

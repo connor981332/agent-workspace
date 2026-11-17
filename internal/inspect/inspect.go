@@ -7,6 +7,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -17,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/connor981332/agent-workspace/internal/config"
+	"github.com/connor981332/agent-workspace/internal/evidence"
 	"github.com/connor981332/agent-workspace/internal/gitx/run"
 )
 
@@ -37,8 +39,10 @@ type Project struct {
 	// What creating a lane will run into, from Preflight.
 	CheckoutHook string   `json:"checkout_hook,omitempty"` // the repository's own post-checkout hook
 	LocalFiles   []string `json:"undeclared_local_files,omitempty"`
-	MissingTools []string `json:"missing_tools,omitempty"`
-	Missing      []string `json:"missing_declared_files,omitempty"`
+	// LocalFilesTotal counts them all, when LocalFiles holds only the first maxLocalFiles.
+	LocalFilesTotal int      `json:"undeclared_local_files_total,omitempty"`
+	MissingTools    []string `json:"missing_tools,omitempty"`
+	Missing         []string `json:"missing_declared_files,omitempty"`
 }
 
 // Finding is one thing a project must change to work well in lanes, with its fix.
@@ -184,7 +188,7 @@ func Preflight(ctx context.Context, owner string, c *config.Config, projects []*
 				p.Missing = append(p.Missing, f)
 			}
 		}
-		p.LocalFiles = ignoredLocal(ctx, dir, declared, pr.Generated)
+		p.LocalFiles, p.LocalFilesTotal = ignoredLocal(ctx, dir, declared, pr.Generated)
 		tools := slices.Clone(stackToolsOf(p.Stacks))
 		hooks := []string{pr.Install}
 		for _, h := range []*config.Hook{pr.Lifecycle.Prepare, pr.Lifecycle.Setup, pr.Lifecycle.Reset} {
@@ -213,29 +217,35 @@ func stackToolsOf(stacks []string) []string {
 }
 
 // ignoredLocal lists the gitignored files in the owner checkout that a new worktree would not have
-// and that nothing declares. Build output and dependency directories are left out.
-func ignoredLocal(ctx context.Context, dir string, declared, generated []string) []string {
+// and that nothing declares, up to maxLocalFiles of them, and counts them all when there are more.
+// Build output and dependency directories are left out, and so is anything generated, local_files
+// or secrets cover, matched as aw sweep matches them.
+func ignoredLocal(ctx context.Context, dir string, declared, generated []string) ([]string, int) {
 	listed, err := run.In(dir).Run(ctx, "ls-files", "--others", "--ignored", "--exclude-standard", "--directory", "--no-empty-directory")
 	if err != nil {
-		return nil
+		return nil, 0
 	}
 	var out []string
+	total := 0
 	for _, e := range strings.Split(strings.TrimRight(listed, "\n"), "\n") {
 		name := path.Base(strings.TrimSuffix(e, "/"))
 		isDir := strings.HasSuffix(e, "/")
 		switch {
-		case e == "", slices.Contains(skipDirs, name), slices.Contains(notLocalConfig, name), slices.Contains(generated, strings.TrimSuffix(e, "/")):
+		case e == "", slices.Contains(skipDirs, name), slices.Contains(notLocalConfig, name), evidence.Declared(e, generated, declared):
 			continue
 		case isDir && !strings.HasPrefix(name, "."): // a directory of output, or a project's own tree
 			continue
 		case slices.ContainsFunc(declared, func(d string) bool { return d == e || strings.HasPrefix(d, e) }):
 			continue
 		}
-		if out = append(out, e); len(out) == maxLocalFiles {
-			break
+		if total++; len(out) < maxLocalFiles {
+			out = append(out, e)
 		}
 	}
-	return out
+	if total <= len(out) {
+		total = 0
+	}
+	return out, total
 }
 
 // DropAccepted removes the findings in files a person has reviewed, and says how many it removed.
@@ -262,7 +272,11 @@ func (p *Project) PreflightLines() []string {
 		out = append(out, "has a post-checkout hook, which will run as a retryable setup step of each lane (post_checkout = \"skip\" turns it off): "+p.CheckoutHook)
 	}
 	if len(p.LocalFiles) > 0 {
-		out = append(out, "gitignored files a new lane would not have: "+strings.Join(p.LocalFiles, ", ")+" → declare the ones it needs in local_files, or in secrets if an agent must not read them")
+		more := ""
+		if p.LocalFilesTotal > len(p.LocalFiles) {
+			more = fmt.Sprintf(", and %d more", p.LocalFilesTotal-len(p.LocalFiles))
+		}
+		out = append(out, "gitignored files a new lane would not have: "+strings.Join(p.LocalFiles, ", ")+more+" → declare the ones it needs in local_files, or in secrets if an agent must not read them, and what builds or tests make in generated")
 	}
 	if len(p.Missing) > 0 {
 		out = append(out, "declared but not in the owner checkout: "+strings.Join(p.Missing, ", ")+" → get them from your team")

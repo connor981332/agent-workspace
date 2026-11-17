@@ -216,6 +216,11 @@ func startConfigAgent(cmd *cobra.Command, a configAgent) error {
 	if err != nil {
 		return err
 	}
+	// Whether a lane can be had is known before setup, which can take minutes: say so first.
+	full := noFreeLane(ws, c, a.purpose)
+	if full != nil {
+		fmt.Fprintf(errOut, "%s: no lane is free for this (%v). After setup, the agent starts in the owner checkout, as a pair session, to sort that out with you first.\n", a.name, full)
+	}
 	var output bytes.Buffer
 	cmd.SetErr(io.MultiWriter(errOut, &output))
 	setupErr := setupWorkspace(cmd, ws, c, a.harness, false, false)
@@ -263,8 +268,9 @@ func startConfigAgent(cmd *cobra.Command, a configAgent) error {
 	if !m.CanReview(cmd.Context()) {
 		prompt += ownerNote + "\n\nThis workspace is not in a Git repository with a commit, so there is no lane branch to review: you are a pair session in the owner checkout. Leave your changes there, and report them."
 	} else {
-		failed = startLaneSession(cmd, a.purpose, harness, "", "", false, a.dropOtherHooks, true, launch.PromptArgs(harness, prompt+laneNote))
-		if failed == nil {
+		if full = noFreeLane(ws, c, a.purpose); full != nil {
+			failed = full
+		} else if failed = startLaneSession(cmd, a.purpose, harness, "", "", false, a.dropOtherHooks, true, launch.PromptArgs(harness, prompt+laneNote)); failed == nil {
 			return nil
 		}
 		fmt.Fprintf(errOut, "%s: no lane could be created (%v). Starting the agent in the owner checkout to work on that.\n", a.name, failed)
@@ -838,4 +844,19 @@ func (r *rehearsal) teardown(ctx context.Context, ws *workspace.Workspace, c *co
 		return errors.New(strings.Join(left, ", "))
 	}
 	return nil
+}
+
+// noFreeLane says why no lane can be claimed for purpose right now, or returns nil, also when the
+// state cannot be read yet (before setup), since claiming then finds out by itself.
+func noFreeLane(ws *workspace.Workspace, c *config.Config, purpose string) error {
+	dir, err := ws.StateDir()
+	if err != nil {
+		return nil
+	}
+	s, err := state.Open(dir, state.ReadOnly)
+	if err != nil {
+		return nil
+	}
+	defer s.Close()
+	return lanes.Full(s.DB(), c.Lanes.Max, purpose)
 }

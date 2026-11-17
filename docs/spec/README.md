@@ -20,7 +20,8 @@ individuals specialize it in layers. It never loses work, and it is never what a
    (booting a server, migrating a database, installing dependencies) takes noticeable time. See
    [speed.md](speed.md).
 2. **Uncertain work stays.** Cleanup removes only work it can prove was merged.
-3. **Guards fail closed.** If a guard cannot decide, the action is blocked.
+3. **Guards fail closed.** If a guard cannot decide, the action is blocked, except the commands that
+   find and fix the problem, so that nobody is stranded.
 4. **Honest about safety.** Guards stop accidents by cooperative agents. They are not a sandbox.
 5. **The owner checkout belongs to the human.** Agents never disturb it unless the human invites one
    in. See [owner-checkout.md](owner-checkout.md).

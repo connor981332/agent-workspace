@@ -13,12 +13,20 @@ import (
 	"strings"
 	"time"
 
+	"github.com/connor981332/agent-workspace/internal/gitx/gitenv"
 	"github.com/connor981332/agent-workspace/internal/workspace"
 )
 
 // ExtraEnv is added to every Git command's environment. aw sets its ref token here, once, before it
 // starts work (lanes.Manager.authorizeRefs).
 var ExtraEnv []string
+
+// LogDir, when set, is where the whole of a failure's output is kept when its error shows only the
+// end, so that the first failure is never lost. aw sets it once it knows the workspace.
+var LogDir string
+
+// keptLogs is how many of those logs stay.
+const keptLogs = 20
 
 // DefaultTimeout bounds one Git command.
 const DefaultTimeout = 2 * time.Minute
@@ -29,10 +37,12 @@ type Error struct {
 	Args   []string
 	Stderr string
 	Err    error
+	// Log holds all of Stderr when the error shows only its end.
+	Log string
 }
 
 func (e *Error) Error() string {
-	msg := tail(strings.TrimSpace(e.Stderr))
+	msg := tail(strings.TrimSpace(e.Stderr), e.Log)
 	if msg == "" {
 		msg = e.Err.Error()
 	}
@@ -45,7 +55,7 @@ const (
 )
 
 // tail keeps an error readable: the last lines of what Git and its hooks said, none of them long.
-func tail(text string) string {
+func tail(text, log string) string {
 	lines := strings.Split(text, "\n")
 	cut := 0
 	if len(lines) > tailLines {
@@ -58,7 +68,9 @@ func tail(text string) string {
 		}
 	}
 	out := strings.Join(lines, "\n")
-	if cut > 0 {
+	if cut > 0 && log != "" {
+		out = fmt.Sprintf("(%d earlier lines not shown; all of it is in %s)\n%s", cut, log, out)
+	} else if cut > 0 {
 		out = fmt.Sprintf("(%d earlier lines not shown)\n%s", cut, out)
 	}
 	return out
@@ -148,7 +160,7 @@ func (g Git) RunInput(ctx context.Context, stdin []byte, args ...string) (string
 	cmd := exec.CommandContext(ctx, "git", full...)
 	cmd.Dir = g.Dir
 	// Never prompt, never page, and read plain output.
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_PAGER=cat", "LC_ALL=C", "GIT_OPTIONAL_LOCKS=0")
+	cmd.Env = append(gitenv.Without(os.Environ()), "GIT_TERMINAL_PROMPT=0", "GIT_PAGER=cat", "LC_ALL=C", "GIT_OPTIONAL_LOCKS=0")
 	cmd.Env = append(cmd.Env, ExtraEnv...)
 	cmd.Env = append(cmd.Env, g.Env...)
 	if stdin != nil {
@@ -157,7 +169,9 @@ func (g Git) RunInput(ctx context.Context, stdin []byte, args ...string) (string
 	var out, errOut bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errOut
 	if err := cmd.Run(); err != nil {
-		return out.String(), &Error{Dir: g.Dir, Args: args, Stderr: errOut.String(), Err: err}
+		e := &Error{Dir: g.Dir, Args: args, Stderr: errOut.String(), Err: err}
+		e.Log = keepLog(e)
+		return out.String(), e
 	}
 	return out.String(), nil
 }
@@ -176,4 +190,26 @@ func (g Git) OK(ctx context.Context, args ...string) (bool, error) {
 		return false, nil
 	}
 	return err == nil, err
+}
+
+// keepLog writes a long failure's whole output to LogDir, and returns its path, or "" when the
+// error shows all of it or there is nowhere to write. Only the newest keptLogs stay.
+func keepLog(e *Error) string {
+	if LogDir == "" || strings.Count(strings.TrimSpace(e.Stderr), "\n") < tailLines {
+		return ""
+	}
+	if os.MkdirAll(LogDir, 0o700) != nil {
+		return ""
+	}
+	path := filepath.Join(LogDir, fmt.Sprintf("git-%s-%d.log", time.Now().Format("20060102-150405.000"), os.Getpid()))
+	head := fmt.Sprintf("git %s\nin %s\n\n", strings.Join(e.Args, " "), e.Dir)
+	if os.WriteFile(path, []byte(head+e.Stderr), 0o600) != nil {
+		return ""
+	}
+	if old, err := filepath.Glob(filepath.Join(LogDir, "git-*.log")); err == nil && len(old) > keptLogs {
+		for _, f := range old[:len(old)-keptLogs] { // the names sort by time
+			os.Remove(f)
+		}
+	}
+	return path
 }

@@ -9,18 +9,31 @@ recorded as the principles in [AGENTS.md](../AGENTS.md). This plan turns those d
 
 ## Status
 
-**State:** PLANNED
+**State:** PARTIALLY IMPLEMENTED
 
 **Updated:** 2026-11-16
 
-**Branches / MRs:** #96 (AGENTS.md, merged). This plan and AGENTS.md's second version are on
-`docs/north-star-v2`.
+**Branches / MRs:** #96 and #97 (AGENTS.md and this plan, merged). Phase 1 is on
+`fix/dogfood-0.3-phase1`.
 
-**Done:** triage and decisions; AGENTS.md.
+**Done:** triage and decisions; AGENTS.md. Phase 1: all ten fixes, each with a scenario that
+fails on master first. Unit tests, vet, the full acceptance suite (`-count=1`), the coverage check
+and the latency budgets pass locally. Differences from the plan as written:
+- 1.1: the dispatcher drops only `GIT_DIR` and `GIT_WORK_TREE` for a team hook in a lane, which is
+  what a main worktree's hooks lack; the temporary `GIT_INDEX_FILE` Git gives a commit's hooks
+  stays. Commands aw starts itself drop every repository-local variable. Started with `GIT_DIR`
+  set, `aw attach` used to fail outright.
+- 1.2: the recycle ran Git's own `switch` with hooks on; restoring a materialized file did too.
+- 1.5: the logs are under `.git/aw/logs/git/` (newest 20), ahead of Phase 3's step logs.
+- 1.6: proof is worked out for every kept lane except one still being set up, without the forge.
+- 1.8: inspect and sweep now share one matcher, which also accepts `**/name`. aw setup names
+  repositories by project and reports those already set up on one line. Collapsing repeats into
+  patterns stays 2.9.
+- 1.9: onboard gets the same early check as audit, since they share the launch.
 
 **In progress:** nothing.
 
-**Next step:** Phase 1. Each fix comes with a scenario that reproduces the failure first.
+**Next step:** merge Phase 1 after CI, rebuild the owner's dev binary, then Phase 2.
 
 ## Decisions taken
 

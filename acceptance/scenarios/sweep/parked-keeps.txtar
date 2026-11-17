@@ -10,6 +10,8 @@ stdout 'Lane feature-flag is parked\.'
 exec aw sweep --apply --json
 json stdout .lanes[0].action keep
 json stdout .lanes[0].reason parked
+# Its proof is still shown, so whoever unparks it can see it is safe to recycle.
+json stdout .lanes[0].repos[0].proof ancestor
 exec aw unpark feature-flag
 stdout 'is working'
 exec aw sweep --json

@@ -84,8 +84,15 @@ func (m *Manager) Sweep(ctx context.Context, o SweepOptions) (*SweepReport, erro
 		rep.Open = []state.JournalEntry{}
 	}
 	failedLanes := map[int]state.JournalEntry{}
+	retryLane := 0
 	for _, e := range open {
 		failedLanes[e.Lane] = e
+		if e.ID == o.Retry {
+			retryLane = e.Lane
+		}
+	}
+	if o.Retry > 0 && retryLane == 0 {
+		return nil, fmt.Errorf("no unfinished cleanup has the number %d → aw sweep lists the unfinished ones", o.Retry)
 	}
 
 	m.forges, m.forgeDeadline = map[string]*forge.Client{}, o.Now.Add(30*time.Second)
@@ -93,14 +100,16 @@ func (m *Manager) Sweep(ctx context.Context, o SweepOptions) (*SweepReport, erro
 	for _, l := range lanes {
 		d := &Decision{Number: l.Number, Dir: Dir(l.Number, m.Cfg.Lanes.Max), Name: l.Name, State: l.State, lane: l}
 		rep.Lanes = append(rep.Lanes, d)
-		if e, ok := failedLanes[l.Number]; ok && o.Retry != e.ID {
-			d.Action, d.Reason = ActionKeep, fmt.Sprintf("an earlier %s failed (%s) → fix the cause, then aw sweep --apply --retry %d", e.Kind, e.Detail, e.ID)
-			continue
-		}
 		if l.State == state.LanePool {
 			continue // decided below, once the recyclable lanes are known
 		}
 		m.decide(ctx, d, sessions, o.Caller)
+		// The proof is still worked out, so that whoever fixes the failure can see whether the lane
+		// is safe to recycle.
+		if e, ok := failedLanes[l.Number]; ok && o.Retry != e.ID {
+			d.Action, d.Reason = ActionKeep, fmt.Sprintf("an earlier %s failed (%s) → fix the cause, then aw sweep --apply --retry %d", e.Kind, e.Detail, e.ID)
+			d.Next = nil
+		}
 	}
 
 	// The pool keeps [lanes] pool lanes; the rest, and lanes past retention, are destroyed. A
@@ -138,6 +147,10 @@ func (m *Manager) Sweep(ctx context.Context, o SweepOptions) (*SweepReport, erro
 		if d.Action != ActionRecycle && d.Action != ActionDestroy {
 			continue
 		}
+		if retryLane != 0 && d.Number != retryLane {
+			d.Result = "skipped" // --retry acts on its own lane only
+			continue
+		}
 		if err := m.apply(ctx, d, o); err != nil {
 			d.Result, d.Error = "failed", err.Error()
 		}
@@ -158,33 +171,36 @@ func firstNote(notes []state.Note) string {
 }
 
 func (m *Manager) decide(ctx context.Context, d *Decision, sessions []state.Session, caller int) {
-	keep := func(format string, args ...any) { d.Action, d.Reason = ActionKeep, fmt.Sprintf(format, args...) }
+	// A reason to keep the lane that is not about its repositories still leaves their proof to be
+	// worked out and reported, without asking the forge: it would not change the decision.
+	var held string
+	keep := func(format string, args ...any) {
+		d.Action, d.Reason = ActionKeep, fmt.Sprintf(format, args...)
+		if held != "" {
+			d.Reason, d.Next = held, nil
+		}
+	}
 	l := d.lane
 	switch l.State {
 	case state.LaneClaiming, state.LaneSettingUp:
 		keep("it is being set up")
-		return
+		return // its worktrees may not exist yet
 	case state.LaneIncomplete:
-		keep("its setup is incomplete")
-		return
+		held = "its setup is incomplete"
 	case state.LaneParked:
-		keep("parked")
-		return
+		held = "parked"
 	}
-	if l.Number == caller {
-		keep("this command runs in it")
-		return
+	if held == "" && l.Number == caller {
+		held = "this command runs in it"
 	}
 	for _, s := range sessions {
-		if s.Lane == l.Number && s.LaneGeneration == l.Generation && s.State == state.SessionActive && Live(s) {
-			keep("session %s (%s) is attached", s.HarnessSession, s.Harness)
-			return
+		if held == "" && s.Lane == l.Number && s.LaneGeneration == l.Generation && s.State == state.SessionActive && Live(s) {
+			held = fmt.Sprintf("session %s (%s) is attached", s.HarnessSession, s.Harness)
 		}
 	}
 	// An open note is work the lane's agent left outside it, which no merge proves done.
-	if notes, err := state.OpenNotes(m.Store.DB(), l.Number, l.Generation); err != nil || len(notes) > 0 {
-		keep("it has %d open note%s, such as %q → do them, or mark them done with aw note --done <n> in the lane", len(notes), plural(len(notes)), firstNote(notes))
-		return
+	if notes, err := state.OpenNotes(m.Store.DB(), l.Number, l.Generation); held == "" && (err != nil || len(notes) > 0) {
+		held = fmt.Sprintf("it has %d open note%s, such as %q → do them, or mark them done with aw note --done <n> in the lane", len(notes), plural(len(notes)), firstNote(notes))
 	}
 	root := m.Root(l.Number)
 	if info, err := os.Lstat(root); err != nil {
@@ -212,11 +228,13 @@ func (m *Manager) decide(ctx context.Context, d *Decision, sessions []state.Sess
 			return
 		}
 		ev := evidence.Check(ctx, r.Path, r.BaseRef, m.evidenceOptions(r))
-		if !ev.Unknown && ev.Clean && ev.Proof == "" {
+		if held == "" && !ev.Unknown && ev.Clean && ev.Proof == "" {
 			m.forgeProof(ctx, owner, r, &ev)
 		}
 		d.Repos = append(d.Repos, ev)
 		switch {
+		case ev.Unknown && held != "":
+			continue // kept anyway; the other repositories' proof is still worth showing
 		case ev.Unknown:
 			keep("%s: %s, so it is protected", repoLabel(r), ev.Reason)
 			return
@@ -227,6 +245,10 @@ func (m *Manager) decide(ctx context.Context, d *Decision, sessions []state.Sess
 			reasons = append(reasons, repoLabel(r)+": "+ev.Reason)
 			d.Next = append(d.Next, fmt.Sprintf("%s: merge its work (aw changeset opens the merge requests), or aw resume %s to keep working on it", repoLabel(r), l.Name))
 		}
+	}
+	if held != "" {
+		keep("%s", held)
+		return
 	}
 	if len(reasons) > 0 {
 		prefix := ""
@@ -308,6 +330,9 @@ func repoLabel(r state.LaneRepo) string {
 // links and .aw/owner.
 func (m *Manager) evidenceOptions(r state.LaneRepo) evidence.Options {
 	o := evidence.Options{ExpectBranch: r.Branch}
+	if r.Branch == "" {
+		o.DetachedAt = r.BaseSHA // reset by a recycle that did not finish
+	}
 	if r.Project == "" {
 		o.Generated = append(o.Generated, m.Cfg.Workspace.Generated...)
 		o.Ours = append(o.Ours, append([]string{".aw/owner", workspace.MaterializedPath}, sandbox.Ours(r.Path)...)...)
@@ -418,19 +443,32 @@ func (m *Manager) recycle(ctx context.Context, d *Decision) error {
 	if err := m.authorizeRefs(ctx); err != nil {
 		return err
 	}
-	var repos []state.LaneRepo
-	for i, r := range d.stored {
+	// Each repository is recorded as it is reset, so that a recycle that fails part way leaves a
+	// record of what it did, and a retry continues from there instead of finding a detached HEAD.
+	repos := slices.Clone(d.stored)
+	var done []string
+	for i, r := range repos {
 		ev := d.Repos[i]
-		g := run.In(r.Path)
+		// The post-checkout hook is a setup step of the next lane, which honours post_checkout.
+		g := run.In(r.Path, noHooks...)
 		removeMaterialized(r.Path) // a copy that replaced a tracked file must not travel to the base
+		failed := func(err error) error {
+			if len(done) == 0 {
+				return fmt.Errorf("%s: %w", repoLabel(r), err)
+			}
+			return fmt.Errorf("%s: %w (already reset: %s; a retry continues from here)", repoLabel(r), err, strings.Join(done, ", "))
+		}
 		if _, err := g.Run(ctx, "switch", "--quiet", "--detach", ev.Base); err != nil {
-			return err
+			return failed(err)
 		}
 		if err := deleteBranch(ctx, g, r.Branch, ev); err != nil {
-			return err
+			return failed(err)
 		}
-		r.Branch, r.BaseSHA = "", ev.Base
-		repos = append(repos, r)
+		repos[i].Branch, repos[i].BaseSHA = "", ev.Base
+		if err := m.Store.Write(ctx, func(tx *sql.Tx) error { return state.SetLaneRepos(tx, d.Number, repos) }); err != nil {
+			return failed(err)
+		}
+		done = append(done, repoLabel(r))
 	}
 	return m.Store.Write(ctx, func(tx *sql.Tx) error {
 		l := d.lane
@@ -524,6 +562,10 @@ func (m *Manager) destroy(ctx context.Context, l state.Lane, stored []state.Lane
 			return err
 		}
 		if err := state.ForgetSetup(tx, l.Number); err != nil {
+			return err
+		}
+		// What failed on this lane earlier is over with it: the lane is gone.
+		if err := state.CloseLaneJournal(tx, l.Number, "the lane was removed"); err != nil {
 			return err
 		}
 		return state.DeleteLane(tx, l.Number)

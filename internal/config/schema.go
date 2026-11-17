@@ -222,7 +222,8 @@ var schema = table("",
 			"env", mapOf("Variables for this project's hooks and aw run commands, such as a switch one of its hooks reads. {lane} and "+
 				"{namespace} are filled in, as in lane_env, so a value such as \"lane-{lane}\" differs per lane.", envRE, envFix, str("")),
 			"generated", strList("Ignored paths (Git pathspecs) that builds create and that do not block recycling a lane, "+
-				"such as node_modules or tmp. Other ignored files may be someone's work, so they keep the lane."),
+				"such as node_modules or tmp; a glob such as *.log or **/rspec.xml matches a name at any depth. Other ignored files "+
+				"may be someone's work, so they keep the lane."),
 			"lane_guards", mapOf("Checks a branch must pass before a lane is created on it (R28). The key names the guard.",
 				nameRE, nameFix, table("",
 					"file", str("A file in the branch, relative to the project."),

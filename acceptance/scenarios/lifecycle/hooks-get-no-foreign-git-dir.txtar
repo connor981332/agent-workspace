@@ -1,0 +1,36 @@
+# Hooks never see a repository that is not their own. A post-checkout hook aw runs as a setup step
+# gets none of Git's repository-local variables, even when aw itself was started with them set, and a
+# team hook Git runs in a lane gets no GIT_DIR, as in the owner checkout, so that Git commands it
+# runs elsewhere (a package manager cloning into its cache) use their own repository. The temporary
+# index Git gives a commit's hooks stays.
+# req: R26 R59
+# source: dogfood of 0.3.0 (plans/dogfood-0.3.md 1.1)
+# milestone: M12
+
+workspace shop --init
+owner-may-change
+exec sh $WORK/hook.sh
+exec aw setup
+exec env GIT_DIR=$WORK/elsewhere/.git GIT_INDEX_FILE=$WORK/elsewhere/.git/index aw attach 'hooked work'
+exec sh $WORK/wait.sh
+grep '^GIT_DIR=unset GIT_INDEX_FILE=unset$' $WORK/checkout-env
+
+cd web/.worktrees/01
+exec git commit -q --allow-empty -m 'lane'
+grep '^GIT_DIR=unset GIT_INDEX_FILE=set$' $WORK/commit-env
+
+-- hook.sh --
+for h in post-checkout:checkout-env pre-commit:commit-env; do
+  name=${h%%:*} out=${h#*:}
+  cat > "web/.git/hooks/$name" <<EOS
+#!/bin/sh
+i=unset; [ -n "\${GIT_INDEX_FILE-}" ] && i=set
+echo "GIT_DIR=\${GIT_DIR-unset} GIT_INDEX_FILE=\$i" > "$WORK/$out"
+EOS
+  chmod +x "web/.git/hooks/$name"
+done
+-- wait.sh --
+i=0
+until [ -s "$WORK/checkout-env" ] && aw lanes --json | grep -Eq '"state": *"(working|incomplete)"'; do
+  i=$((i + 1)); [ $i -lt 200 ] || exit 1; sleep 0.05
+done

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/connor981332/agent-workspace/internal/config"
+	gitrun "github.com/connor981332/agent-workspace/internal/gitx/run"
 	"github.com/connor981332/agent-workspace/internal/lifecycle"
 	"github.com/connor981332/agent-workspace/internal/state"
 	"github.com/connor981332/agent-workspace/internal/workspace"
@@ -47,6 +48,7 @@ func openForWrite() (*writeContext, error) {
 	if err := checkSandbox(dir); err != nil {
 		return nil, err
 	}
+	gitrun.LogDir = filepath.Join(dir, "logs", "git")
 	store, err := state.Open(dir, state.ReadWrite)
 	if err != nil {
 		return nil, err

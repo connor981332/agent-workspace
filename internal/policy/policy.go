@@ -50,8 +50,11 @@ const (
 // Scope is everything a decision depends on, resolved by the caller from the configuration and
 // the state.
 type Scope struct {
-	Role  Role
-	Owner string // the owner checkout, absolute
+	// Broken, when set, says why the workspace's configuration could not be read. Guards cannot
+	// decide without it, so only the commands that find and fix the problem are allowed.
+	Broken string
+	Role   Role
+	Owner  string // the owner checkout, absolute
 	// start is where a shell command starts, before any cd in it.
 	start shell.Dir
 	// Session is the session as <harness>:<id>, so a refusal can tell the human how to grant it.
@@ -166,6 +169,9 @@ func Decide(s Scope, c Call) (d Decision) {
 	}
 	s.Owner = shell.Resolve(s.Owner)
 	cwd := shell.Dir{Logical: filepath.Clean(c.Cwd), Physical: shell.Resolve(c.Cwd), Known: true}
+	if s.Broken != "" {
+		return decideBroken(s, c, cwd)
+	}
 
 	switch c.Tool {
 	case Read, Write:
