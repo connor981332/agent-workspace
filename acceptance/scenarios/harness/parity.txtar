@@ -1,5 +1,7 @@
-# Every harness reaches the same decision on the same call: this table runs through each adapter. Asking is left out, since not every harness can ask.
-# req: R56
+# Every harness reaches the same decision on the same call: this table runs through each adapter. A
+# call that goes to the human is asked where the harness can ask (claude, grok), and refused where it
+# cannot (codex, opencode), saying so (plans/dogfood-0.3.md 6.5).
+# req: R56 R22
 # source: spec (no candidate source)
 # milestone: M3
 
@@ -9,7 +11,10 @@ exec aw attach 'add feature flag'
 cd .worktrees/01
 exec sh $WORK/table.sh
 ! stdout DIFFERS
-stdout 'all harnesses agree on 16 calls'
+stdout 'all harnesses agree on 12 calls'
+exec sh $WORK/asks.sh
+! stdout DIFFERS
+stdout 'all harnesses ask or refuse 4 calls'
 
 -- table.sh --
 n=0
@@ -27,10 +32,6 @@ check 0 bash 'cat web/README.md'
 check 2 bash 'touch ../../README.md'
 check 2 bash 'cd ../.. && touch x'
 check 2 bash 'cat "$(git rev-parse --show-toplevel)/x"'
-check 2 bash 'git push --force origin x'
-check 2 bash 'git branch -D main'
-check 2 bash 'docker compose down'
-check 2 bash 'pkill node'
 check 2 bash 'printenv'
 check 2 bash 'echo unterminated "'
 check 0 read web/README.md
@@ -39,3 +40,17 @@ check 0 edit web/README.md
 check 2 write ../../x
 check 2 edit "$OWNER/README.md"
 echo "all harnesses agree on $n calls"
+-- asks.sh --
+n=0
+for call in 'git push --force origin x' 'git branch -D main' 'docker compose down' 'pkill node'; do
+	n=$((n + 1))
+	for h in claude grok; do
+		out=$(awtest-hook -harness "$h" bash "$call" 2>/dev/null) || echo "DIFFERS: $h $call: exit $?, want 0"
+		echo "$out" | grep -qi 'ask' || echo "DIFFERS: $h $call: did not ask"
+	done
+	for h in codex opencode; do
+		err=$(awtest-hook -harness "$h" bash "$call" 2>&1 >/dev/null) && echo "DIFFERS: $h $call: allowed, want refused"
+		echo "$err" | grep -q 'this harness cannot ask the human' || echo "DIFFERS: $h $call: did not say it cannot ask"
+	done
+done
+echo "all harnesses ask or refuse $n calls"

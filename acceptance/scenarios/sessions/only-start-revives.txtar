@@ -15,8 +15,8 @@ json stdout .lanes[0].action recycle
 # A tool call does not revive it, even from under the harness. Its scope is still its lane, which
 # its record says, though it no longer holds it.
 env PATH=$WORK/bin:$PATH
-! exec claude pre $WORK/one
-stderr 'this session belongs to lane feature-flag'
+exec claude pre $WORK/one
+stdout 'additionalContext'
 exec aw sweep --json
 json stdout .lanes[0].action recycle
 

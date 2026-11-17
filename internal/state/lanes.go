@@ -82,6 +82,8 @@ type Session struct {
 	Home string `json:"home"`
 	// Released is when it stopped holding its lane (aw detach, aw finish, a re-pair), or "".
 	Released string `json:"released,omitempty"`
+	// Waiting is what its last tool call asked the human, until its next one, or "".
+	Waiting string `json:"waiting,omitempty"`
 	// Joined are the processes that joined after it started (session_processes).
 	Joined []Process `json:"joined,omitempty"`
 }
@@ -320,11 +322,11 @@ func SetLaneRepos(tx *sql.Tx, lane int, repos []LaneRepo) error {
 	return nil
 }
 
-const sessionColumns = `id, harness, harness_session, coalesce(lane, 0), coalesce(lane_generation, 0), purpose, state, started, last_activity, coalesce(pid, 0), coalesce(pid_start, ''), pair, home, released`
+const sessionColumns = `id, harness, harness_session, coalesce(lane, 0), coalesce(lane_generation, 0), purpose, state, started, last_activity, coalesce(pid, 0), coalesce(pid_start, ''), pair, home, released, waiting`
 
 func scanSession(row interface{ Scan(...any) error }) (Session, error) {
 	var s Session
-	err := row.Scan(&s.ID, &s.Harness, &s.HarnessSession, &s.Lane, &s.LaneGeneration, &s.Purpose, &s.State, &s.Started, &s.LastActivity, &s.PID, &s.PIDStart, &s.Pair, &s.Home, &s.Released)
+	err := row.Scan(&s.ID, &s.Harness, &s.HarnessSession, &s.Lane, &s.LaneGeneration, &s.Purpose, &s.State, &s.Started, &s.LastActivity, &s.PID, &s.PIDStart, &s.Pair, &s.Home, &s.Released, &s.Waiting)
 	return s, err
 }
 
@@ -467,6 +469,18 @@ func ReleaseSession(tx *sql.Tx, id int) error {
 // HoldSession records that a session holds its lane again (aw attach from its own lane).
 func HoldSession(tx *sql.Tx, id int) error {
 	_, err := tx.Exec(`UPDATE sessions SET released = '', state = ?, last_activity = ? WHERE id = ?`, SessionActive, now(), id)
+	return err
+}
+
+// RecordSessionWaiting is the hook's write when a tool call asks the human, and when the next call
+// shows the question was answered (text ""). Like RecordSessionIdentity it never waits for a lock.
+func RecordSessionWaiting(dir string, id int, text string) error {
+	db, err := sql.Open("sqlite", "file:"+filepath.Join(dir, File)+"?_pragma=busy_timeout(0)")
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	_, err = db.Exec(`UPDATE sessions SET waiting = ? WHERE id = ?`, text, id)
 	return err
 }
 

@@ -22,9 +22,10 @@ exec awtest-hook write .claude/settings.json
 ! stdout .
 exec awtest-hook bash 'bin/aw discard old-lane --yes'
 ! stdout .
-! exec awtest-hook bash 'git branch -D main'
-stderr 'deletes a branch'
-! exec awtest-hook bash 'git reset --hard'
+exec awtest-hook bash 'git branch -D main'
+stdout '"permissionDecision":"ask"'
+exec awtest-hook bash 'git reset --hard'
+stdout '"permissionDecision":"ask"'
 
 -- pair.sh --
 mkdir -p "$XDG_CONFIG_HOME/agent-workspace"

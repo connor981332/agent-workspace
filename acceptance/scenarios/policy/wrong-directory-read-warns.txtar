@@ -1,0 +1,18 @@
+# A lane session that reads from the owner checkout disturbs nothing, so it goes through with a note
+# naming the lane's copy (the warn tier). A write from there is still refused with the command that
+# works.
+# req: R58
+# source: plans/dogfood-0.3.md 6.3 (AGENTS.md, "How a protection should behave")
+# milestone: M12
+
+workspace shop --init
+session s-1 claude
+exec aw attach 'add feature flag'
+exec awtest-hook -session s-1 bash 'git status'
+stdout 'so it read the owner''s files'
+stdout 'start it with cd '
+exec awtest-hook -session s-1 read README.md
+stdout 'README.md is the owner''s copy'
+! exec awtest-hook -session s-1 bash 'touch x'
+stderr 'could change it'
+stderr 'start it with cd '

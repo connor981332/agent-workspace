@@ -1,0 +1,36 @@
+# What cannot be taken back, or is someone else's, goes to the human, who approves it in place (the
+# guard tier): stopping processes, changing shared containers, reading a secret, deleting a branch.
+# While the question is open, aw shows the lane as waiting on you; the session's next call clears it.
+# req: R22 R81
+# source: plans/dogfood-0.3.md 6.2 (AGENTS.md, "How a protection should behave")
+# milestone: M12
+
+workspace shop --init
+safeguards
+session s-1 claude
+exec aw attach 'add feature flag'
+cd .worktrees/01
+exec awtest-hook -session s-1 bash 'docker compose down'
+stdout '"permissionDecision":"ask"'
+exec awtest-hook -session s-1 bash 'git branch -D main'
+stdout '"permissionDecision":"ask"'
+exec awtest-hook -session s-1 bash 'pkill node'
+stdout '"permissionDecision":"ask"'
+stdout 'so the human decides'
+cd $OWNER
+exec aw
+stdout 'waiting on you: pkill stops processes'
+exec aw recap --json
+json stdout .lanes[0].section 'needs you'
+
+# The next call means the question was answered.
+cd .worktrees/01
+exec awtest-hook -session s-1 bash 'ls'
+cd $OWNER
+exec aw
+! stdout 'waiting on you'
+
+# Turning the guards off stays a hard stop.
+cd .worktrees/01
+! exec awtest-hook -session s-1 bash 'git -c core.hooksPath=/dev/null commit -m x'
+stderr 'bypasses the workspace''s protections'

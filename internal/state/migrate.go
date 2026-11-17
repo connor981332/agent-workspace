@@ -215,6 +215,11 @@ var migrations = []string{
 	ALTER TABLE sessions ADD COLUMN released TEXT NOT NULL DEFAULT '';
 	UPDATE sessions SET home = 'pair' WHERE pair = 1;
 	UPDATE lanes SET state = 'claimed' WHERE state IN ('working', 'ready')`,
+
+	// 15: what a session is waiting on the human for: the question its last tool call asked, until
+	// its next tool call, so that aw can show it as waiting on you (AGENTS.md, "How a protection
+	// should behave").
+	`ALTER TABLE sessions ADD COLUMN waiting TEXT NOT NULL DEFAULT ''`,
 }
 
 // BackupPath is where the database is copied before migrating from schema version v.

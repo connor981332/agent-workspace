@@ -12,8 +12,7 @@ exec aw attach 'add feature flag' --json
 json stdout .lane 01
 env GROK_SESSION_ID=
 env LANE=$OWNER/.worktrees/01
-! exec awtest-hook -harness grok -session grok-one bash 'git status'
-stderr 'this session belongs to lane feature-flag'
+exec awtest-hook -harness grok -session grok-one bash 'git status'
 exec awtest-hook -harness grok -session grok-one read $LANE/README.md
 ! exec awtest-hook -harness grok -session grok-one write $OWNER/README.md
 exec awtest-hook -harness grok -session grok-one edit $LANE/web/x.ts

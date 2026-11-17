@@ -7,8 +7,12 @@ workspace shop --init
 safeguards
 exec aw attach 'add feature flag'
 cd .worktrees/01
-! exec awtest-hook bash 'docker compose up -d --force-recreate db'
-stderr 'docker compose up changes shared containers'
-! exec awtest-hook bash 'docker container rm -f shop-db && docker run -p 5433:5432 postgres'
-! exec awtest-hook bash 'podman run -v /:/host alpine'
-! exec awtest-hook bash 'devcontainer up --remove-existing-container'
+exec awtest-hook bash 'docker compose up -d --force-recreate db'
+stdout '"permissionDecision":"ask"'
+stdout 'docker compose up changes shared containers'
+exec awtest-hook bash 'docker container rm -f shop-db && docker run -p 5433:5432 postgres'
+stdout '"permissionDecision":"ask"'
+exec awtest-hook bash 'podman run -v /:/host alpine'
+stdout '"permissionDecision":"ask"'
+exec awtest-hook bash 'devcontainer up --remove-existing-container'
+stdout '"permissionDecision":"ask"'

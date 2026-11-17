@@ -28,10 +28,10 @@ exec sh $WORK/as.sh bash 'echo hi > notes.txt'
 exec sh $WORK/whoami.sh
 json stdout .pair true
 
-! exec awtest-hook bash 'git branch -D main'
-stderr 'deletes a branch'
-! exec awtest-hook bash 'git reset --hard'
-stderr 'discards uncommitted work'
+exec awtest-hook bash 'git branch -D main'
+stdout '"permissionDecision":"ask"'
+exec awtest-hook bash 'git reset --hard'
+stdout '"permissionDecision":"ask"'
 exec awtest-hook bash 'git push origin main'
 stdout '"permissionDecision":"ask"'
 
