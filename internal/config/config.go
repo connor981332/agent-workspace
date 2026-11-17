@@ -86,14 +86,15 @@ type Audit struct {
 }
 
 type Lanes struct {
-	Max            int              `json:"max"`
-	Pool           int              `json:"pool"`
-	Retention      Duration         `json:"retention"`
-	Hostname       string           `json:"hostname"`
-	ServerCapacity int              `json:"server_capacity"`
-	PortStride     int              `json:"port_stride"`
-	BranchPrefix   string           `json:"branch_prefix"`
-	Data           map[string]*Data `json:"data"`
+	Max              int              `json:"max"`
+	Pool             int              `json:"pool"`
+	Retention        Duration         `json:"retention"`
+	ArchiveRetention Duration         `json:"archive_retention"`
+	Hostname         string           `json:"hostname"`
+	ServerCapacity   int              `json:"server_capacity"`
+	PortStride       int              `json:"port_stride"`
+	BranchPrefix     string           `json:"branch_prefix"`
+	Data             map[string]*Data `json:"data"`
 }
 
 type Data struct {

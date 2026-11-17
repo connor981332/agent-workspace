@@ -54,6 +54,9 @@ type SweepReport struct {
 	// UnrecognizedForges are the origins' hosts that forge = "auto" did not recognize, so that a
 	// squash-merged lane there could not be proven merged.
 	UnrecognizedForges []string `json:"unrecognized_forges,omitempty"`
+	// PrunedArchives are the archived tips --apply removed for being older than
+	// [lanes] archive_retention, as "<repository> <ref>".
+	PrunedArchives []string `json:"pruned_archives,omitempty"`
 }
 
 // SweepOptions configure a sweep.
@@ -164,6 +167,9 @@ func (m *Manager) Sweep(ctx context.Context, o SweepOptions) (*SweepReport, erro
 		if err := m.apply(ctx, d, o); err != nil {
 			d.Result, d.Error = "failed", err.Error()
 		}
+	}
+	if len(o.Only) == 0 && o.Retry == 0 {
+		rep.PrunedArchives = m.pruneArchives(ctx, o.Now)
 	}
 	rep.Open, _ = state.OpenJournal(m.Store.DB())
 	if rep.Open == nil {
@@ -482,6 +488,13 @@ func (m *Manager) recycle(ctx context.Context, d *Decision) error {
 		if _, err := g.Run(ctx, "switch", "--quiet", "--detach", ev.Base); err != nil {
 			return failed(err)
 		}
+		// Proven by anything but ancestry, the commits themselves are not in the base, though
+		// their changes are: the tip is archived first, so that its history is not lost either.
+		if r.Branch != "" && ev.Proof != evidence.Ancestor {
+			if err := archiveTip(ctx, g, d.lane.Name, ev.Head, time.Now()); err != nil {
+				return failed(err)
+			}
+		}
 		if err := deleteBranch(ctx, g, r.Branch, ev); err != nil {
 			return failed(err)
 		}
@@ -575,7 +588,11 @@ func (m *Manager) destroy(ctx context.Context, l state.Lane, stored []state.Lane
 				if archived {
 					flag = "-D" // its head is under refs/aw/archive
 				} else if ok, _ := g.OK(ctx, "merge-base", "--is-ancestor", head, r.BaseRef); !ok {
-					flag = "-D" // proven by patch equivalence or the forge
+					// Proven by patch, content or the forge: archived first, as a recycle does.
+					if err := archiveTip(ctx, g, l.Name, head, time.Now()); err != nil {
+						return err
+					}
+					flag = "-D"
 				}
 				if _, err := g.Run(ctx, "branch", flag, r.Branch); err != nil {
 					return err
@@ -737,3 +754,48 @@ func (m *Manager) Resolve(ref string) (state.Lane, error) {
 
 // ErrDirty is returned when an operation would lose uncommitted work.
 var ErrDirty = errors.New("uncommitted work")
+
+// archiveTip keeps head under refs/aw/archive/<name>/<time>, as aw discard does.
+func archiveTip(ctx context.Context, g run.Git, name, head string, now time.Time) error {
+	stamp := now.UTC().Format(archiveStamp)
+	ref := ArchivePrefix + name + "/" + stamp
+	for n := 2; ok(g.OK(ctx, "rev-parse", "--verify", "--quiet", ref)); n++ {
+		ref = fmt.Sprintf("%s%s/%s-%d", ArchivePrefix, name, stamp, n)
+	}
+	_, err := g.Run(ctx, "update-ref", ref, head, "")
+	return err
+}
+
+// archiveStamp is how an archive's ref names its time.
+const archiveStamp = "20060102-150405"
+
+// pruneArchives removes archived tips older than [lanes] archive_retention from every repository,
+// and returns what it removed. An archive whose time cannot be read from its name is kept.
+func (m *Manager) pruneArchives(ctx context.Context, now time.Time) []string {
+	keep := time.Duration(m.Cfg.Lanes.ArchiveRetention)
+	if keep <= 0 {
+		return nil
+	}
+	all, err := m.Archives(ctx)
+	if err != nil {
+		return nil
+	}
+	dirs := map[string]string{}
+	for _, r := range m.archiveRepos() {
+		dirs[r[0]] = r[1]
+	}
+	var removed []string
+	for _, a := range all {
+		// A second archive of one name within a second ends in -<n>, after the time.
+		at, err := time.Parse(archiveStamp, a.Time[:min(len(a.Time), len(archiveStamp))])
+		if err != nil || now.Sub(at) <= keep {
+			continue
+		}
+		for _, r := range a.Repos {
+			if _, err := run.In(dirs[r.Repo]).Run(ctx, "update-ref", "-d", r.Ref, r.Head); err == nil {
+				removed = append(removed, r.Repo+" "+r.Ref)
+			}
+		}
+	}
+	return removed
+}

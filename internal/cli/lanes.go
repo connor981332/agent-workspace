@@ -128,6 +128,9 @@ report, and --apply, to them.`,
 						}
 					}
 				}
+				if n := len(rep.PrunedArchives); n > 0 {
+					fmt.Fprintf(out, "Removed %d archived tip%s older than [lanes] archive_retention.\n", n, plural(n))
+				}
 				if len(rep.UnrecognizedForges) > 0 {
 					fmt.Fprintf(out, "\nforge = \"auto\" recognizes no forge at %s, so a squash-merged lane there cannot be proven merged → set [workspace] forge = \"gitlab\" or \"github\" in workspace.toml\n", ui.Clean(strings.Join(rep.UnrecognizedForges, ", ")))
 				}

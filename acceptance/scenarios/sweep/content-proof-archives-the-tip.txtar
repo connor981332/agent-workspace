@@ -1,0 +1,49 @@
+# A lane proven merged by content, its squash in the base, has its tip archived before it is
+# recycled, since its commits are not in the base though its changes are: aw archives lists it. An
+# apply also removes archives older than [lanes] archive_retention, and keeps newer ones.
+# req: R25 R27
+# source: dogfood of 0.3.0 (plans/dogfood-0.3.md 4.1, 4.2)
+# milestone: M12
+
+workspace solo --single --init
+exec aw attach 'add feature flag'
+lane-commit 01 a.txt 'first'
+lane-commit 01 b.txt 'second'
+exec git rev-parse aw/feature-flag
+cp stdout $WORK/head
+git-squash . aw/feature-flag
+exec git update-ref refs/aw/archive/old-work/20200101-000000 HEAD
+
+exec aw sweep --apply --json
+json stdout .lanes[0].repos[0].proof content
+json stdout .lanes[0].result done
+json stdout .pruned_archives[0] 'solo refs/aw/archive/old-work/20200101-000000'
+! exec git rev-parse --verify --quiet refs/aw/archive/old-work/20200101-000000
+exec sh -c 'git for-each-ref --format="%(objectname)" refs/aw/archive/feature-flag | cmp - "$WORK/head"'
+exec aw archives
+stdout '^feature-flag/[0-9]{8}-[0-9]{6}$'
+! stdout 'old-work'
+
+# Removed rather than pooled, with no room in the pool, a lane proven by content is archived too.
+cp $WORK/no-pool.toml workspace.toml
+owner-may-change
+exec aw attach 'second change'
+lane-commit 01 c.txt 'third'
+git-squash . aw/second-change
+exec aw sweep --apply --json
+json stdout .lanes[0].action destroy
+json stdout .lanes[0].result done
+exec git for-each-ref refs/aw/archive/second-change
+stdout 'refs/aw/archive/second-change/'
+
+-- no-pool.toml --
+[workspace]
+name = "Solo"
+namespace = "solo"
+schema = 1
+
+[lanes]
+pool = 0
+
+[projects.solo]
+directory = "."
