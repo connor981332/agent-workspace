@@ -38,9 +38,11 @@ exec awtest-hook -session other bash 'git status'
 stderr 'bin/aw attach'
 stderr 'aw pair'
 
-# The attached session's process ends: the record no longer maps it to the lane.
+# The attached session's process ends: it no longer holds the lane, but its scope is still the
+# lane's, whatever its directory (docs/spec/sessions.md).
 end-session s-1
-exec awtest-hook -session s-1 bash 'git status'
+! exec awtest-hook -session s-1 bash 'git status'
+stderr 'this session belongs to lane feature-flag'
 
 -- in-lane.sh --
 set -e

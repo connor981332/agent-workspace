@@ -27,9 +27,9 @@ stderr 'deletes a branch'
 ! exec awtest-hook -harness codex bash 'git reset --hard'
 stderr 'discards uncommitted work'
 
-# The owner checkout is the human's: destructive Git stays refused there.
+# The owner checkout is the human's: destructive Git stays refused there, for a session started there.
 cd ../..
-! exec awtest-hook bash 'git reset --hard'
+! exec awtest-hook -session owner-1 bash 'git reset --hard'
 stderr 'discards uncommitted work'
 
 # A lane's own work is pre-approved.

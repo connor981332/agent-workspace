@@ -17,4 +17,4 @@ stderr 'web has 1 uncommitted changes → commit or remove them'
 stderr 'aw finish needs a summary'
 cd $OWNER
 exec aw sweep --json
-json stdout .lanes[0].state working
+json stdout .lanes[0].state idle

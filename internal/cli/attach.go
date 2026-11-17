@@ -155,9 +155,16 @@ end of the step's log and the command that retries it.`,
 				if wait {
 					setupErr = waitForSetup(cmd, c.Lane.Number, io.Discard)
 				}
+				st := c.Lane.State
+				if st == state.LaneClaimed {
+					st = lanes.Idle // a person's claim: no session holds it
+					if who != (lanes.Identity{}) {
+						st = lanes.Working
+					}
+				}
 				if err := writeJSON(out, map[string]any{
 					"number": c.Lane.Number, "lane": c.Dir, "name": c.Lane.Name, "purpose": c.Lane.Purpose,
-					"state": c.Lane.State, "root": c.Root, "repos": c.Repos, "reused": c.Reused, "returned": c.Returned, "joined": c.Joined, "from_pool": c.FromPool,
+					"state": st, "root": c.Root, "repos": c.Repos, "reused": c.Reused, "returned": c.Returned, "joined": c.Joined, "from_pool": c.FromPool,
 					"notes": c.Notes,
 				}); err != nil {
 					return err
@@ -242,10 +249,7 @@ func waitForSetup(cmd *cobra.Command, lane int, say io.Writer) error {
 	}
 }
 
-// samePurpose compares two purposes as a person would: case and spacing aside.
-func samePurpose(a, b string) bool {
-	return strings.EqualFold(strings.Join(strings.Fields(a), " "), strings.Join(strings.Fields(b), " "))
-}
+func samePurpose(a, b string) bool { return lanes.SamePurpose(a, b) }
 
 func shellQuote(s string) string {
 	if s != "" && !strings.ContainsAny(s, " \t\n'\"\\$`!*?[]{}()<>|&;#~") {

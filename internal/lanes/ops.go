@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -33,9 +34,9 @@ func (m *Manager) Park(ctx context.Context, l state.Lane) (state.Lane, error) {
 // Unpark returns a parked lane to working.
 func (m *Manager) Unpark(ctx context.Context, l state.Lane) (state.Lane, error) {
 	if l.State != state.LaneParked {
-		return l, fmt.Errorf("lane %s is %s, not parked", l.Name, l.State)
+		return l, fmt.Errorf("lane %s is not parked", l.Name)
 	}
-	return m.setState(ctx, l, state.LaneWorking)
+	return m.setState(ctx, l, state.LaneClaimed)
 }
 
 func (m *Manager) setState(ctx context.Context, l state.Lane, s string) (state.Lane, error) {
@@ -113,7 +114,8 @@ func (m *Manager) Discard(ctx context.Context, l state.Lane, now time.Time) ([]s
 // FinishOptions are aw finish's arguments.
 type FinishOptions struct {
 	Summary string
-	Plan    string // a file inside the lane
+	Plan    string   // a file inside the lane
+	Who     Identity // the session finishing, which then releases the lane
 }
 
 // Finished is what aw finish recorded.
@@ -123,6 +125,8 @@ type Finished struct {
 	Summary string            `json:"summary"`
 	Plan    string            `json:"plan,omitempty"`
 	Already bool              `json:"already"` // the same heads were already handed off
+	// Released says the session that finished no longer holds the lane.
+	Released bool `json:"released"`
 	// Incomplete says the lane's setup had not completed. The work is handed off as it is: its
 	// branches are what is reviewed, and setup is for working in the lane.
 	Incomplete bool `json:"incomplete,omitempty"`
@@ -142,7 +146,7 @@ func (m *Manager) Finish(ctx context.Context, l state.Lane, o FinishOptions) (*F
 	}
 	incomplete := l.State == state.LaneIncomplete || slices.ContainsFunc(steps, func(s state.Step) bool { return !s.Finished() })
 	switch l.State {
-	case state.LaneWorking, state.LaneReady, state.LaneParked, state.LaneIncomplete:
+	case state.LaneClaimed, state.LaneParked, state.LaneIncomplete:
 	default:
 		return nil, fmt.Errorf("lane %s is %s, so it cannot be finished", Dir(l.Number, m.Cfg.Lanes.Max), l.State)
 	}
@@ -192,10 +196,14 @@ func (m *Manager) Finish(ctx context.Context, l state.Lane, o FinishOptions) (*F
 		return nil, fmt.Errorf("lane %s was not finished:\n  %s", l.Name, strings.Join(problems, "\n  "))
 	}
 
-	if h, err := state.LatestHandoff(m.Store.DB(), l.Number, l.Generation); err == nil && l.State == state.LaneReady {
+	if h, err := state.LatestHandoff(m.Store.DB(), l.Number, l.Generation); err == nil && h.Archived == "" {
 		var old map[string]string
 		if json.Unmarshal([]byte(h.Heads), &old) == nil && sameHeads(old, heads) && h.Summary == o.Summary && h.Plan == plan {
-			return &Finished{Lane: l, Heads: heads, Summary: h.Summary, Plan: h.Plan, Already: true}, nil
+			released, err := m.release(ctx, o.Who, l)
+			if l.State == state.LaneClaimed {
+				l.State = Ready
+			}
+			return &Finished{Lane: l, Heads: heads, Summary: h.Summary, Plan: h.Plan, Already: true, Released: released}, err
 		}
 	}
 	// The heads must not move while the handoff is written: read them again under the lock.
@@ -212,14 +220,44 @@ func (m *Manager) Finish(ctx context.Context, l state.Lane, o FinishOptions) (*F
 		if err := state.AddHandoff(tx, state.Handoff{Lane: l.Number, Generation: l.Generation, Summary: o.Summary, Plan: plan, Heads: string(data)}); err != nil {
 			return err
 		}
-		cur.State, cur.Updated = state.LaneReady, state.Now()
+		cur.Updated = state.Now() // ready for review follows from the handoff
+		if cur.State == state.LaneIncomplete {
+			cur.State = state.LaneClaimed // its work is handed off as committed; setup is for working in it
+		}
 		l = cur
 		return state.UpdateLane(tx, cur)
 	})
 	if err != nil {
 		return nil, err
 	}
-	return &Finished{Lane: l, Heads: heads, Summary: o.Summary, Plan: plan, Incomplete: incomplete}, nil
+	released, err := m.release(ctx, o.Who, l)
+	if l.State == state.LaneClaimed {
+		l.State = Ready // what the lane now is, unless another session holds it
+	}
+	return &Finished{Lane: l, Heads: heads, Summary: o.Summary, Plan: plan, Incomplete: incomplete, Released: released}, err
+}
+
+// release ends who's hold on lane l, if it has one, and says whether it did.
+func (m *Manager) release(ctx context.Context, who Identity, l state.Lane) (bool, error) {
+	if !who.known() {
+		return false, nil
+	}
+	done := false
+	err := m.Store.Write(ctx, func(tx *sql.Tx) error {
+		s, err := state.SessionByHarnessID(tx, who.Harness, who.Session)
+		if errors.Is(err, state.ErrNotFound) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if s.Pair || s.Lane != l.Number || s.LaneGeneration != l.Generation || s.Released != "" {
+			return nil
+		}
+		done = true
+		return state.ReleaseSession(tx, s.ID)
+	})
+	return done, err
 }
 
 func repoKey(r state.LaneRepo) string {

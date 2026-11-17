@@ -206,6 +206,15 @@ var migrations = []string{
 		done       TEXT NOT NULL DEFAULT ''
 	) STRICT;
 	CREATE INDEX lane_notes_lane ON lane_notes (lane, generation)`,
+
+	// 14: sessions and lanes (docs/spec/sessions.md). A session's home is the scope it started with,
+	// and released is when it stopped holding its lane. A lane's working and ready are now worked
+	// out from its sessions and handoff, so both are stored as claimed. A session recorded before
+	// this did not say where it started: it counts as having come from the owner checkout.
+	`ALTER TABLE sessions ADD COLUMN home TEXT NOT NULL DEFAULT 'unattached';
+	ALTER TABLE sessions ADD COLUMN released TEXT NOT NULL DEFAULT '';
+	UPDATE sessions SET home = 'pair' WHERE pair = 1;
+	UPDATE lanes SET state = 'claimed' WHERE state IN ('working', 'ready')`,
 }
 
 // BackupPath is where the database is copied before migrating from schema version v.

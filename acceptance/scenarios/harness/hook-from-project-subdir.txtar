@@ -15,6 +15,7 @@ exec awtest-hook bash 'cat ../x.ts'
 ! exec awtest-hook bash 'touch ../../../../README.md'
 stderr 'is outside lane feature-flag'
 
-# The same read from the owner checkout is the owner's to make.
+# The same read from the owner checkout, by a session that started there, is the owner's to make.
+# The session above started in the lane, which stays its scope wherever it goes.
 cd $OWNER
-exec awtest-hook read README.md
+exec awtest-hook -session other read README.md

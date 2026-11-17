@@ -31,6 +31,6 @@ EOS
 done
 -- wait.sh --
 i=0
-until [ -s "$WORK/checkout-env" ] && aw lanes --json | grep -Eq '"state": *"(working|incomplete)"'; do
+until [ -s "$WORK/checkout-env" ] && aw lanes --json | grep -Eq '"state": *"(idle|incomplete)"'; do
   i=$((i + 1)); [ $i -lt 200 ] || exit 1; sleep 0.05
 done

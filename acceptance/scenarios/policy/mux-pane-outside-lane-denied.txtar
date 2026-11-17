@@ -11,9 +11,9 @@ exec sh $WORK/table.sh
 ! stdout DIFFERS
 cd $OWNER
 exec sh $WORK/pair.sh
-exec awtest-hook bash 'tmux new-window -n x "npm test"'
+exec awtest-hook -session owner-1 bash 'tmux new-window -n x "npm test"'
 ! stdout .
-exec awtest-hook bash 'herdr pane run p1 ls'
+exec awtest-hook -session owner-1 bash 'herdr pane run p1 ls'
 ! stdout .
 
 -- table.sh --

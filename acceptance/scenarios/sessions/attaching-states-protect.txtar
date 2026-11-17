@@ -12,7 +12,7 @@ exec cat $WORK/sweep.json
 stdout '"state": "claiming"'
 stdout '"reason": "it is being set up"'
 exec cat $WORK/attach.json
-stdout '"state": "working"'
+stdout '"state": "idle"'
 
 -- slow.sh --
 # A git wrapper that pauses while the first project worktree is created.

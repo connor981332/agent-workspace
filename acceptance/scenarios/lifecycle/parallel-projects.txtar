@@ -10,7 +10,7 @@ exec aw run web true
 exec aw run api true
 cd ../..
 exec aw --json
-json stdout .lanes[0].state working
+json stdout .lanes[0].state recyclable
 
 -- workspace.toml --
 [workspace]

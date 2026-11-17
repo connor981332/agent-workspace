@@ -12,7 +12,7 @@ exec sh -c 'echo new > web/.worktrees/02/untracked.txt'
 
 exec aw recap
 stdout 'first-thing'
-stdout 'second-thing +no session attached +web: 1 dirty'
+stdout 'second-thing +no session holds it +web: 1 dirty'
 
 cd .worktrees/02
 exec aw recap

@@ -1,0 +1,39 @@
+# aw finish writes the handoff and releases the lane: sweep no longer keeps it for the session, the
+# lane is ready for review, and the session is back in the owner checkout. Attaching again for the
+# same work takes the lane back; aw detach releases it without a handoff.
+# req: R23 R78
+# source: plans/dogfood-0.3.md 5.3 (docs/spec/sessions.md, "Finishing")
+# milestone: M12
+
+workspace solo --single --init
+session s-1 claude
+exec aw attach 'add feature flag'
+lane-commit 01 flag.txt 'add the flag'
+cd .worktrees/01
+exec aw finish --summary 'Adds the flag.'
+stdout 'no longer holds the lane, and is back in the owner checkout'
+cd $OWNER
+exec aw sweep --json
+! stdout 'is attached'
+stdout 'ready for review, but'
+exec aw lanes --json
+json stdout .lanes[0].state ready
+
+# The lane's files are no longer its to write, and the refusal names the way back.
+! exec awtest-hook -session s-1 write $OWNER/.worktrees/01/flag.txt
+stderr 'released its lane'
+stderr 'bin/aw attach ''add feature flag'''
+exec aw attach 'add feature flag' --json
+json stdout .returned true
+json stdout .lane 01
+exec aw lanes --json
+json stdout .lanes[0].state working
+exec awtest-hook -session s-1 write $OWNER/.worktrees/01/flag.txt
+
+# aw detach releases it without a handoff, once.
+exec aw detach
+stdout 'Released lane feature-flag'
+exec aw sweep --json
+! stdout 'is attached'
+exec aw detach
+stdout 'holds no lane'

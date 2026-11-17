@@ -1,0 +1,23 @@
+# A session that started in a lane keeps that lane's scope after it finishes: it may go on editing
+# there, holding nothing, and the lane then shows that it changed since its handoff.
+# req: R23 R78
+# source: plans/dogfood-0.3.md 5.3 (docs/spec/sessions.md, "Scope changes only through commands")
+# milestone: M12
+
+workspace solo --single --init
+exec aw attach 'add feature flag'
+session s-1 claude
+cd .worktrees/01
+exec awtest-hook -session s-1 session-start -
+exec aw attach 'add feature flag'
+stdout 'lane 01 feature-flag'
+lane-commit 01 flag.txt 'add the flag'
+exec aw finish --summary 'Adds the flag.'
+stdout 'It started there, so it may still edit it'
+exec awtest-hook -session s-1 write flag2.txt
+exec sh -c 'echo more > flag2.txt'
+cd $OWNER
+exec aw sweep --json
+! stdout 'is attached'
+exec aw recap --json
+json stdout .lanes[0].state changed

@@ -34,6 +34,7 @@ type candidate struct {
 	session state.Session
 	lane    *state.Lane // nil for a pair session
 	label   string
+	ready   bool // its lane has a handoff no later session has picked up
 }
 
 // candidates are the sessions that are not running, newest first, one per lane.
@@ -62,15 +63,18 @@ func candidates(w *writeContext) ([]candidate, error) {
 		if err != nil || l.Generation != s.LaneGeneration || running {
 			continue
 		}
-		out = append(out, candidate{session: s, lane: &l, label: l.Name})
+		out = append(out, candidate{session: s, lane: &l, label: l.Name, ready: state.HandedOff(w.store.DB(), l.Number, l.Generation)})
 	}
 	return out, nil
 }
 
 func describe(c candidate) string {
 	what := c.session.State
-	if c.lane != nil && (c.lane.State == state.LaneReady || c.lane.State == state.LaneParked) {
+	switch {
+	case c.lane != nil && c.lane.State == state.LaneParked:
 		what = c.lane.State
+	case c.ready:
+		what = "ready"
 	}
 	purpose := c.session.Purpose
 	if c.lane != nil {
@@ -344,7 +348,7 @@ func open(cmd *cobra.Command, w *writeContext, l state.Lane, harnessName string)
 	if l.State == state.LaneParked {
 		return fmt.Errorf("lane %s is parked → aw unpark %s first", l.Name, l.Name)
 	}
-	if l.State != state.LaneWorking && l.State != state.LaneReady {
+	if l.State != state.LaneClaimed {
 		return fmt.Errorf("lane %s is %s, so it has no work to open", l.Name, l.State)
 	}
 	if err := lanes.CheckName(harnessName); err != nil {
@@ -359,7 +363,7 @@ func open(cmd *cobra.Command, w *writeContext, l state.Lane, harnessName string)
 		return err
 	}
 	for _, s := range sessions {
-		if s.Lane == l.Number && s.LaneGeneration == l.Generation && s.State == state.SessionActive && s.Alive() {
+		if s.Holds(l) {
 			return fmt.Errorf("lane %s already has a running session (%s) → finish it first, so that two agents do not share one lane", l.Name, ui.Clean(s.Harness))
 		}
 	}
@@ -401,7 +405,7 @@ func claimForOpen(ctx context.Context, w *writeContext, l state.Lane, h *state.H
 			Purpose: l.Purpose, State: state.SessionActive, Started: now, LastActivity: now, PID: pid, PIDStart: start}); err != nil {
 			return err
 		}
-		l.State, l.Updated = state.LaneWorking, now
+		l.Updated = now
 		if err := state.UpdateLane(tx, l); err != nil {
 			return err
 		}

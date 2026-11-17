@@ -14,4 +14,4 @@ stderr 'there is no lane named "nope"'
 exec aw park 1
 stdout 'Lane feature-flag is parked'
 exec aw unpark feat
-stdout 'Lane feature-flag is working'
+stdout 'Lane feature-flag is unparked'

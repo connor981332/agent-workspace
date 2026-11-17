@@ -16,7 +16,7 @@ exec aw run web sh -c 'grep -n . "$AW_LANE_STATE/order" | cut -d: -f2 | cut -d" 
 stdout '^prepare web.prepare web.install web.setup '
 cd ../..
 exec aw --json
-json stdout .lanes[0].state working
+json stdout .lanes[0].state recyclable
 
 -- workspace.toml --
 [workspace]

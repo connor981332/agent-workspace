@@ -72,14 +72,22 @@ func findAttachment(stateDir string, max int) (*attachedInfo, bool, []string) {
 			pair = pair || (rec.State == state.SessionActive && rec.Alive())
 			continue
 		}
+		if rec.Lane == 0 && (rec.LaneGeneration == 0 || rec.Released != "") {
+			continue // unattached: in no lane, and none was taken from it
+		}
 		if rec.Lane == 0 {
 			warnings = append(warnings, "this session's attachment is stale: its lane has been recycled or destroyed → run aw attach before editing")
 			continue
 		}
 		l, err := state.LaneByNumber(store.DB(), rec.Lane)
 		if err != nil || l.Generation != rec.LaneGeneration {
-			warnings = append(warnings, "this session's attachment is stale: its lane has moved on → run aw attach before editing")
+			if rec.Released == "" || rec.Home == state.HomeLane {
+				warnings = append(warnings, "this session's attachment is stale: its lane has moved on → run aw attach before editing")
+			}
 			continue
+		}
+		if !rec.InLane(l) {
+			continue // it released the lane, and is back where it started
 		}
 		if rec.State != state.SessionActive || !rec.Alive() {
 			warnings = append(warnings, "this session's attachment has ended → run aw attach before editing")

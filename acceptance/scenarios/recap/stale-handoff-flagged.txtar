@@ -16,7 +16,7 @@ json stdout .lanes[0].handoff.stale false
 
 lane-commit 01 api/more.txt 'more'
 exec aw recap
-stdout '(?s)^NEEDS YOU\n  feature-flag +ready for review, but changed since the handoff'
+stdout '(?s)^NEEDS YOU\n  feature-flag +changed since its handoff'
 stdout 'handoff: "Adds the flag. Verify the toggle by hand." \(stale: the work changed since\)'
 exec aw recap --json
 json stdout .lanes[0].handoff.stale true

@@ -112,6 +112,12 @@ func (m *Manager) Sweep(ctx context.Context, o SweepOptions) (*SweepReport, erro
 			continue // decided below, once the recyclable lanes are known
 		}
 		m.decide(ctx, d, sessions, o.Caller)
+		if l.State == state.LaneClaimed {
+			d.State = QuickState(m.Store.DB(), l, sessions)
+			if d.Action == ActionRecycle {
+				d.State = Recyclable
+			}
+		}
 		// The proof is still worked out, so that whoever fixes the failure can see whether the lane
 		// is safe to recycle.
 		if e, ok := failedLanes[l.Number]; ok && o.Retry != e.ID {
@@ -210,7 +216,7 @@ func (m *Manager) decide(ctx context.Context, d *Decision, sessions []state.Sess
 		held = "this command runs in it"
 	}
 	for _, s := range sessions {
-		if held == "" && s.Lane == l.Number && s.LaneGeneration == l.Generation && s.State == state.SessionActive && Live(s) {
+		if held == "" && s.Holds(l) {
 			held = fmt.Sprintf("session %s (%s) is attached", s.HarnessSession, s.Harness)
 		}
 	}
@@ -268,7 +274,7 @@ func (m *Manager) decide(ctx context.Context, d *Decision, sessions []state.Sess
 	}
 	if len(reasons) > 0 {
 		prefix := ""
-		if l.State == state.LaneReady {
+		if state.HandedOff(m.Store.DB(), l.Number, l.Generation) {
 			prefix = "ready for review, but "
 		}
 		keep("%s%s", prefix, strings.Join(reasons, "; "))
@@ -510,7 +516,7 @@ func (m *Manager) recycle(ctx context.Context, d *Decision) error {
 		if err := state.UpdateLane(tx, l); err != nil {
 			return err
 		}
-		if _, err := tx.Exec(`UPDATE sessions SET lane = NULL, lane_generation = NULL WHERE lane = ?`, l.Number); err != nil {
+		if _, err := tx.Exec(`UPDATE sessions SET lane = NULL WHERE lane = ?`, l.Number); err != nil {
 			return err
 		}
 		return state.SetLaneRepos(tx, l.Number, repos)
@@ -606,7 +612,7 @@ func (m *Manager) destroy(ctx context.Context, l state.Lane, stored []state.Lane
 		os.RemoveAll(root) // a lane root that is not a worktree: links and copies
 	}
 	if err := m.Store.Write(ctx, func(tx *sql.Tx) error {
-		if _, err := tx.Exec(`UPDATE sessions SET lane = NULL, lane_generation = NULL WHERE lane = ?`, l.Number); err != nil {
+		if _, err := tx.Exec(`UPDATE sessions SET lane = NULL WHERE lane = ?`, l.Number); err != nil {
 			return err
 		}
 		if _, err := tx.Exec(`DELETE FROM lane_data WHERE lane = ?`, l.Number); err != nil {

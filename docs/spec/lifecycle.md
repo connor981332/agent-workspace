@@ -2,30 +2,44 @@
 
 ## States
 
+A lane stores only what a person or a step can say: claimed, being set up, incomplete, parked or in
+the pool. What a claimed lane is doing is worked out whenever it is shown, from its sessions, its
+handoff and its repositories ([sessions.md](sessions.md), "Lane state is derived").
+
 ```
                      setting-up ──(a step fails)──▶ incomplete
                          │                              │ aw setup <lane>
-          claim          ▼         finish               ▼  proven merged
- pool ──────────────▶ working ──────────────▶ ready ──────────────────────▶ recyclable
-  ▲                  │      ▲                  │                               │
-  │             park │      │ unpark           │ more work                     │ recycle
-  │                  ▼      │                  ▼                               │
-  │                 parked ─┘               working                            │
-  └────────────────────────────────────────────────────────────────────────────┘
+          claim          ▼                              ▼
+ pool ──────────────▶ claimed ◀──── unpark ──── parked
+  ▲                      │  └────── park ───────▶
+  │                      │  proven merged and clean
+  │       recycle        ▼
+  └───────────────── recyclable
                                          discard (explicit) ──▶ archived, destroyed
 ```
 
-| State | Meaning | Protected from cleanup |
+| Stored state | Meaning | Protected from cleanup |
 |---|---|---|
 | `pool` | Recycled, reset to the base, ready to claim | n/a |
+| `claiming` | Its worktrees are being created | yes |
 | `setting-up` | Claimed; setup steps still running in the background | yes |
-| `working` | Has work in progress; zero or more sessions attached | yes |
+| `claimed` | In use; what it is doing is derived (below) | until proven merged and clean |
 | `incomplete` | A setup step failed; `aw run` refuses until it is retried. `aw finish` still hands its work off, with a warning, since review needs only its branches | yes |
-| `ready` | Handed off for review; exact heads recorded | yes |
 | `parked` | Shelved on purpose | yes |
+
+A claimed lane is shown as one of these. `aw lanes` reads no repository, so it shows only the
+first, second, fourth and fifth; `aw`, `aw recap` and `aw sweep` show them all.
+
+| Derived state | When | Protected from cleanup |
+|---|---|---|
+| `working` | A live session holds it | yes |
+| `ready` | Nobody holds it, and its handoff still describes it | until proven merged |
+| `changed` | Nobody holds it, and a head moved or a worktree changed after its handoff | until proven merged |
+| `interrupted` | Nobody holds it, it has no handoff, and its last session ended without releasing it | until proven merged |
+| `idle` | Nobody holds it, it has no handoff, and no session left it unfinished | until proven merged |
 | `recyclable` | Every repository proven merged and clean | no |
 
-A lane belongs to work. Sessions attach to it and detach from it, crash or end, and the lane stays.
+A lane belongs to work. Sessions hold it and release it, crash or end, and the lane stays.
 
 ## Creating and claiming
 
@@ -200,11 +214,12 @@ the stand-in modules are built (see [README.md](README.md#settled-questions)):
 
 1. Records the exact head of every repository in the lane.
 2. Writes the handoff note (summary, plan link, what the human should verify).
-3. Releases every lease the lane holds and stops its servers.
-4. Moves the lane to `ready`. It stays protected while the human verifies it.
+3. Releases the lane: the session no longer holds it, and every lease the lane holds is given back
+   and its servers stopped. The lane is then `ready`, and stays protected while the human verifies
+   it.
 
-A session that ends without finishing leaves its lane `working`. After a crash it is shown as
-interrupted.
+`aw detach` releases without a handoff. A session that ends without either leaves its lane
+`interrupted`, and `aw open <lane>` has a fresh session pick it up.
 
 ## Merge proof
 

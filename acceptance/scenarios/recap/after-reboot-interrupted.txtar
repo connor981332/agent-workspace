@@ -17,7 +17,7 @@ end-session s-1
 exec sh -c 'cksum .git/aw/state.db*'
 cp stdout $WORK/before
 exec aw recap
-stdout '(?s)^NEEDS YOU\n  checkout-tax +interrupted +solo: 1 dirty, 1 ahead  last \d\d:\d\d +"fix checkout tax rounding"\n.*RUNNING\n  \(none\)'
+stdout '(?s)^NEEDS YOU\n  checkout-tax +ended without a handoff +solo: 1 dirty, 1 ahead  last \d\d:\d\d +"fix checkout tax rounding"\n.*RUNNING\n  \(none\)'
 exec aw recap --json
 json stdout .lanes[0].sessions[0].state interrupted
 exec sh -c 'cksum .git/aw/state.db*'

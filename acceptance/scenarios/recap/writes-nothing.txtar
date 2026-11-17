@@ -29,7 +29,7 @@ exec sh $WORK/tree.sh
 cmp stdout $WORK/before
 
 exec aw recap --json
-json stdout .lanes[0].state ready
+json stdout .lanes[0].state recyclable
 json stdout .lanes[0].section cleanable
 
 -- tree.sh --

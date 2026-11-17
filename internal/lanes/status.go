@@ -29,6 +29,17 @@ const (
 	Pool      = "pool"
 )
 
+// Derived lane states (docs/spec/sessions.md, "Lane state is derived"): what a claimed lane is
+// doing, worked out from its sessions, handoff and repositories whenever it is shown.
+const (
+	Working     = "working"     // a live session holds it
+	Ready       = "ready"       // nobody holds it, and its handoff still describes it
+	Changed     = "changed"     // nobody holds it, and it changed after its handoff
+	Interrupted = "interrupted" // nobody holds it, no handoff, and its last session ended without one
+	Idle        = "idle"        // nobody holds it, no handoff, and no session left it unfinished
+	Recyclable  = "recyclable"  // clean and proven merged
+)
+
 // LaneStatus is what the dashboard and aw recap show for one lane.
 type LaneStatus struct {
 	Number   int             `json:"number"`
@@ -43,6 +54,8 @@ type LaneStatus struct {
 	Repos    []RepoStatus    `json:"repos,omitempty"`
 	Handoff  *HandoffStatus  `json:"handoff,omitempty"`
 	Notes    []state.Note    `json:"notes,omitempty"` // open notes (aw note)
+
+	held, unfinished bool // a session holds it; a session that held it ended without releasing it
 }
 
 // SessionStatus is a session as observed now: an active session whose process is gone shows as
@@ -109,6 +122,16 @@ func (m *Manager) Status(ctx context.Context, o StatusOptions) ([]*LaneStatus, e
 			st := s.State
 			if st == state.SessionActive && !Live(s) {
 				st = state.SessionInterrupted
+			}
+			switch {
+			case s.Pair:
+				continue
+			case s.Holds(l):
+				ls.held = true
+			case s.Released != "":
+				st = "released"
+			default:
+				ls.unfinished = true
 			}
 			ls.Sessions = append(ls.Sessions, SessionStatus{Harness: s.Harness, ID: s.HarnessSession, State: st, LastActivity: s.LastActivity})
 		}
@@ -363,18 +386,8 @@ func (m *Manager) setupProgress(l state.Lane) string {
 	return fmt.Sprintf(" (%s, %d/%d)", current, finished, len(steps))
 }
 
-// classify puts a lane in a dashboard section and says why.
+// classify works out a claimed lane's state, puts the lane in a dashboard section, and says why.
 func (m *Manager) classify(ls *LaneStatus, l state.Lane) {
-	running := false
-	interrupted := false
-	for _, s := range ls.Sessions {
-		switch s.State {
-		case state.SessionActive:
-			running = true
-		case state.SessionInterrupted:
-			interrupted = true
-		}
-	}
 	if h, err := state.LatestHandoff(m.Store.DB(), l.Number, l.Generation); err == nil && h.Archived != "" {
 		// A later session has picked it up: it no longer describes the lane.
 	} else if err == nil {
@@ -384,7 +397,7 @@ func (m *Manager) classify(ls *LaneStatus, l state.Lane) {
 			hs.Invalid = true
 		} else {
 			for _, r := range ls.Repos {
-				if r.Head != "" && heads[r.Project] != r.Head {
+				if (r.Head != "" && heads[r.Project] != r.Head) || r.Dirty > 0 {
 					hs.Stale = true
 				}
 			}
@@ -400,6 +413,9 @@ func (m *Manager) classify(ls *LaneStatus, l state.Lane) {
 			proven = false
 		}
 	}
+	if ls.State == state.LaneClaimed {
+		ls.State = Derive(ls.held, ls.unfinished, ls.Handoff, proven)
+	}
 	switch {
 	case ls.State == state.LanePool:
 		ls.Section, ls.Why = Pool, "warm"
@@ -411,19 +427,59 @@ func (m *Manager) classify(ls *LaneStatus, l state.Lane) {
 		ls.Section, ls.Why = NeedsYou, "handoff needs inspection (it cannot be read)"
 	case ls.State == state.LaneParked:
 		ls.Section, ls.Why = Parked, "parked"
-	case running:
+	case ls.State == Working:
 		ls.Section, ls.Why = Running, "session running"
 	case proven && len(ls.Notes) > 0:
 		ls.Section, ls.Why = NeedsYou, fmt.Sprintf("merged, with %d open note%s", len(ls.Notes), plural(len(ls.Notes)))
-	case proven:
+	case ls.State == Recyclable:
 		ls.Section, ls.Why = Cleanable, "proven merged"
-	case ls.State == state.LaneReady && ls.Handoff != nil && ls.Handoff.Stale:
-		ls.Section, ls.Why = NeedsYou, "ready for review, but changed since the handoff"
-	case ls.State == state.LaneReady:
+	case ls.State == Changed:
+		ls.Section, ls.Why = NeedsYou, "changed since its handoff"
+	case ls.State == Ready:
 		ls.Section, ls.Why = NeedsYou, "ready for review"
-	case interrupted:
-		ls.Section, ls.Why = NeedsYou, "interrupted"
+	case ls.State == Interrupted:
+		ls.Section, ls.Why = NeedsYou, "ended without a handoff"
 	default:
-		ls.Section, ls.Why = NeedsYou, "no session attached"
+		ls.Section, ls.Why = NeedsYou, "no session holds it"
 	}
+}
+
+// QuickState is a claimed lane's state without reading its repositories, for views that must stay
+// fast (aw lanes): working, ready, interrupted or idle. Changed and recyclable need its repositories,
+// which aw, aw recap and aw sweep read.
+func QuickState(q state.Querier, l state.Lane, sessions []state.Session) string {
+	held, unfinished := false, false
+	for _, s := range sessions {
+		switch {
+		case s.Pair || s.Lane != l.Number || s.LaneGeneration != l.Generation:
+		case s.Holds(l):
+			held = true
+		case s.Released == "":
+			unfinished = true
+		}
+	}
+	var h *HandoffStatus
+	if state.HandedOff(q, l.Number, l.Generation) {
+		h = &HandoffStatus{}
+	}
+	return Derive(held, unfinished, h, false)
+}
+
+// Derive is a claimed lane's state: whether a session holds it, whether a session that held it
+// ended without releasing it, its current handoff (nil for none), and whether every repository is
+// clean and proven merged.
+func Derive(held, unfinished bool, h *HandoffStatus, proven bool) string {
+	switch {
+	case held:
+		return Working
+	case proven:
+		return Recyclable
+	case h != nil && (h.Stale || h.Invalid):
+		return Changed
+	case h != nil:
+		return Ready
+	case unfinished:
+		return Interrupted
+	}
+	return Idle
 }

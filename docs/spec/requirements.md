@@ -64,7 +64,8 @@ expected but can follow.
   its own provisioned data.
 - **R22.** A lane is identified to people by a name derived from its purpose, never by a GUID.
 - **R23.** Lanes belong to work. A lane survives the end, crash or restart of any session attached to
-  it.
+  it. A session holds a lane only while it is alive and has not released it, and every session has
+  a one-command exit from a lane (`aw detach`, or `aw finish` with a handoff).
 - **R24.** Claiming a lane from the warm pool must be near-instant (see [speed.md](speed.md)).
 - **R25.** Cleanup removes a lane only when every repository in it is clean and its work is proven
   merged (see [lifecycle.md](lifecycle.md#merge-proof)). A gone remote branch, a handoff or a quiet
@@ -159,10 +160,12 @@ expected but can follow.
   shared Git configuration, stop the owner's processes, or connect to the owner's data.
 - **R59.** Ref protection is enforced inside Git by a `reference-transaction` hook as well as by the
   guards.
-- **R60.** The human can grant a pair session in the owner checkout. Only the human can grant it.
+- **R60.** The human can grant a pair session in the owner checkout. Only the human can grant it, and
+  the grant always succeeds: a session holding a lane releases it, and its work stays there.
 - **R61.** A pair session acts with the owner's seat for resources, and aw's own rules do not apply
   to it: it may change the workspace's own configuration and run the human's commands. The team's
-  guards and enabled safeguards apply to it as well.
+  guards and enabled safeguards apply to it as well. A pair session does not attach; `aw
+  move-to-lane` gives its work a lane.
 - **R62.** Work can move from the owner checkout to a lane (`aw move-to-lane`) and a lane's head can be
   tried in the owner checkout (`aw try`).
 
@@ -206,11 +209,11 @@ expected but can follow.
 
 - **R77.** The tool records each session's harness, harness session ID, lane, purpose and activity.
   Resuming never requires the user to know an ID.
-- **R78.** `aw finish` records exact heads, writes a handoff note, releases leases and leaves the lane
-  protected.
+- **R78.** `aw finish` records exact heads, writes a handoff note, releases the lane and its leases,
+  and leaves the lane protected. Ready for review is derived from the handoff, not stored.
 - **R79.** Lanes can be parked and unparked.
 - **R80.** After a crash or reboot, interrupted sessions are detected and shown, and stale leases are
-  recovered.
+  recovered. An interrupted lane is a derived state.
 - **R81.** A status view shows what needs the human, what is running, what is parked and what can be
   cleaned up.
 

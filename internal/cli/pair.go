@@ -13,6 +13,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	gitrun "github.com/connor981332/agent-workspace/internal/gitx/run"
 	"github.com/connor981332/agent-workspace/internal/harness"
 	"github.com/connor981332/agent-workspace/internal/harness/launch"
 	"github.com/connor981332/agent-workspace/internal/lanes"
@@ -21,6 +22,7 @@ import (
 	"github.com/connor981332/agent-workspace/internal/policy"
 	"github.com/connor981332/agent-workspace/internal/sandbox"
 	"github.com/connor981332/agent-workspace/internal/state"
+	"github.com/connor981332/agent-workspace/internal/ui"
 	"github.com/connor981332/agent-workspace/internal/workspace"
 )
 
@@ -148,7 +150,7 @@ session that is refused a write prints the exact command. Only you can grant pai
 				if harnessName != "" || len(args) > 0 || useMux {
 					return &usageError{errors.New("--session grants a running session, so it takes no --harness, --mux or harness arguments")}
 				}
-				return grantPair(cmd.Context(), w.store, session, cmd)
+				return grantPair(cmd.Context(), w, session, cmd)
 			}
 			return startPairSession(cmd, w, harnessName, useMux, args)
 		}),
@@ -211,9 +213,12 @@ func savePair(ctx context.Context, store *state.Store, s state.Session) error {
 	})
 }
 
-// grantPair makes a running session a pair session. Its process is not known here; its next hook
-// call records it. A session working in a lane stays there: its lane is not given up by accident.
-func grantPair(ctx context.Context, store *state.Store, session string, cmd *cobra.Command) error {
+// grantPair makes a running session a pair session (docs/spec/sessions.md): it always succeeds, since
+// only the human runs it. A lane the session held is released, and its work stays there; when that
+// work is uncommitted, a warning says so. The session's process is not known here; its next hook
+// call records it.
+func grantPair(ctx context.Context, w *writeContext, session string, cmd *cobra.Command) error {
+	store := w.store
 	h, id, ok := strings.Cut(session, ":")
 	if !ok || id == "" || !slices.Contains(harness.Harnesses, h) {
 		return &usageError{fmt.Errorf("--session takes <harness>:<session id>, with a harness among %v", harness.Harnesses)}
@@ -224,8 +229,12 @@ func grantPair(ctx context.Context, store *state.Store, session string, cmd *cob
 		rec.HarnessSession = id
 	case err != nil:
 		return err
-	case rec.Lane > 0 && rec.State == state.SessionActive && rec.Alive():
-		return fmt.Errorf("session %s is attached to a lane, so it stays there → finish that work first, or start a new session with aw pair", session)
+	}
+	var left *state.Lane
+	if rec.Lane > 0 {
+		if l, err := state.LaneByNumber(store.DB(), rec.Lane); err == nil && rec.InLane(l) {
+			left = &l
+		}
 	}
 	if err := savePair(ctx, store, state.Session{Harness: h, HarnessSession: rec.HarnessSession}); err != nil {
 		return err
@@ -236,5 +245,38 @@ func grantPair(ctx context.Context, store *state.Store, session string, cmd *cob
 		return err
 	}
 	fmt.Fprintf(cmd.OutOrStdout(), "Session %s is now a pair session in the owner checkout.\n", session)
+	if left != nil {
+		if err := newBroker(w).ReleaseLane(ctx, left.Number); err != nil {
+			fmt.Fprintf(cmd.ErrOrStderr(), "aw: warning: lane %s's seats could not be given back (%v) → aw stop releases them\n", ui.Clean(left.Name), err)
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "It no longer holds lane %s.\n", ui.Clean(left.Name))
+		if dirty := uncommitted(ctx, store, left.Number); len(dirty) > 0 {
+			fmt.Fprintf(cmd.ErrOrStderr(), "aw: warning: lane %s has uncommitted work in %s, which stays in the lane → the pair session can still commit it there (cd %s)\n",
+				ui.Clean(left.Name), strings.Join(dirty, ", "), shellQuote(manager(w).Root(left.Number)))
+		}
+	}
 	return nil
+}
+
+// uncommitted names a lane's repositories that have uncommitted changes.
+func uncommitted(ctx context.Context, store *state.Store, lane int) []string {
+	repos, err := state.LaneRepos(store.DB(), lane)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, r := range repos {
+		status, err := gitrun.In(r.Path).Run(ctx, "--no-optional-locks", "status", "--porcelain=v1")
+		if err != nil {
+			continue
+		}
+		if status = workspace.WithoutMaterialized(r.Path, status); status != "" {
+			name := r.Project
+			if name == "" {
+				name = "the workspace repository"
+			}
+			out = append(out, name)
+		}
+	}
+	return out
 }

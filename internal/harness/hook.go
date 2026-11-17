@@ -132,9 +132,11 @@ const activityEvery = 30 * time.Second
 // resolveScope builds the policy's scope from the workspace around the call's directory: its
 // configuration (from the cache when it is current) and its state, read-only.
 //
-// A session with a current attachment works in its lane, wherever it runs from. Without one, the
-// directory decides: a call in a lane root is confined to that lane, and one in the owner checkout
-// is unattached (or a pair session, when the individual layer says owner_sessions = "pair").
+// A session's scope comes from its record, wherever it runs from (docs/spec/sessions.md): its lane,
+// pair, or unattached. A session with no record yet gets one from where it is now, which is where it
+// started: a lane root gives that lane, and the owner checkout gives unattached (or a pair session,
+// when the individual layer says owner_sessions = "pair"). Only a harness that gives no session ID
+// is placed by its directory on every call.
 func resolveScope(p Payload, version string, t *timing.Recorder) (*policy.Scope, pendingNotes, error) {
 	dir := p.Cwd
 	if !filepath.IsAbs(dir) {
@@ -231,7 +233,7 @@ func resolveScope(p Payload, version string, t *timing.Recorder) (*policy.Scope,
 		if ws.LaneRoot == "" && state.DelegationActive(s.DB()) {
 			scope.Delegated, scope.DelegatedCommands = true, cfg.Delegation.Maintenance
 		}
-		if at.pair && ws.LaneRoot == "" {
+		if at.pair {
 			scope.Role = policy.Pair
 			return scope, pendingNotes{}, nil
 		}
@@ -239,10 +241,20 @@ func resolveScope(p Payload, version string, t *timing.Recorder) (*policy.Scope,
 		if at.stale && ws.LaneRoot != "" {
 			return nil, pendingNotes{}, fmt.Errorf("the lane at %s has moved on to other work since this session attached → go back to the owner checkout, and run bin/aw attach \"<what you are working on>\"", ws.LaneRoot)
 		}
+		if at.known && !attached {
+			// Its record says it is not in a lane: where it runs from changes nothing.
+			scope.PreviousLane = at.previous
+			return scope, pendingNotes{}, nil
+		}
 	}
+	record := false
 	if !attached {
-		// No current attachment: the working directory decides.
+		// No record: where the session is now decides, and is recorded as where it started.
+		record = s != nil && p.Session != ""
 		if ws.LaneRoot == "" {
+			if record {
+				recordStart(stateDir, p, state.Session{Home: state.HomeUnattached})
+			}
 			return scope, pendingNotes{}, nil
 		}
 		if n, err = strconv.Atoi(filepath.Base(ws.LaneRoot)); err != nil || s == nil {
@@ -260,6 +272,9 @@ func resolveScope(p Payload, version string, t *timing.Recorder) (*policy.Scope,
 	repos, err := state.LaneRepos(s.DB(), n)
 	if err != nil {
 		return nil, pendingNotes{}, err
+	}
+	if record && lane.State != state.LanePool {
+		recordStart(stateDir, p, state.Session{Home: state.HomeLane, Lane: n, LaneGeneration: lane.Generation, Purpose: lane.Purpose})
 	}
 	scope.Role = policy.Lane
 	scope.LaneRoot = root
@@ -304,14 +319,33 @@ func resolveScope(p Payload, version string, t *timing.Recorder) (*policy.Scope,
 	return scope, notes, nil
 }
 
-// attached is what a hook call's session is attached to: a lane, a pair session in the owner
-// checkout, or nothing (no record, a record that has ended, or one whose process has gone). stale
-// means the session's lane has since moved on, or been recycled or destroyed (architecture.md, step
-// 2: a stale session cannot act on it).
+// attached is a hook call's session's scope, from its record: a lane, a pair session, or neither.
+// known says there is a record, so the directory decides nothing. stale means the session's lane
+// has since moved on, or been recycled or destroyed (architecture.md, step 2: a stale session cannot
+// act on it). previous is the purpose of a lane it released, which it may attach to again.
 type attached struct {
-	lane  int
-	pair  bool
-	stale bool
+	lane     int
+	pair     bool
+	stale    bool
+	known    bool
+	previous string
+}
+
+// recordStart records a session aw has no record of, from where it is now (state.RecordSessionStart).
+// It never waits: a busy database is tried again on the next call.
+func recordStart(stateDir string, p Payload, s state.Session) {
+	s.Harness, s.HarnessSession = p.Harness, p.Session
+	if pid := platform.HarnessAncestor(os.Getpid(), p.Harness); pid > 0 {
+		if start, err := platform.ProcessIdentity(pid); err == nil {
+			s.PID, s.PIDStart = pid, start
+		}
+	}
+	if s.Home == state.HomeLane && s.PID == 0 {
+		// A hold with no process to watch would never end, and keep the lane from sweep forever. The
+		// session still has the lane's scope; aw attach makes it hold the lane, with its process.
+		s.Released = state.Now()
+	}
+	_ = state.RecordSessionStart(stateDir, s)
 }
 
 // attachment finds what a hook call's session is attached to.
@@ -335,17 +369,20 @@ func attachment(s *state.Store, stateDir string, p Payload) (attached, error) {
 	if err != nil {
 		return attached{}, err
 	}
-	current := attached{lane: rec.Lane, pair: rec.Pair}
-	if !rec.Pair {
-		if rec.Lane == 0 {
-			return attached{stale: true}, nil // its lane was recycled or destroyed: whatever is there now is not its own
-		}
+	current := attached{known: true, pair: rec.Pair}
+	if !rec.Pair && (rec.Lane > 0 || rec.LaneGeneration > 0) {
+		// A lane, or one recycled or destroyed since (its number is cleared, its generation kept).
 		l, err := state.LaneByNumber(s.DB(), rec.Lane)
-		if errors.Is(err, state.ErrNotFound) || (err == nil && l.Generation != rec.LaneGeneration) {
-			return attached{stale: true}, nil
-		}
-		if err != nil {
+		switch {
+		case rec.Lane == 0 || errors.Is(err, state.ErrNotFound) || (err == nil && l.Generation != rec.LaneGeneration):
+			// Whatever is there now is not its own. A session that had left it is simply unattached.
+			current.stale = rec.Released == "" || rec.Home == state.HomeLane
+		case err != nil:
 			return attached{}, err
+		case rec.InLane(l):
+			current.lane = rec.Lane
+		default:
+			current.previous = l.Purpose
 		}
 	}
 	// Only a session starting brings a record back: a harness resumed in a new process keeps its
@@ -359,7 +396,7 @@ func attachment(s *state.Store, stateDir string, p Payload) (attached, error) {
 		}
 	}
 	if rec.State != state.SessionActive || !rec.Alive() {
-		return attached{}, nil
+		return current, nil // it no longer holds its lane, but its scope is still its own
 	}
 	if adopted || rec.PID == 0 {
 		pid, start := 0, ""
