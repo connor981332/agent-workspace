@@ -1,0 +1,26 @@
+# A pair session works with the human in the owner checkout and does not attach: aw attach names
+# aw move-to-lane instead, and the session stays paired. The human's aw pair --session always
+# succeeds, and says when the lane it leaves has uncommitted work.
+# req: R60 R61
+# source: plans/dogfood-0.3.md 5.3 and 5.5 (docs/spec/sessions.md, "Scope changes only through commands")
+# milestone: M12
+
+workspace solo --single --init
+exec aw pair --session claude:p-1
+env AW_SESSION=claude:p-1
+! exec aw attach 'add feature flag'
+stderr 'this is a pair session'
+stderr 'aw move-to-lane "add feature flag"'
+env AW_SESSION=
+exec aw lanes
+stdout 'No lanes'
+
+# A session working in a lane is paired at the human's word; its uncommitted work stays in the lane.
+session s-1 claude
+exec aw attach 'add feature flag'
+exec sh -c 'echo wip > .worktrees/01/wip.txt'
+env AW_SESSION=
+exec aw pair --session claude:s-1
+stdout 'It no longer holds lane feature-flag'
+stderr 'lane feature-flag has uncommitted work'
+exists .worktrees/01/wip.txt

@@ -17,7 +17,7 @@ exec aw setup feature-flag
 exec aw attach 'another one' --wait
 stderr '^aw: lane another-one is set up \([0-9]+ steps\)$'
 exec aw --json
-json stdout .lanes[1].state working
+json stdout .lanes[1].state recyclable
 
 -- attach.sh --
 # Hold prepare until --wait has observed and reported it, rather than racing a short sleep.

@@ -574,7 +574,7 @@ func (r *Runner) finish() error {
 		if err := state.SetSetupRunner(tx, r.Lane.Number, 0, ""); err != nil {
 			return err
 		}
-		to := state.LaneWorking
+		to := state.LaneClaimed
 		if failed != nil || pending {
 			to = state.LaneIncomplete
 		}

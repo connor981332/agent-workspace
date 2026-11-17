@@ -30,7 +30,7 @@ exec aw run web sh -c 'cat "$AW_LANE_STATE/prepared"'
 stdout -count=1 '^ran$'
 cd ../..
 exec aw --json
-json stdout .lanes[0].state working
+json stdout .lanes[0].state recyclable
 
 -- workspace.toml --
 [workspace]

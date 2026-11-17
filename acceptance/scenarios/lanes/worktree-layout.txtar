@@ -9,7 +9,7 @@ workspace shop --init
 exec aw attach 'fix checkout tax rounding' --json
 json stdout .lane 01
 json stdout .name checkout-tax
-json stdout .state working
+json stdout .state idle
 json stdout .repos[0].project ''
 json stdout .repos[0].branch aw/checkout-tax
 json stdout .repos[1].project api

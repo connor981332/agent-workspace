@@ -50,6 +50,12 @@ repository whose hooks path has been changed.
 
 ## Sessions with no lane
 
+A session's scope is set where it starts, and its working directory never changes it afterwards
+([sessions.md](sessions.md)): a session that started in the owner checkout stays unattached when it
+goes into a lane's directory, until it attaches. One that released its lane with `aw finish` or
+`aw detach` is back here, and its refusals name `aw attach "<that lane's purpose>"`, which takes the
+lane back.
+
 A session in the owner checkout with no lane can diagnose without claiming one. Commands classified
 as read-only by their subcommand and flags run, including read-only Git and a `curl` that only asks
 for a URL. A command that visibly changes the owner checkout is refused with the attach and pair
@@ -65,7 +71,9 @@ session**.
 - **Starting one.** `aw pair` launches the default harness in the owner checkout with the pair role.
   For a session already running in the owner checkout, the human runs `aw pair --session
   <harness>:<id>`. A harness alone knows its session's ID, so the refusal an unattached session
-  receives spells out that command for it. Only the human can grant pairing: as with delegations, hooks refuse an agent that tries to
+  receives spells out that command for it. The grant always succeeds: a session holding a lane
+  releases it, with a warning when the lane has uncommitted work, which stays there. A pair session
+  does not attach: `aw attach` names `aw move-to-lane` instead. Only the human can grant pairing: as with delegations, hooks refuse an agent that tries to
   grant pairing or edit its record. `owner_sessions = "pair"` in the individual layer makes every
   directly started session in the owner checkout a pair session. `aw new` still gives lanes.
 - **aw's own rules do not apply.** A pair session acts for the human: it may write anywhere in the

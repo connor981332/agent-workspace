@@ -32,7 +32,7 @@ type ResetResult struct {
 // a git reset --hard. A repository with uncommitted work refuses the whole reset, and one with no
 // commits of the lane's own is left alone.
 func (m *Manager) ResetBranch(ctx context.Context, l state.Lane, only []string, now time.Time) ([]ResetResult, error) {
-	if l.State != state.LaneWorking && l.State != state.LaneReady {
+	if l.State != state.LaneClaimed {
 		return nil, fmt.Errorf("lane %s is %s, so it has no branch to reset", l.Name, l.State)
 	}
 	repos, err := state.LaneRepos(m.Store.DB(), l.Number)

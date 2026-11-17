@@ -95,6 +95,13 @@ func AddHandoff(tx *sql.Tx, h Handoff) error {
 	return err
 }
 
+// HandedOff reports whether a lane's current generation has a handoff that no later session has
+// picked up: the lane is ready for review, or has changed since.
+func HandedOff(q Querier, lane, generation int) bool {
+	h, err := LatestHandoff(q, lane, generation)
+	return err == nil && h.Archived == ""
+}
+
 // ArchiveHandoff records that aw open has picked a handoff up.
 func ArchiveHandoff(tx *sql.Tx, id int) error {
 	_, err := tx.Exec(`UPDATE handoffs SET archived = ? WHERE id = ? AND archived = ''`, now(), id)

@@ -25,10 +25,10 @@ stdout 'Tests pass. Check the flag by hand.'
 stdout '^claude cwd .*/\.worktrees/01$'
 stdout '^claude AW_SESSION=claude:open-[0-9a-f]{16}$'
 exec aw recap --json
-json stdout .lanes[0].state working
+json stdout .lanes[0].state interrupted
 ! stdout 'Check the flag by hand'
 exec aw recap --json
-! stdout 'handoff'
+! stdout '"handoff"'
 
 # A second session is told to work from what is there, in the harness's own way of taking a prompt.
 exec aw open feature-flag --harness opencode

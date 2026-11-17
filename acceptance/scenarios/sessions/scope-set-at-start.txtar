@@ -1,0 +1,22 @@
+# A session's scope is set where it starts, and the directory it runs from later changes nothing: a
+# session that started in the owner checkout cannot write in a lane by going there, and one that
+# started in a lane keeps that lane's scope in the owner checkout.
+# req: R23 R58
+# source: plans/dogfood-0.3.md 5.2 (docs/spec/sessions.md, "Scope is set when a session starts")
+# milestone: M12
+
+workspace shop --init
+exec aw attach 'add feature flag'
+
+# Started in the owner checkout: unattached, wherever it goes.
+exec awtest-hook -session owner-1 session-start -
+cd .worktrees/01
+! exec awtest-hook -session owner-1 write web/new.txt
+stderr 'bin/aw attach'
+
+# Started in the lane: the lane's, wherever it goes.
+exec awtest-hook -session lane-1 session-start -
+exec awtest-hook -session lane-1 write web/new.txt
+cd $OWNER
+! exec awtest-hook -session lane-1 write README.md
+stderr 'lane feature-flag'

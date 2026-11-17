@@ -330,7 +330,11 @@ func newParkCmd(unpark bool) *cobra.Command {
 			if asJSON {
 				return writeJSON(cmd.OutOrStdout(), l)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Lane %s is %s.\n", l.Name, l.State)
+			if l.State == state.LaneParked {
+				fmt.Fprintf(cmd.OutOrStdout(), "Lane %s is parked.\n", l.Name)
+			} else {
+				fmt.Fprintf(cmd.OutOrStdout(), "Lane %s is unparked.\n", l.Name)
+			}
 			return nil
 		}),
 	}
@@ -357,9 +361,12 @@ func newFinishCmd() *cobra.Command {
 		Use:   `finish --summary "…" [--plan <path>] [lane]`,
 		Short: "Hand this lane off for review: record its exact heads and a handoff note",
 		Long: `Hand the lane off for review. It records the exact head of every repository and the handoff
-note (the summary, and the plan if given), and moves the lane to ready, where it stays protected
-until its work is proven merged. It refuses, listing every problem, when a repository has
-uncommitted work, is not on the lane's branch, or changes while it runs.`,
+note (the summary, and the plan if given), and releases the lane: this session no longer holds it,
+and its seats and servers are given back. The lane is then ready for review, and stays protected
+until its work is proven merged. A session that came to the lane from the owner checkout returns
+there; one that started in the lane may go on working in it, and the lane then shows that it
+changed since its handoff. It refuses, listing every problem, when a repository has uncommitted
+work, is not on the lane's branch, or changes while it runs.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: run(func(cmd *cobra.Command, args []string) error {
 			w, err := openForWrite()
@@ -370,6 +377,9 @@ uncommitted work, is not on the lane's branch, or changes while it runs.`,
 			m := manager(w)
 			l, err := laneArg(m, args)
 			if err != nil {
+				return err
+			}
+			if o.Who, err = sessionIdentity("", ""); err != nil {
 				return err
 			}
 			f, err := m.Finish(cmd.Context(), l, o)
@@ -392,6 +402,9 @@ uncommitted work, is not on the lane's branch, or changes while it runs.`,
 				fmt.Fprintf(cmd.ErrOrStderr(), "aw: warning: lane %s's setup had not completed; its work is handed off as committed → to work in it again, run aw setup %s\n", ui.Clean(f.Lane.Name), ui.Clean(f.Lane.Name))
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Lane %s is ready for review. It stays protected until its work is proven merged.\n", f.Lane.Name)
+			if f.Released {
+				fmt.Fprintln(cmd.OutOrStdout(), releasedLine(w, o.Who))
+			}
 			warnOpenNotes(cmd, w, l)
 			return nil
 		}),
@@ -399,5 +412,64 @@ uncommitted work, is not on the lane's branch, or changes while it runs.`,
 	cmd.Flags().StringVar(&o.Summary, "summary", "", "what changed, and what the human should verify")
 	cmd.Flags().StringVar(&o.Plan, "plan", "", "the plan the work followed, a file inside the lane")
 	cmd.Flags().BoolVar(&asJSON, "json", false, "print the handoff as JSON")
+	return cmd
+}
+
+// releasedLine says where a session is after it released its lane.
+func releasedLine(w *writeContext, who lanes.Identity) string {
+	rec, err := state.SessionByHarnessID(w.store.DB(), who.Harness, who.Session)
+	if err == nil && rec.Home == state.HomeLane {
+		return "This session no longer holds the lane. It started there, so it may still edit it; the lane will show that it changed since its handoff."
+	}
+	return fmt.Sprintf("This session no longer holds the lane, and is back in the owner checkout (%s): read-only there until it attaches again.", ui.Clean(w.ws.Owner))
+}
+
+func newDetachCmd() *cobra.Command {
+	var asJSON bool
+	cmd := &cobra.Command{
+		Use:   "detach",
+		Short: "Release this session's lane without a handoff, and return to where it started",
+		Long: `Release the lane this session holds: its seats and servers are given back, and sweep no longer
+keeps the lane for it. The work stays in the lane. A session that came to the lane from the owner
+checkout returns there; one that started in the lane stays in its scope, holding nothing.
+aw finish does the same after writing a handoff, which is what a reviewer needs; aw detach is for
+leaving without one. Attaching again for the same work takes the lane back.`,
+		Args: cobra.NoArgs,
+		RunE: run(func(cmd *cobra.Command, args []string) error {
+			who, err := sessionIdentity("", "")
+			if err != nil {
+				return err
+			}
+			w, err := openForWrite()
+			if err != nil {
+				return err
+			}
+			defer w.Close()
+			d, err := manager(w).Detach(cmd.Context(), who)
+			if err != nil {
+				return err
+			}
+			if d.Released {
+				if err := newBroker(w).ReleaseLane(cmd.Context(), d.Lane.Number); err != nil {
+					return fmt.Errorf("the lane is released, but its seats could not be given back (%v) → run aw detach again", err)
+				}
+			}
+			if asJSON {
+				return writeJSON(cmd.OutOrStdout(), d)
+			}
+			out := cmd.OutOrStdout()
+			switch {
+			case d.Released:
+				fmt.Fprintf(out, "Released lane %s; its work stays there.\n", ui.Clean(d.Lane.Name))
+				fmt.Fprintln(out, releasedLine(w, who))
+			case d.Home == state.HomePair:
+				fmt.Fprintln(out, "This is a pair session, which holds no lane: nothing to release.")
+			default:
+				fmt.Fprintln(out, "This session holds no lane: nothing to release.")
+			}
+			return nil
+		}),
+	}
+	cmd.Flags().BoolVar(&asJSON, "json", false, "print what was released as JSON")
 	return cmd
 }

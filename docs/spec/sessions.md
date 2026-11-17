@@ -88,7 +88,8 @@ none of these has a derived state, worked out when it is shown or swept:
 | **idle** | Nobody holds it and it has no handoff, and no session ever held it, such as a lane made with `aw attach` from a script. |
 | **recyclable** | Every repository is clean and proven merged (unchanged rule), whatever the above. |
 
-`aw`, `aw lanes`, `recap` and sweep show these. "Interrupted" and "changed since its handoff" show
+`aw`, `recap` and sweep show these. `aw lanes` reads no repository, to stay fast, so it shows
+*working*, *ready*, *interrupted* and *idle*, and leaves *changed* and *recyclable* to the others. "Interrupted" and "changed since its handoff" show
 in `aw`'s *needs you* section, with `aw open <lane>` to have a fresh agent write a handoff. JSON keeps
 the `state` field, with these names; `working` and `ready` keep their meanings.
 
@@ -129,7 +130,9 @@ sessions by default, and `--lane` starts one in a lane.
 State schema 14:
 
 - `sessions` gains `home` (`unattached`, `pair` or `lane`) and `released` (a time, or empty). A
-  record with a lane and no `released` holds it as long as its process is alive.
+  record with a lane and no `released` holds it as long as its process is alive. The hook records a
+  session that starts in a lane as holding it only when it can find the session's process;
+  otherwise the session has the lane's scope, and `aw attach` makes it hold the lane.
 - Lanes stored as `working` or `ready` become `claimed`. Their handoffs are already stored.
 - Existing records do not say where a session started. A session with a lane gets home
   `unattached`, as if it came from the owner checkout, so that `detach` returns it there; one that

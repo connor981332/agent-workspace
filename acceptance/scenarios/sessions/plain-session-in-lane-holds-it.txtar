@@ -1,0 +1,30 @@
+# A harness started in a lane root, with no aw command, holds that lane: sweep keeps it while the
+# session runs, as it would for one that attached.
+# req: R23 R25
+# source: plans/dogfood-0.3.md 5.2 (docs/spec/sessions.md, "Scope is set when a session starts")
+# milestone: M12
+
+workspace solo --single --init
+exec aw attach 'add feature flag'
+exec sh $WORK/make-claude.sh
+env PATH=$WORK/bin:$PATH
+cd .worktrees/01
+exec sh -c 'claude start "$WORK/started" >/dev/null 2>&1 & i=0; while [ ! -e "$WORK/started" ] && [ $i -lt 200 ]; do sleep 0.05; i=$((i + 1)); done; test -e "$WORK/started"'
+cd $OWNER
+exec aw sweep --json
+json stdout .lanes[0].action keep
+json stdout .lanes[0].reason 'session s-1 (claude) is attached'
+exec aw lanes --json
+json stdout .lanes[0].state working
+exec touch $WORK/stop
+
+-- make-claude.sh --
+mkdir -p "$WORK/bin"
+cat > "$WORK/bin/claude" <<'EOS'
+#!/bin/sh
+awtest-hook -session s-1 session-start -
+touch "$2"
+i=0
+while [ ! -e "$WORK/stop" ] && [ $i -lt 600 ]; do sleep 0.05; i=$((i + 1)); done
+EOS
+chmod +x "$WORK/bin/claude"

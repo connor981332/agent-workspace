@@ -203,7 +203,7 @@ func TestArchivedHandoffStaysOnRecord(t *testing.T) {
 	defer s.Close()
 	ctx := context.Background()
 	if err := s.Write(ctx, func(tx *sql.Tx) error {
-		if err := InsertLane(tx, Lane{Number: 1, State: LaneReady, Generation: 1, Created: now(), Updated: now()}); err != nil {
+		if err := InsertLane(tx, Lane{Number: 1, State: LaneClaimed, Generation: 1, Created: now(), Updated: now()}); err != nil {
 			return err
 		}
 		return AddHandoff(tx, Handoff{Lane: 1, Generation: 1, Summary: "done", Heads: "{}"})

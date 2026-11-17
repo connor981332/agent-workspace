@@ -16,10 +16,16 @@ const (
 	LaneClaiming   = "claiming" // reserved; its worktrees are being created
 	LanePool       = "pool"
 	LaneSettingUp  = "setting-up"
-	LaneWorking    = "working"
+	LaneClaimed    = "claimed" // in use; what it is doing is worked out (lanes.Derive)
 	LaneIncomplete = "incomplete"
-	LaneReady      = "ready"
 	LaneParked     = "parked"
+)
+
+// Session homes: the scope a session started with, which aw detach returns it to.
+const (
+	HomeUnattached = "unattached"
+	HomePair       = "pair"
+	HomeLane       = "lane"
 )
 
 // Lane is one row of lanes.
@@ -72,8 +78,25 @@ type Session struct {
 	PIDStart       string `json:"pid_start,omitempty"`
 	// Pair is a pair session: granted by the human, in the owner checkout, with no lane (R60).
 	Pair bool `json:"pair,omitempty"`
+	// Home is the scope it started with: HomeUnattached, HomePair or HomeLane.
+	Home string `json:"home"`
+	// Released is when it stopped holding its lane (aw detach, aw finish, a re-pair), or "".
+	Released string `json:"released,omitempty"`
 	// Joined are the processes that joined after it started (session_processes).
 	Joined []Process `json:"joined,omitempty"`
+}
+
+// Holds reports whether the session holds lane l now: it is attached to this generation of the
+// lane, has not released it, and is running (docs/spec/sessions.md, "Two separate things").
+func (s Session) Holds(l Lane) bool {
+	return !s.Pair && s.Lane == l.Number && s.LaneGeneration == l.Generation && s.Released == "" &&
+		s.State == SessionActive && s.Alive()
+}
+
+// InLane reports whether the session's scope is lane l: it holds it, or it started there. A
+// session that came to a lane from elsewhere returns to its home when it releases the lane.
+func (s Session) InLane(l Lane) bool {
+	return !s.Pair && s.Lane == l.Number && s.LaneGeneration == l.Generation && (s.Released == "" || s.Home == HomeLane)
 }
 
 // Process is one process of a session: its PID and start identity.
@@ -297,11 +320,11 @@ func SetLaneRepos(tx *sql.Tx, lane int, repos []LaneRepo) error {
 	return nil
 }
 
-const sessionColumns = `id, harness, harness_session, coalesce(lane, 0), coalesce(lane_generation, 0), purpose, state, started, last_activity, coalesce(pid, 0), coalesce(pid_start, ''), pair`
+const sessionColumns = `id, harness, harness_session, coalesce(lane, 0), coalesce(lane_generation, 0), purpose, state, started, last_activity, coalesce(pid, 0), coalesce(pid_start, ''), pair, home, released`
 
 func scanSession(row interface{ Scan(...any) error }) (Session, error) {
 	var s Session
-	err := row.Scan(&s.ID, &s.Harness, &s.HarnessSession, &s.Lane, &s.LaneGeneration, &s.Purpose, &s.State, &s.Started, &s.LastActivity, &s.PID, &s.PIDStart, &s.Pair)
+	err := row.Scan(&s.ID, &s.Harness, &s.HarnessSession, &s.Lane, &s.LaneGeneration, &s.Purpose, &s.State, &s.Started, &s.LastActivity, &s.PID, &s.PIDStart, &s.Pair, &s.Home, &s.Released)
 	return s, err
 }
 
@@ -416,16 +439,58 @@ func SaveSession(tx *sql.Tx, s Session) (int, error) {
 	if s.PID > 0 {
 		pid = s.PID
 	}
+	if s.Home == "" {
+		s.Home = HomeUnattached
+		if s.Pair {
+			s.Home = HomePair
+		}
+	}
 	var id int
-	err := tx.QueryRow(`INSERT INTO sessions (harness, harness_session, lane, lane_generation, purpose, state, started, last_activity, pid, pid_start, pair)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, nullif(?, ''), ?)
+	err := tx.QueryRow(`INSERT INTO sessions (harness, harness_session, lane, lane_generation, purpose, state, started, last_activity, pid, pid_start, pair, home, released)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, nullif(?, ''), ?, ?, ?)
 		ON CONFLICT (harness, harness_session) DO UPDATE SET lane = excluded.lane, lane_generation = excluded.lane_generation,
 			purpose = excluded.purpose, state = excluded.state, last_activity = excluded.last_activity,
 			pid = coalesce(excluded.pid, sessions.pid), pid_start = coalesce(excluded.pid_start, sessions.pid_start),
-			pair = excluded.pair
+			pair = excluded.pair, released = excluded.released
 		RETURNING id`,
-		s.Harness, s.HarnessSession, lane, gen, s.Purpose, s.State, s.Started, s.LastActivity, pid, s.PIDStart, s.Pair).Scan(&id)
+		s.Harness, s.HarnessSession, lane, gen, s.Purpose, s.State, s.Started, s.LastActivity, pid, s.PIDStart, s.Pair, s.Home, s.Released).Scan(&id)
 	return id, err
+}
+
+// ReleaseSession records that a session no longer holds its lane. Its scope stays the lane only
+// if the lane is its home.
+func ReleaseSession(tx *sql.Tx, id int) error {
+	_, err := tx.Exec(`UPDATE sessions SET released = ? WHERE id = ? AND released = ''`, now(), id)
+	return err
+}
+
+// HoldSession records that a session holds its lane again (aw attach from its own lane).
+func HoldSession(tx *sql.Tx, id int) error {
+	_, err := tx.Exec(`UPDATE sessions SET released = '', state = ?, last_activity = ? WHERE id = ?`, SessionActive, now(), id)
+	return err
+}
+
+// RecordSessionStart is the hook's write for a session it has no record of (docs/spec/sessions.md,
+// "Scope is set when a session starts"): where the session started decides its scope, once. Like
+// RecordSessionIdentity it never waits for a lock, and it never replaces a record.
+func RecordSessionStart(dir string, s Session) error {
+	db, err := sql.Open("sqlite", "file:"+filepath.Join(dir, File)+"?_pragma=busy_timeout(0)")
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	var lane, gen, pid any
+	if s.Lane > 0 {
+		lane, gen = s.Lane, s.LaneGeneration
+	}
+	if s.PID > 0 {
+		pid = s.PID
+	}
+	at := now()
+	_, err = db.Exec(`INSERT OR IGNORE INTO sessions (harness, harness_session, lane, lane_generation, purpose, state, started, last_activity, pid, pid_start, pair, home, released)
+		VALUES (?, ?, ?, ?, '', ?, ?, ?, ?, nullif(?, ''), 0, ?, ?)`,
+		s.Harness, s.HarnessSession, lane, gen, SessionActive, at, at, pid, s.PIDStart, s.Home, s.Released)
+	return err
 }
 
 // Now is the time format stored in state: UTC, RFC 3339 with nanoseconds.

@@ -329,10 +329,21 @@ or its number. aw recap shows each lane in full. It writes nothing.`,
 				Root    string `json:"root"`
 			}
 			rows := []row{}
-			for _, l := range all {
-				if l.State != state.LanePool {
-					rows = append(rows, row{l.Number, lanes.Dir(l.Number, m.Cfg.Lanes.Max), l.Name, l.State, l.Purpose, m.Root(l.Number)})
+			var sessions []state.Session
+			if len(all) > 0 {
+				if sessions, err = state.Sessions(m.Store.DB()); err != nil {
+					return err
 				}
+			}
+			for _, l := range all {
+				if l.State == state.LanePool {
+					continue
+				}
+				st := l.State
+				if st == state.LaneClaimed {
+					st = lanes.QuickState(m.Store.DB(), l, sessions)
+				}
+				rows = append(rows, row{l.Number, lanes.Dir(l.Number, m.Cfg.Lanes.Max), l.Name, st, l.Purpose, m.Root(l.Number)})
 			}
 			if asJSON {
 				return writeJSON(out, map[string]any{"lanes": rows})
@@ -514,7 +525,7 @@ func continueHint(out io.Writer, m *lanes.Manager, all []state.Lane) error {
 		case running[l.Number]:
 		case l.State == state.LaneParked:
 			parked = append(parked, ui.Clean(l.Name))
-		case l.State == state.LaneReady:
+		case l.State == state.LaneClaimed && state.HandedOff(m.Store.DB(), l.Number, l.Generation):
 			ready = append(ready, ui.Clean(l.Name))
 		}
 	}

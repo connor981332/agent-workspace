@@ -97,6 +97,9 @@ type Scope struct {
 	Safeguards []string
 	// AskSupported is whether the harness can ask the human; if not, an ask is a deny.
 	AskSupported bool
+	// PreviousLane is the purpose of the lane an unattached session released, which attaching
+	// again with the same purpose takes back.
+	PreviousLane string
 }
 
 // safeguard reports whether the team turned on an optional group of rules.
@@ -351,6 +354,9 @@ func (s Scope) attachHint() string {
 	pair := "aw pair"
 	if s.Session != "" {
 		pair = "aw pair --session " + quote(s.Session)
+	}
+	if s.PreviousLane != "" {
+		return `→ this session released its lane; run bin/aw attach ` + quote(s.PreviousLane) + ` to take it back, or bin/aw attach "<other work>" for a new one; or ask the human to make this a pair session by running ` + pair
 	}
 	return `→ run bin/aw attach "<what you are working on>" to claim a lane, and work there; or ask the human to make this a pair session by running ` + pair
 }

@@ -122,7 +122,7 @@ func (m *Manager) Claim(ctx context.Context, req ClaimRequest) (*Claimed, error)
 		return nil, errors.New(`a lane needs a purpose → say what the work is, e.g. aw attach "fix checkout tax rounding"`)
 	}
 	if req.Who.known() {
-		if c, err := m.existing(ctx, req.Who); err != nil || c != nil {
+		if c, err := m.existing(ctx, req.Who, purpose); err != nil || c != nil {
 			return c, err
 		}
 	}
@@ -139,9 +139,9 @@ func (m *Manager) Claim(ctx context.Context, req ClaimRequest) (*Claimed, error)
 		if req.Who.known() {
 			s, err := state.SessionByHarnessID(tx, req.Who.Harness, req.Who.Session)
 			if err == nil && s.Lane > 0 && s.State != state.SessionEnded {
-				if l, err := state.LaneByNumber(tx, s.Lane); err == nil && l.Generation == s.LaneGeneration {
+				if l, err := state.LaneByNumber(tx, s.Lane); err == nil && keepsLane(s, l, purpose) {
 					lane, reused = l, true
-					return nil
+					return state.HoldSession(tx, s.ID)
 				}
 			}
 		}
@@ -169,7 +169,7 @@ func (m *Manager) Claim(ctx context.Context, req ClaimRequest) (*Claimed, error)
 			}
 		} else {
 			if len(lanes) >= m.Cfg.Lanes.Max {
-				return maxLanesError(m.Cfg.Lanes.Max, lanes)
+				return maxLanesError(tx, m.Cfg.Lanes.Max, lanes)
 			}
 			n := 1
 			for slices.ContainsFunc(lanes, func(l state.Lane) bool { return l.Number == n }) {
@@ -207,7 +207,7 @@ func (m *Manager) Claim(ctx context.Context, req ClaimRequest) (*Claimed, error)
 		if err := state.SetLaneRepos(tx, lane.Number, repos); err != nil {
 			return err
 		}
-		lane.State, lane.Updated = state.LaneWorking, state.Now()
+		lane.State, lane.Updated = state.LaneClaimed, state.Now()
 		if steps := lifecycle.Plan(m.Cfg, fromPool, hooks); len(steps) > 0 {
 			lane.State = state.LaneSettingUp
 			if err := state.PlanSetup(tx, lane.Number, lane.Generation, fromPool, lifecycle.Names(steps)); err != nil {
@@ -225,34 +225,69 @@ func (m *Manager) Claim(ctx context.Context, req ClaimRequest) (*Claimed, error)
 		Setup: lane.State == state.LaneSettingUp, Notes: notes(plans)}, nil
 }
 
-// existing returns the lane the session already holds, waiting while another call builds it.
-func (m *Manager) existing(ctx context.Context, who Identity) (*Claimed, error) {
+// keepsLane reports whether a session attaching for purpose gets lane l back: the lane it is in,
+// or the one it released, when it attaches for the same work again (docs/spec/sessions.md, "Scope
+// changes only through commands").
+func keepsLane(s state.Session, l state.Lane, purpose string) bool {
+	if s.Pair || s.Lane != l.Number || s.LaneGeneration != l.Generation {
+		return false
+	}
+	return s.InLane(l) || SamePurpose(purpose, l.Purpose)
+}
+
+// SamePurpose compares two purposes as a person would: case and spacing aside.
+func SamePurpose(a, b string) bool {
+	return strings.EqualFold(strings.Join(strings.Fields(a), " "), strings.Join(strings.Fields(b), " "))
+}
+
+// ErrPairAttach refuses aw attach from a pair session, which works with the human instead.
+type ErrPairAttach struct{ Purpose string }
+
+func (e ErrPairAttach) Error() string {
+	return fmt.Sprintf("this is a pair session, which works in the owner checkout with the human and does not attach, so no lane was claimed → to give this work a branch of its own, run aw move-to-lane %q; the session stays paired", e.Purpose)
+}
+
+// existing returns the lane the session already has, waiting while another call builds it, and
+// makes the session hold it again.
+func (m *Manager) existing(ctx context.Context, who Identity, purpose string) (*Claimed, error) {
 	s, err := state.SessionByHarnessID(m.Store.DB(), who.Harness, who.Session)
-	if errors.Is(err, state.ErrNotFound) || (err == nil && (s.Lane == 0 || s.State == state.SessionEnded)) {
+	if errors.Is(err, state.ErrNotFound) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
+	if s.Pair && s.State == state.SessionActive && s.Alive() {
+		return nil, ErrPairAttach{purpose}
+	}
+	if s.Lane == 0 || s.State == state.SessionEnded {
+		return nil, nil
+	}
 	l, err := state.LaneByNumber(m.Store.DB(), s.Lane)
-	if err != nil || l.Generation != s.LaneGeneration {
-		return nil, nil // the lane has moved on: a new claim
+	if err != nil || !keepsLane(s, l, purpose) {
+		return nil, nil // the lane has moved on, or the session left it for other work: a new claim
 	}
 	c, err := m.waitBuilt(ctx, l.Number, true)
 	if err != nil {
 		return nil, err
 	}
-	c.Returned = s.State == state.SessionInterrupted
-	if who.PID <= 0 {
-		return c, nil
+	c.Returned = s.State == state.SessionInterrupted || s.Released != ""
+	start := ""
+	if who.PID > 0 {
+		if start, err = platform.ProcessIdentity(who.PID); err != nil {
+			start = ""
+		}
 	}
-	start, err := platform.ProcessIdentity(who.PID)
-	if err != nil {
-		return c, nil
-	}
-	c.Joined = !s.Has(who.PID, start)
+	c.Joined = start != "" && !s.Has(who.PID, start)
 	if c.Joined || c.Returned {
-		err = m.Store.Write(ctx, func(tx *sql.Tx) error { return state.JoinSession(tx, s.ID, who.PID, start) })
+		err = m.Store.Write(ctx, func(tx *sql.Tx) error {
+			if start != "" {
+				if err := state.JoinSession(tx, s.ID, who.PID, start); err != nil {
+					return err
+				}
+			}
+			return state.HoldSession(tx, s.ID)
+		})
 	}
 	return c, err
 }
@@ -314,17 +349,19 @@ func Full(q state.Querier, max int, purpose string) error {
 	if len(lanes) < max {
 		return nil
 	}
-	return maxLanesError(max, lanes)
+	return maxLanesError(q, max, lanes)
 }
 
-func maxLanesError(max int, lanes []state.Lane) error {
+func maxLanesError(q state.Querier, max int, lanes []state.Lane) error {
 	var parked, ready []string
 	for _, l := range lanes {
 		switch l.State {
 		case state.LaneParked:
 			parked = append(parked, l.Name)
-		case state.LaneReady:
-			ready = append(ready, l.Name)
+		case state.LaneClaimed:
+			if state.HandedOff(q, l.Number, l.Generation) {
+				ready = append(ready, l.Name)
+			}
 		}
 	}
 	var hints []string

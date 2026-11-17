@@ -14,7 +14,7 @@ recorded as the principles in [AGENTS.md](../AGENTS.md). This plan turns those d
 **Updated:** 2026-11-16
 
 **Branches / MRs:** #96 and #97 (AGENTS.md and this plan), #98 (Phase 1), #99 (Phase 2), #100
-(Phase 3). Phase 4 is on `feat/dogfood-0.3-phase4`.
+(Phase 3), #101 (Phase 4). Phase 5 is on `feat/dogfood-0.3-phase5` and follow-on branches.
 
 **Done:** triage and decisions; AGENTS.md. Phases 1 to 4, each item with a scenario that fails on
 master first. Unit tests, vet, the full acceptance suite (`-count=1`), the coverage check and the
@@ -50,10 +50,21 @@ latency budgets pass locally. Differences from the plan as written:
   scenarios that rely on it use a new `[git-content]` condition, as CI runs sweep on Git 2.34.
 - CI: the acceptance step runs with `-timeout 18m`, since macos-15-intel comes close to go test's
   default ten minutes.
+- 5.1: the design note is [docs/spec/sessions.md](../docs/spec/sessions.md), reviewed by the owner
+  on 2026-11-16 with four refinements: a session that started in a lane keeps its scope after
+  releasing it, instead of the hook reclaiming the lane on a write (the hook stays read-only and
+  fast); lazy setup starts with a command, not an edit; a harness with no session start is placed
+  by its first tool call; and a full claim recycles proven lanes nobody holds.
+- 5.2 to 5.5: state schema 14 (a session's home and when it released its lane; working and ready
+  stored as claimed). The hook records a session it has no record of from where it is, once, and
+  as holding a lane only when it can find the session's process, so that a hold always ends.
+  `aw lanes` derives what it can without reading repositories. Finishing an incomplete lane makes
+  it claimed, as finishing used to make it ready. Sweep still says a holding session "is attached".
 
-**In progress:** nothing.
+**In progress:** Phase 5: 5.6 to 5.9.
 
-**Next step:** merge Phase 4 after CI, rebuild the owner's dev binary, then Phase 5, which starts with its design note (5.1).
+**Next step:** lazy per-project setup (5.6), then capacity (5.7), the instructions (5.8) and pair
+sessions for audit and onboard (5.9).
 
 ## Decisions taken
 

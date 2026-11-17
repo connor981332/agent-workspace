@@ -42,12 +42,15 @@ json stdout .pair_sessions[0].harness claude
 exec awtest-hook -session live-1 bash 'bin/aw pair --session claude:someone-else'
 ! stdout .
 
-# A session working in a lane is not pulled out of it.
+# The human's grant always succeeds: a session working in a lane releases it, and the lane's work
+# stays there (docs/spec/sessions.md).
 session s-1 claude
 exec aw attach 'add feature flag'
 env AW_SESSION=
-! exec aw pair --session claude:s-1
-stderr 'attached to a lane'
+exec aw pair --session claude:s-1
+stdout 'It no longer holds lane feature-flag'
+exec aw sweep --json
+! stdout 'session s-1'
 
 # The grant is made from the owner checkout.
 cd .worktrees/01
