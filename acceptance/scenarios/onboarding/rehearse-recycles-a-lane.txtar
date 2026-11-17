@@ -1,0 +1,70 @@
+# aw rehearse also sends a lane through the warm pool: it resets the lane, recycles it, claims it
+# back and sets it up again, so what only recycling runs is tried before a real lane meets it. It
+# says how long each repository's own checkout hook took in a lane, and a lane sweep would keep, here
+# for a file its setup makes that nothing declares generated, is a finding.
+# req: R87 R25
+# source: dogfood of 0.3.0 (plans/dogfood-0.3.md 2.6)
+# milestone: M12
+
+owner-may-change
+workspace shop --init
+exec sh $WORK/hook.sh
+exec aw setup
+exec aw rehearse
+stdout 'Recycling lane rehearse-(first|second) and claiming it again from the pool'
+stdout '^web\.post-checkout took [0-9.]+m?s in a lane; every new or recycled lane runs it\.$'
+stdout 'The rehearsal passed'
+! exists .worktrees/01
+exec git for-each-ref refs/aw/archive
+! stdout .
+
+# Setup makes a file nothing declares: no lane like this would ever be recycled.
+cp $WORK/undeclared.toml workspace.toml
+! exec aw rehearse
+stderr 'collision: a lane like rehearse-(first|second) would never be recycled: web: .*ignored files that are not declared generated \(cache.db\)'
+
+-- hook.sh --
+printf '*.db\n' > web/.gitignore
+git -C web add .gitignore
+git -C web commit -qm ignore
+git -C web push -q
+cat > web/.git/hooks/post-checkout <<'EOS'
+#!/bin/sh
+exit 0
+EOS
+chmod +x web/.git/hooks/post-checkout
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 2
+
+[projects.web]
+directory = "web"
+generated = ["*.db"]
+
+[projects.web.lifecycle.setup]
+run = "touch cache.db"
+
+[projects.api]
+directory = "api"
+-- undeclared.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 2
+
+[projects.web]
+directory = "web"
+
+[projects.web.lifecycle.setup]
+run = "touch cache.db"
+
+[projects.api]
+directory = "api"

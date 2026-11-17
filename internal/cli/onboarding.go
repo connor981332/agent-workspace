@@ -28,6 +28,7 @@ import (
 	"github.com/connor981332/agent-workspace/internal/harness/launch"
 	"github.com/connor981332/agent-workspace/internal/inspect"
 	"github.com/connor981332/agent-workspace/internal/lanes"
+	"github.com/connor981332/agent-workspace/internal/lifecycle"
 	"github.com/connor981332/agent-workspace/internal/sandbox"
 	"github.com/connor981332/agent-workspace/internal/state"
 	"github.com/connor981332/agent-workspace/internal/ui"
@@ -434,6 +435,8 @@ var collisionKey = regexp.MustCompile(`^AW_HOSTNAME$|^AW_PORT_|DATABASE|_DB_|RED
 type rehearsal struct {
 	exe, owner string
 	collisions []string
+	projects   map[string]*config.Project // the workspace's projects
+	repos      []string                   // the owner checkout's repositories
 }
 
 func (r *rehearsal) aw(ctx context.Context, dir string, args ...string) (string, error) {
@@ -470,8 +473,10 @@ func newRehearseCmd() *cobra.Command {
 		Short: "Create two lanes at once, start their servers, check they do not collide, and clean up",
 		Long: `Create two lanes at the same time, run their setup and start their servers, then check that the lanes
 do not collide: ports, hostnames and data must differ, and nothing may be written into the owner
-checkout. Each project's smoke command runs if it has one. Both lanes are then torn down, and aw
-confirms that nothing is left behind.
+checkout. Each project's smoke command runs if it has one, and each repository's own post-checkout
+hook is timed. One lane is then recycled and claimed again from the pool, as real lanes are; a lane
+sweep would keep is reported. Both lanes are then torn down, and aw confirms that nothing is left
+behind.
 
 With a lane, or from inside one, it rehearses that lane's proposal as the lane has it now, committed
 or not, in a throwaway copy of the workspace with its own name, ports and containers. Your checkout,
@@ -495,9 +500,9 @@ a workspace may do this for its own lane.`,
 			if err != nil {
 				return err
 			}
-			r := &rehearsal{exe: exe, owner: ws.Owner}
+			r := &rehearsal{exe: exe, owner: ws.Owner, projects: c.Projects, repos: ownerRepos(ws, c)}
 			out := cmd.OutOrStdout()
-			repos := ownerRepos(ws, c)
+			repos := r.repos
 			snapshot := func() []string { return ownerStatus(ctx, repos) }
 			before := snapshot()
 			projects, err := scanProjects(ws, c)
@@ -543,6 +548,16 @@ a workspace may do this for its own lane.`,
 			err = failed
 			if err == nil {
 				err = r.exercise(ctx, ws, c, lanesMade, out)
+			}
+			if err == nil {
+				r.checkoutHookTimes(ws, c, lanesMade, out)
+				// A lane is recycled and claimed again, as the warm pool does, so that what only
+				// recycling runs (switching each worktree, the reset hooks, the checkout hooks
+				// in a reused lane) is tried before a real lane meets it.
+				var warm laneRun
+				if warm, err = r.recycle(ctx, ws, lanesMade[0], out); err == nil {
+					lanesMade[0] = warm
+				}
 			}
 			fmt.Fprintln(out, "Tearing down the two lanes.")
 			if terr := r.teardown(ctx, ws, c, lanesMade); terr != nil {
@@ -859,4 +874,120 @@ func noFreeLane(ws *workspace.Workspace, c *config.Config, purpose string) error
 	}
 	defer s.Close()
 	return lanes.Full(s.DB(), c.Lanes.Max, purpose)
+}
+
+// slowCheckoutHook is how long a repository's own post-checkout hook may take in a lane before the
+// rehearsal points out that every new lane pays for it.
+const slowCheckoutHook = 30 * time.Second
+
+// checkoutHookTimes says how long each project's own post-checkout hook took in the lanes, since
+// every lane, new or recycled, runs it.
+func (r *rehearsal) checkoutHookTimes(ws *workspace.Workspace, c *config.Config, made []laneRun, out io.Writer) {
+	dir, err := ws.StateDir()
+	if err != nil {
+		return
+	}
+	s, err := state.Open(dir, state.ReadOnly)
+	if err != nil {
+		return
+	}
+	defer s.Close()
+	longest := map[string]time.Duration{}
+	for _, l := range made {
+		ls, err := state.LaneByName(s.DB(), l.name)
+		if err != nil {
+			continue
+		}
+		steps, _ := state.Steps(s.DB(), ls.Number, ls.Generation)
+		for _, st := range steps {
+			if !strings.HasSuffix(st.Name, "."+lifecycle.PhaseCheckout) {
+				continue
+			}
+			began, err1 := time.Parse(time.RFC3339Nano, st.Started)
+			ended, err2 := time.Parse(time.RFC3339Nano, st.Ended)
+			if err1 == nil && err2 == nil && ended.Sub(began) > longest[st.Name] {
+				longest[st.Name] = ended.Sub(began)
+			}
+		}
+	}
+	for _, name := range slices.Sorted(mapsKeys(longest)) {
+		d := longest[name].Round(time.Second)
+		if longest[name] < time.Second {
+			d = longest[name].Round(time.Millisecond)
+		}
+		fmt.Fprintf(out, "%s took %s in a lane; every new or recycled lane runs it.\n", name, d)
+		if longest[name] >= slowCheckoutHook {
+			project, _, _ := strings.Cut(name, ".")
+			fmt.Fprintf(out, "  If lanes do not need it, post_checkout = \"skip\" under [projects.%s] turns it off.\n", project)
+		}
+	}
+}
+
+// recycle sends a rehearsal lane through the warm pool: its branches go back to the base, aw sweep
+// recycles it, and a new claim takes it from the pool and sets it up again. A lane sweep would keep
+// is a finding: real lanes like it would never be recycled. It returns the lane to tear down.
+func (r *rehearsal) recycle(ctx context.Context, ws *workspace.Workspace, l laneRun, out io.Writer) (laneRun, error) {
+	fmt.Fprintf(out, "Recycling lane %s and claiming it again from the pool.\n", l.name)
+	root := filepath.Join(ws.Owner, ".worktrees", l.dir)
+	if _, err := r.aw(ctx, root, "reset-branch"); err != nil {
+		r.collide("lane %s could not be reset to its base for recycling: %v", l.name, err)
+		return l, nil
+	}
+	text, err := r.aw(ctx, ws.Owner, "sweep", "--apply", l.name, "--json")
+	var rep struct {
+		Lanes []struct {
+			Action, Reason, Result, Error string
+		} `json:"lanes"`
+	}
+	if jerr := json.Unmarshal([]byte(text), &rep); jerr != nil || len(rep.Lanes) != 1 {
+		r.collide("recycling lane %s failed: %v", l.name, err)
+		return l, nil
+	}
+	// With the pool full, or [lanes] pool = 0, a proven-merged lane is removed instead: that it
+	// was proven is what matters, and the new claim below makes a lane from scratch.
+	d := rep.Lanes[0]
+	switch {
+	case d.Action != lanes.ActionRecycle && d.Action != lanes.ActionDestroy:
+		r.collide("a lane like %s would never be recycled: %s", l.name, d.Reason)
+		return l, nil
+	case d.Result != "done":
+		r.collide("recycling lane %s failed: %s", l.name, d.Error)
+		return l, nil
+	}
+	r.dropArchives(ctx, ws, l.name)
+	text, err = r.aw(ctx, ws.Owner, "attach", "rehearse warm", "--json")
+	var claim struct {
+		Dir      string `json:"lane"`
+		Name     string `json:"name"`
+		FromPool bool   `json:"from_pool"`
+	}
+	if err == nil {
+		err = json.Unmarshal([]byte(text), &claim)
+	}
+	if err != nil {
+		return laneRun{}, fmt.Errorf("claiming a lane from the pool after recycling: %w", err)
+	}
+	warm := laneRun{name: claim.Name, dir: claim.Dir}
+	if d.Action == lanes.ActionRecycle && !claim.FromPool {
+		r.collide("the recycled lane did not go back to the pool, so a new claim did not reuse it")
+	}
+	// aw run waits for the warm lane's setup, and fails if a step of it did.
+	for _, name := range slices.Sorted(mapsKeys(r.projects)) {
+		if _, err := r.aw(ctx, filepath.Join(ws.Owner, ".worktrees", warm.dir), "run", name, "true"); err != nil {
+			r.collide("setting up a recycled lane failed: %v", err)
+			break
+		}
+	}
+	return warm, nil
+}
+
+// dropArchives removes what resetting a rehearsal lane archived: it was never anybody's work.
+func (r *rehearsal) dropArchives(ctx context.Context, ws *workspace.Workspace, name string) {
+	for _, repo := range r.repos {
+		g := gitrun.In(repo)
+		refs, _ := g.Run(ctx, "for-each-ref", "--format=%(refname)", "refs/aw/archive/"+name)
+		for _, ref := range strings.Fields(refs) {
+			g.Run(ctx, "update-ref", "-d", ref)
+		}
+	}
 }
