@@ -93,8 +93,12 @@ Proposals are checked before anyone reviews them:
 2. `aw rehearse` creates two lanes at the same time, runs their setup, starts their servers, then
    checks that the lanes do not collide: different ports and hostnames, different database names,
    different Redis databases and buckets, no write into the owner checkout, no shared temporary
-   files. It runs each project's smoke command if one is declared.
-3. It tears both lanes down and confirms nothing is left: no worktrees, branches, databases,
+   files. It runs each project's smoke command if one is declared, and says how long each
+   repository's own post-checkout hook took, since every lane runs it.
+3. It recycles one lane as the warm pool would (resetting its branches, `aw sweep --apply`, a new
+   claim that sets it up again). A lane sweep would keep, such as one whose setup leaves a file
+   nothing declares `generated`, is reported: real lanes like it would never be recycled.
+4. It tears both lanes down and confirms nothing is left: no worktrees, branches, databases,
    processes or containers.
 
 With a lane, or from inside one, `aw rehearse` tests that lane's proposal without touching the owner:

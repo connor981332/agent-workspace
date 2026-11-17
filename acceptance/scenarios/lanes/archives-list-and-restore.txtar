@@ -1,0 +1,44 @@
+# aw archives lists what discard archived, newest first, with each repository's tip, so the safety
+# net can be found without knowing ref names. --restore makes a branch from an archive in every
+# repository it holds, which a new lane can start from; it is the human's, as is retrying a sweep.
+# req: R27 R34 R60
+# source: dogfood of 0.3.0 (plans/dogfood-0.3.md 2.3, 2.4)
+# milestone: M12
+
+workspace shop --init
+exec aw archives
+stdout 'Nothing is archived'
+exec aw attach 'add feature flag'
+lane-commit 01 web/flag.txt 'flag work'
+exec aw discard feature-flag --yes
+# Discarding says what it is doing, step by step.
+stderr '^aw: feature-flag: web: removing its worktree$'
+exec aw archives
+stdout '^feature-flag/[0-9]{8}-[0-9]{6}$'
+stdout '^   web: [0-9a-f]{12} flag work$'
+exec aw archives --json
+json stdout .archives[0].name feature-flag
+json stdout .archives[0].repos[2].repo web
+
+exec awtest-hook bash 'bin/aw archives --restore feature-flag'
+stdout '"permissionDecision":"ask".*only the human does'
+exec awtest-hook bash 'bin/aw archives'
+! stdout .
+env CLAUDE_CODE_SESSION_ID=agent-1
+! exec aw archives --restore feature-flag
+stderr 'only for the human'
+! exec aw sweep --retry 1
+stderr 'only for the human'
+env CLAUDE_CODE_SESSION_ID=
+
+exec aw archives --restore feature-flag
+stdout 'Restored feature-flag/.* as branch restored/feature-flag in .*web'
+stdout 'aw new "<purpose>" --branch restored/feature-flag'
+exec git -C web log -1 --format=%s restored/feature-flag
+stdout '^flag work$'
+! exec aw archives --restore feature-flag
+stderr 'already has a branch restored/feature-flag; nothing was changed'
+! exec aw archives --restore no-such-work
+stderr 'nothing is archived as no-such-work'
+exec aw attach 'pick up the flag' --branch restored/feature-flag
+exists web/.worktrees/01/flag.txt

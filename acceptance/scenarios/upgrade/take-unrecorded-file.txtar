@@ -18,5 +18,7 @@ stderr 'aw does not generate that file'
 
 exec aw upgrade --to $AW_NEW_VERSION --take .claude/skills/aw-workspace-design/SKILL.md
 stdout 'Next: commit this'
+# The pin and a configuration change that needs it go in one merge request (plans/dogfood-0.3.md 2.5).
+stdout 'same merge request: merged apart, the default branch is broken in between'
 ! grep '# my note' .claude/skills/aw-workspace-design/SKILL.md
 grep 'aw-workspace-design/SKILL.md' .aw/managed

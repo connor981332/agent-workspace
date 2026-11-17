@@ -40,6 +40,7 @@ type Manager struct {
 
 	forges        map[string]*forge.Client // by host, for one sweep
 	forgeDeadline time.Time
+	unrecognized  []string // hosts forge = "auto" did not recognize, in one sweep
 }
 
 // Identity is the session asking, when it is known.

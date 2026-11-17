@@ -233,6 +233,9 @@ func finishUpgrade(cmd *cobra.Command, from string, eject, take []string) error 
 		return &silentError{errors.New("aw doctor found problems")}
 	}
 	fmt.Fprintln(out, "Next: commit this, and open a merge request. Everyone else gets it with git pull.")
+	// A configuration change that uses what this version adds, merged before the new pin, leaves the
+	// default branch with a workspace.toml its own pinned aw cannot read.
+	fmt.Fprintln(out, "Put any workspace.toml change that needs this version in the same merge request: merged apart, the default branch is broken in between.")
 	return nil
 }
 

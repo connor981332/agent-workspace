@@ -1,0 +1,28 @@
+# Naming lanes aims aw sweep at them: only they are reported, and --apply acts on them alone. A lane
+# kept as unproven says every check that was tried, and when forge = "auto" did not recognize the
+# origin's host, sweep says which setting would let it ask.
+# req: R25 R31
+# source: dogfood of 0.3.0 (plans/dogfood-0.3.md 2.1, 2.2)
+# milestone: M12
+
+workspace solo --single --init
+owner-may-change
+exec aw attach 'one'
+exec aw attach 'two'
+exec aw sweep two --json
+json stdout .lanes[0].name two
+! json stdout .lanes[1]
+exec aw sweep --apply two --json
+json stdout .lanes[0].result done
+exists .worktrees/01
+exec git rev-parse --verify --quiet refs/heads/aw/one
+! exec aw sweep nothing-by-that-name
+stderr 'nothing-by-that-name'
+
+lane-commit 01 more.txt 'unmerged'
+exec git remote set-url origin https://git.example.org/team/solo.git
+exec aw sweep one
+stdout 'its head is not there, and no commit there has the same patch; no forge was asked, since forge = "auto" does not recognize git.example.org'
+stdout 'set \[workspace\] forge = "gitlab" or "github"'
+exec aw sweep one --json
+json stdout .unrecognized_forges[0] git.example.org

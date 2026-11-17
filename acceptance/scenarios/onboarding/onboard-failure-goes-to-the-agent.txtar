@@ -12,6 +12,9 @@ exec git -C web checkout -q --detach
 stdout 'detached HEAD'
 exec aw onboard --harness claude
 stderr 'no lane could be created'
+# Before offering an hour's maintenance (on a terminal), it says what failed (plans/dogfood-0.3.md 2.7).
+stderr '^Setup did not finish: aw doctor found problems\.$'
+stderr '^No lane could be created: .*detached HEAD'
 grep 'Something failed before you started' $STUB_LOG
 grep 'detached HEAD' $STUB_LOG
 grep 'pair session' $STUB_LOG

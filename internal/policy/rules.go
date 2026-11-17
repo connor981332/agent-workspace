@@ -382,6 +382,9 @@ func ownerOnlyRule(s Scope, c shell.Command) Decision {
 	if why, ok := ownerOnly[sub]; ok {
 		return ask("owner-only", "aw %s %s, which only the human does%s → approve it if you asked for this", sub, why, where)
 	}
+	if sub == "archives" && hasArg(rest, "--restore") {
+		return ask("owner-only", "aw archives --restore makes branches in the owner's repositories, which only the human does%s → approve it if you asked for this; aw archives, without --restore, lists them", where)
+	}
 	if sub == "sweep" && !s.Delegated && (hasArg(rest, "--apply") || hasArg(rest, "--retry")) {
 		return ask("owner-only", "aw sweep --apply removes lanes, which only the human does%s → approve it if you asked for this; aw sweep, without --apply, shows what it would do", where)
 	}

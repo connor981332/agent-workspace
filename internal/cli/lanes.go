@@ -44,7 +44,7 @@ func newSweepCmd() *cobra.Command {
 	var apply, asJSON bool
 	var retry int
 	cmd := &cobra.Command{
-		Use:   "sweep",
+		Use:   "sweep [lane…]",
 		Short: "Show which lanes are proven merged, and with --apply recycle them",
 		Long: `Show, for every lane, whether it is kept, recycled or destroyed, and why.
 
@@ -52,9 +52,10 @@ A lane is recycled only when every repository in it is clean and proven merged: 
 base branch, or its commits are patch-equivalent to the base's, or (with forge support) the forge
 reports exactly that head merged. A gone remote branch, a handoff or a quiet session proves
 nothing. Recycled lanes return to the warm pool; lanes beyond [lanes] pool, or older than
-[lanes] retention in it, are removed. Without --apply nothing is changed.`,
-		Args: cobra.NoArgs,
-		RunE: run(func(cmd *cobra.Command, _ []string) error {
+[lanes] retention in it, are removed. Without --apply nothing is changed. Naming lanes limits the
+report, and --apply, to them.`,
+		Args: cobra.ArbitraryArgs,
+		RunE: run(func(cmd *cobra.Command, args []string) error {
 			w, err := openForWrite()
 			if err != nil {
 				return err
@@ -64,7 +65,15 @@ nothing. Recycled lanes return to the warm pool; lanes beyond [lanes] pool, or o
 			if retry > 0 {
 				apply = true
 			}
-			rep, err := m.Sweep(cmd.Context(), lanes.SweepOptions{Apply: apply, Caller: m.CallerLane(), Retry: retry})
+			var only []int
+			for _, ref := range args {
+				l, err := m.Resolve(ref)
+				if err != nil {
+					return err
+				}
+				only = append(only, l.Number)
+			}
+			rep, err := m.Sweep(cmd.Context(), lanes.SweepOptions{Apply: apply, Caller: m.CallerLane(), Retry: retry, Only: only})
 			if err != nil {
 				return err
 			}
@@ -108,6 +117,9 @@ nothing. Recycled lanes return to the warm pool; lanes beyond [lanes] pool, or o
 							fmt.Fprintf(out, "   %s\n", ui.Clean(step))
 						}
 					}
+				}
+				if len(rep.UnrecognizedForges) > 0 {
+					fmt.Fprintf(out, "\nforge = \"auto\" recognizes no forge at %s, so a squash-merged lane there cannot be proven merged → set [workspace] forge = \"gitlab\" or \"github\" in workspace.toml\n", ui.Clean(strings.Join(rep.UnrecognizedForges, ", ")))
 				}
 				for _, e := range rep.Open {
 					fmt.Fprintf(out, "Unfinished: %s of lane %02d failed (%s) → aw sweep --apply --retry %d\n", e.Kind, e.Lane, ui.Clean(e.Detail), e.ID)
@@ -183,6 +195,7 @@ archived the same way, and a worktree with uncommitted files is left alone.`,
 			if err := newBroker(w).ReleaseLane(cmd.Context(), l.Number); err != nil {
 				return err
 			}
+			m.Progress = func(s string) { fmt.Fprintf(cmd.ErrOrStderr(), "aw: %s: %s\n", l.Name, s) }
 			archived, err := m.Discard(cmd.Context(), l, time.Now())
 			if err != nil {
 				return err

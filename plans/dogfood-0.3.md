@@ -13,27 +13,31 @@ recorded as the principles in [AGENTS.md](../AGENTS.md). This plan turns those d
 
 **Updated:** 2026-11-16
 
-**Branches / MRs:** #96 and #97 (AGENTS.md and this plan, merged). Phase 1 is on
-`fix/dogfood-0.3-phase1`.
+**Branches / MRs:** #96 and #97 (AGENTS.md and this plan), #98 (Phase 1), all merged. Phase 2 is on
+`feat/dogfood-0.3-phase2`.
 
-**Done:** triage and decisions; AGENTS.md. Phase 1: all ten fixes, each with a scenario that
-fails on master first. Unit tests, vet, the full acceptance suite (`-count=1`), the coverage check
-and the latency budgets pass locally. Differences from the plan as written:
+**Done:** triage and decisions; AGENTS.md. Phases 1 and 2, each item with a scenario that fails on
+master first. Unit tests, vet, the full acceptance suite (`-count=1`), the coverage check and the
+latency budgets pass locally. Differences from the plan as written:
 - 1.1: the dispatcher drops only `GIT_DIR` and `GIT_WORK_TREE` for a team hook in a lane, which is
   what a main worktree's hooks lack; the temporary `GIT_INDEX_FILE` Git gives a commit's hooks
-  stays. Commands aw starts itself drop every repository-local variable. Started with `GIT_DIR`
-  set, `aw attach` used to fail outright.
-- 1.2: the recycle ran Git's own `switch` with hooks on; restoring a materialized file did too.
+  stays. Commands aw starts itself drop every repository-local variable.
 - 1.5: the logs are under `.git/aw/logs/git/` (newest 20), ahead of Phase 3's step logs.
-- 1.6: proof is worked out for every kept lane except one still being set up, without the forge.
-- 1.8: inspect and sweep now share one matcher, which also accepts `**/name`. aw setup names
-  repositories by project and reports those already set up on one line. Collapsing repeats into
-  patterns stays 2.9.
+- 1.8: inspect and sweep share one matcher, which also accepts `**/name`.
 - 1.9: onboard gets the same early check as audit, since they share the launch.
+- 2.1: naming lanes narrows the report as well as `--apply`; `--retry` still reports every lane.
+- 2.3: `aw archives --restore <name>` is a flag, as `aw sweep --apply` is, so that the human-only
+  check covers it; the branch is `restored/<name>`. A bug found on the way: an unguarded agent's
+  `aw sweep --retry` was not refused, since the check read the number flag as a boolean.
+- 2.6: rehearse resets one lane, recycles it with `aw sweep --apply` and claims it back; with
+  `[lanes] pool = 0` the lane is removed instead, which also counts as proven.
+- 2.7: the reasons are printed before the question, which only a terminal is asked.
+- CI: the acceptance step runs with `-timeout 18m`, since macos-15-intel comes close to go test's
+  default ten minutes.
 
 **In progress:** nothing.
 
-**Next step:** merge Phase 1 after CI, rebuild the owner's dev binary, then Phase 2.
+**Next step:** merge Phase 2 after CI, rebuild the owner's dev binary, then Phase 3.
 
 ## Decisions taken
 

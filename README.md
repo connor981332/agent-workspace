@@ -182,6 +182,8 @@ All of these only read.
 - `aw park <lane>` protects a lane from cleanup until `aw unpark`.
 - `aw discard <lane>` abandons a lane's work. Every branch is archived under `refs/aw/archive/` first,
   so nothing committed is lost.
+- `aw archives` lists what was archived, and `aw archives --restore <name>` makes a branch from it
+  that `aw new "<purpose>" --branch restored/<name>` starts a lane on.
 
 ### Picking up where you left off
 
