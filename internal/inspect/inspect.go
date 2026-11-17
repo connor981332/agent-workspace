@@ -40,9 +40,13 @@ type Project struct {
 	CheckoutHook string   `json:"checkout_hook,omitempty"` // the repository's own post-checkout hook
 	LocalFiles   []string `json:"undeclared_local_files,omitempty"`
 	// LocalFilesTotal counts them all, when LocalFiles holds only the first maxLocalFiles.
-	LocalFilesTotal int      `json:"undeclared_local_files_total,omitempty"`
-	MissingTools    []string `json:"missing_tools,omitempty"`
-	Missing         []string `json:"missing_declared_files,omitempty"`
+	LocalFilesTotal int `json:"undeclared_local_files_total,omitempty"`
+	// LocalGroups are all of them, with repeats collapsed into globs, and SuggestGenerated what
+	// generated could say for the ones that look like test output, logs or build state.
+	LocalGroups      []FileGroup `json:"undeclared_local_groups,omitempty"`
+	SuggestGenerated []string    `json:"suggested_generated,omitempty"`
+	MissingTools     []string    `json:"missing_tools,omitempty"`
+	Missing          []string    `json:"missing_declared_files,omitempty"`
 }
 
 // Finding is one thing a project must change to work well in lanes, with its fix.
@@ -173,6 +177,9 @@ var notLocalConfig = []string{".next", ".cache", ".gradle", ".idea", ".vscode", 
 
 const maxLocalFiles = 50
 
+// maxGroupsShown is how many groups a line names before it counts the rest.
+const maxGroupsShown = 15
+
 // Preflight adds what lanes will run into, before anything is created: checkout hooks, gitignored
 // files a fresh worktree would lack, and tools that are not installed.
 func Preflight(ctx context.Context, owner string, c *config.Config, projects []*Project) {
@@ -188,7 +195,13 @@ func Preflight(ctx context.Context, owner string, c *config.Config, projects []*
 				p.Missing = append(p.Missing, f)
 			}
 		}
-		p.LocalFiles, p.LocalFilesTotal = ignoredLocal(ctx, dir, declared, pr.Generated)
+		all := ignoredLocal(ctx, dir, declared, pr.Generated)
+		p.LocalFiles = all[:min(len(all), maxLocalFiles)]
+		if len(all) > maxLocalFiles {
+			p.LocalFilesTotal = len(all)
+		}
+		p.LocalGroups = groupFiles(all)
+		p.SuggestGenerated = suggestGenerated(p.LocalGroups)
 		tools := slices.Clone(stackToolsOf(p.Stacks))
 		hooks := []string{pr.Install}
 		for _, h := range []*config.Hook{pr.Lifecycle.Prepare, pr.Lifecycle.Setup, pr.Lifecycle.Reset} {
@@ -217,16 +230,14 @@ func stackToolsOf(stacks []string) []string {
 }
 
 // ignoredLocal lists the gitignored files in the owner checkout that a new worktree would not have
-// and that nothing declares, up to maxLocalFiles of them, and counts them all when there are more.
-// Build output and dependency directories are left out, and so is anything generated, local_files
-// or secrets cover, matched as aw sweep matches them.
-func ignoredLocal(ctx context.Context, dir string, declared, generated []string) ([]string, int) {
+// and that nothing declares. Build output and dependency directories are left out, and so is
+// anything generated, local_files or secrets cover, matched as aw sweep matches them.
+func ignoredLocal(ctx context.Context, dir string, declared, generated []string) []string {
 	listed, err := run.In(dir).Run(ctx, "ls-files", "--others", "--ignored", "--exclude-standard", "--directory", "--no-empty-directory")
 	if err != nil {
-		return nil, 0
+		return nil
 	}
 	var out []string
-	total := 0
 	for _, e := range strings.Split(strings.TrimRight(listed, "\n"), "\n") {
 		name := path.Base(strings.TrimSuffix(e, "/"))
 		isDir := strings.HasSuffix(e, "/")
@@ -238,14 +249,9 @@ func ignoredLocal(ctx context.Context, dir string, declared, generated []string)
 		case slices.ContainsFunc(declared, func(d string) bool { return d == e || strings.HasPrefix(d, e) }):
 			continue
 		}
-		if total++; len(out) < maxLocalFiles {
-			out = append(out, e)
-		}
+		out = append(out, e)
 	}
-	if total <= len(out) {
-		total = 0
-	}
-	return out, total
+	return out
 }
 
 // DropAccepted removes the findings in files a person has reviewed, and says how many it removed.
@@ -271,12 +277,20 @@ func (p *Project) PreflightLines() []string {
 	if p.CheckoutHook != "" {
 		out = append(out, "has a post-checkout hook, which will run as a retryable setup step of each lane (post_checkout = \"skip\" turns it off): "+p.CheckoutHook)
 	}
-	if len(p.LocalFiles) > 0 {
-		more := ""
-		if p.LocalFilesTotal > len(p.LocalFiles) {
-			more = fmt.Sprintf(", and %d more", p.LocalFilesTotal-len(p.LocalFiles))
+	if len(p.LocalGroups) > 0 {
+		shown := p.LocalGroups[:min(len(p.LocalGroups), maxGroupsShown)]
+		parts := make([]string, len(shown))
+		for i, g := range shown {
+			parts[i] = g.describe()
 		}
-		out = append(out, "gitignored files a new lane would not have: "+strings.Join(p.LocalFiles, ", ")+more+" → declare the ones it needs in local_files, or in secrets if an agent must not read them, and what builds or tests make in generated")
+		more := ""
+		if n := len(p.LocalGroups) - len(shown); n > 0 {
+			more = fmt.Sprintf(", and %d more (aw inspect --json lists them)", n)
+		}
+		out = append(out, "gitignored files a new lane would not have: "+strings.Join(parts, ", ")+more+" → declare the ones it needs in local_files, or in secrets if an agent must not read them, and what builds or tests make in generated")
+	}
+	if len(p.SuggestGenerated) > 0 {
+		out = append(out, fmt.Sprintf("these look like test output, logs or build state; generated = [%s] would stop them keeping lanes (a suggestion: nothing is changed)", quoteList(p.SuggestGenerated)))
 	}
 	if len(p.Missing) > 0 {
 		out = append(out, "declared but not in the owner checkout: "+strings.Join(p.Missing, ", ")+" → get them from your team")
@@ -387,4 +401,12 @@ func scanFile(p *Project, path, file string, env map[string]bool, ports map[int]
 			add(n, "secret-logged", "this looks like it prints a secret", "do not log it; tools that need a secret read it themselves")
 		}
 	}
+}
+
+func quoteList(items []string) string {
+	q := make([]string, len(items))
+	for i, s := range items {
+		q[i] = fmt.Sprintf("%q", s)
+	}
+	return strings.Join(q, ", ")
 }

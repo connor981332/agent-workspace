@@ -12,7 +12,7 @@ exec sh $WORK/files.sh
 exec aw inspect --json
 stdout '"undeclared_local_files_total": 62'
 exec aw inspect
-stdout '! gitignored files a new lane would not have: notes-01.md, .*notes-50.md, and 12 more'
+stdout '! gitignored files a new lane would not have: \*\.md \(62\) →'
 ! stdout 'rspec.xml'
 ! stdout '\.rspec_status'
 

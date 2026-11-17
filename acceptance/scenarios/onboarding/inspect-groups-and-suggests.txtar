@@ -1,0 +1,27 @@
+# aw inspect shows files that repeat as the glob that covers them, with a count and what they look
+# like, and suggests generated globs for what looks like test output, logs or build state. It only
+# suggests: workspace.toml is not changed.
+# req: R67 R85
+# source: dogfood of 0.3.0 (plans/dogfood-0.3.md 2.9)
+# milestone: M12
+
+workspace shop --init
+owner-may-change
+exec sh $WORK/files.sh
+exec aw inspect
+stdout '! gitignored files a new lane would not have: \*\*/\.rspec_status \(4, test output\), \*\*/rspec\.xml \(4, test output\), .*\.env\.bak \(editor backup\)'
+stdout 'generated = \["\*\*/\.rspec_status", "\*\*/rspec\.xml", "\*\.log"\] would stop them keeping lanes \(a suggestion: nothing is changed\)'
+exec aw inspect --json
+stdout '"pattern": "\*\*/rspec\.xml"'
+stdout '"suggested_generated"'
+! grep 'generated' workspace.toml
+
+-- files.sh --
+printf 'rspec.xml\n.rspec_status\n*.log\n*.bak\n' >> web/.gitignore
+for g in a b c d; do mkdir -p "web/gems/$g" && echo "# $g" > "web/gems/$g/lib.rb"; done
+mkdir -p web/log && : > web/log/.keep
+git -C web add -A
+git -C web commit -qm 'gems and ignores'
+for g in a b c d; do : > "web/gems/$g/rspec.xml" && : > "web/gems/$g/.rspec_status"; done
+: > web/log/development.log
+: > web/.env.bak
