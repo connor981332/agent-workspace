@@ -341,9 +341,13 @@ or its number. aw recap shows each lane in full. It writes nothing.`,
 				fmt.Fprintln(out, `No lanes. aw new "<purpose>" starts one with a harness, and aw attach "<purpose>" claims one for this session.`)
 				return nil
 			}
+			// One row a lane, cut to the terminal's width: the purpose gives way, and the lane's
+			// root is its number under .worktrees (aw lanes --json has the full path).
+			table := [][]string{{"LANE", "NAME", "STATE", "PURPOSE"}}
 			for _, r := range rows {
-				fmt.Fprintf(out, "%s %-24s %-12s %s\n   %s\n", r.Dir, ui.Clean(r.Name), r.State, quoted(r.Purpose), ui.Clean(r.Root))
+				table = append(table, []string{r.Dir, r.Name, r.State, quoted(r.Purpose)})
 			}
+			ui.NewOut(out).Table(table, 3)
 			// What to do next is for the human in the owner checkout: an agent does not start
 			// sessions, and in a lane the work is already here.
 			if ids, _ := issuedIdentities(); len(ids) == 0 && m.CallerLane() == 0 && m.Store != nil {
@@ -503,5 +507,26 @@ func continueHint(out io.Writer, m *lanes.Manager, all []state.Lane) error {
 		fmt.Fprintf(out, "   aw resume <lane>   reopen its last session where it stopped (%s)\n", strings.Join(resumable, ", "))
 	}
 	fmt.Fprintln(out, "   aw open <lane>     start a fresh session that begins with the lane's latest handoff")
+	// And how to clear lanes nobody works in, which is what frees room for new ones.
+	var parked, ready []string
+	for _, l := range all {
+		switch {
+		case running[l.Number]:
+		case l.State == state.LaneParked:
+			parked = append(parked, ui.Clean(l.Name))
+		case l.State == state.LaneReady:
+			ready = append(ready, ui.Clean(l.Name))
+		}
+	}
+	fmt.Fprintln(out, "\nClear lanes:")
+	fmt.Fprintln(out, "   aw sweep           see which lanes are proven merged; aw sweep --apply recycles them")
+	if len(ready) > 0 {
+		fmt.Fprintf(out, "   review and merge   the lanes ready for review (%s), so that sweep can recycle them\n", strings.Join(ready, ", "))
+	}
+	if len(parked) > 0 {
+		fmt.Fprintf(out, "   aw discard <lane>  abandon parked work you no longer need (%s); its branches are archived\n", strings.Join(parked, ", "))
+	} else {
+		fmt.Fprintln(out, "   aw discard <lane>  abandon a lane's work; its branches are archived first")
+	}
 	return nil
 }

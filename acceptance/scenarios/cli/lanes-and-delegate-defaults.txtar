@@ -10,8 +10,14 @@ exec aw lanes
 stdout 'No lanes'
 exec aw attach 'fix checkout tax rounding'
 exec aw lanes
-stdout '^01 checkout-tax'
+stdout '^LANE  NAME +STATE +PURPOSE$'
+stdout '^01    checkout-tax  working  "fix checkout tax rounding"$'
 stdout 'fix checkout tax rounding'
+# On a narrow terminal the purpose gives way: no row wraps (plans/dogfood-0.3.md 3.3).
+env COLUMNS=40
+exec aw lanes
+stdout '^01    checkout-tax  working  "fix check…$'
+env COLUMNS=
 exec aw lanes --json
 json stdout .lanes[0].name checkout-tax
 exec aw --help
