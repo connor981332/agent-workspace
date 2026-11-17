@@ -154,7 +154,7 @@ func Check(ctx context.Context, path, baseRef string, o Options) Repo {
 		r.Proof = Patch
 		return r
 	}
-	r.Reason = fmt.Sprintf("not proven merged: %d commit%s not in %s", unmerged, plural(unmerged), baseRef)
+	r.Reason = fmt.Sprintf("not proven merged: %d commit%s not in %s: its head is not there, and no commit there has the same patch", unmerged, plural(unmerged), baseRef)
 	return r
 }
 

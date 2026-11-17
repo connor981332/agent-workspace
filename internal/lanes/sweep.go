@@ -51,6 +51,9 @@ type SweepReport struct {
 	Applied bool                 `json:"applied"`
 	Lanes   []*Decision          `json:"lanes"`
 	Open    []state.JournalEntry `json:"unfinished"` // cleanups that failed earlier
+	// UnrecognizedForges are the origins' hosts that forge = "auto" did not recognize, so that a
+	// squash-merged lane there could not be proven merged.
+	UnrecognizedForges []string `json:"unrecognized_forges,omitempty"`
 }
 
 // SweepOptions configure a sweep.
@@ -58,7 +61,9 @@ type SweepOptions struct {
 	Apply  bool
 	Caller int // the lane the command runs in, which is never swept
 	Retry  int // a journal entry to retry
-	Now    time.Time
+	// Only, when set, are the lanes to report and act on; the rest are left alone.
+	Only []int
+	Now  time.Time
 }
 
 // Sweep decides, for every lane, whether it is kept, recycled or destroyed. With Apply, it carries
@@ -95,7 +100,7 @@ func (m *Manager) Sweep(ctx context.Context, o SweepOptions) (*SweepReport, erro
 		return nil, fmt.Errorf("no unfinished cleanup has the number %d → aw sweep lists the unfinished ones", o.Retry)
 	}
 
-	m.forges, m.forgeDeadline = map[string]*forge.Client{}, o.Now.Add(30*time.Second)
+	m.forges, m.forgeDeadline, m.unrecognized = map[string]*forge.Client{}, o.Now.Add(30*time.Second), nil
 	pooled := 0
 	for _, l := range lanes {
 		d := &Decision{Number: l.Number, Dir: Dir(l.Number, m.Cfg.Lanes.Max), Name: l.Name, State: l.State, lane: l}
@@ -140,6 +145,11 @@ func (m *Manager) Sweep(ctx context.Context, o SweepOptions) (*SweepReport, erro
 		}
 	}
 
+	// The pool is worked out from every lane, then the report narrowed to the lanes asked for.
+	if len(o.Only) > 0 {
+		rep.Lanes = slices.DeleteFunc(rep.Lanes, func(d *Decision) bool { return !slices.Contains(o.Only, d.Number) })
+	}
+	rep.UnrecognizedForges = m.unrecognized
 	if !o.Apply {
 		return rep, nil
 	}
@@ -289,12 +299,15 @@ func (m *Manager) forgeProof(ctx context.Context, owner string, r state.LaneRepo
 	if rest, ok := strings.CutPrefix(r.BaseRef, "refs/remotes/"); ok {
 		remote, target, _ = strings.Cut(rest, "/")
 	}
+	// Whatever stops the forge being asked is said, so that "not proven" names every check tried.
 	raw, err := run.In(owner).Line(ctx, "config", "--get", "remote."+remote+".url")
 	if err != nil {
+		ev.Reason += fmt.Sprintf("; no forge was asked, since %s has no URL", remote)
 		return
 	}
 	host, project, ok := forge.ParseRemote(raw)
 	if !ok {
+		ev.Reason += fmt.Sprintf("; no forge was asked, since %s is not on one", remote)
 		return
 	}
 	c, seen := m.forges[host]
@@ -303,6 +316,14 @@ func (m *Manager) forgeProof(ctx context.Context, owner string, r state.LaneRepo
 		m.forges[host] = c
 	}
 	if c == nil {
+		if m.Cfg.Workspace.Forge == "none" {
+			ev.Reason += `; no forge was asked (forge = "none")`
+			return
+		}
+		ev.Reason += fmt.Sprintf(`; no forge was asked, since forge = "auto" does not recognize %s`, host)
+		if !slices.Contains(m.unrecognized, host) {
+			m.unrecognized = append(m.unrecognized, host)
+		}
 		return
 	}
 	ch := c.Find(ctx, forge.Identity{Host: host, Project: project, Target: target}, r.RemoteBranch(), ev.Head)
