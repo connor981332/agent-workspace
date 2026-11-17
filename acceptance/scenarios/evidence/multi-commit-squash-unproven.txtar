@@ -1,7 +1,10 @@
-# Several commits squashed into one are not proven merged by local evidence: no single patch
-# matches. (A forge's exact-head proof can prove them; see evidence/github-states.)
+# Several commits squashed into one match no single patch, but the base then holds every change the
+# lane made, so merging the lane in would change nothing: that is proof by content. A squash that was
+# reverted afterwards proves nothing, and the lane says every check that failed; a history with merge
+# commits is proven by content alone.
 # req: R25
 # source: C1 test_lanes.py::test_patch_and_squash_proofs
+# changed: a squash is proven by content (plans/dogfood-0.3.md 4.1); before, only a forge could.
 # milestone: M2
 
 workspace solo --single --init
@@ -9,12 +12,18 @@ exec aw attach 'add feature flag'
 lane-commit 01 a.txt 'first'
 lane-commit 01 b.txt 'second'
 git-squash . aw/feature-flag
+exec aw sweep --json
+json stdout .lanes[0].action recycle
+json stdout .lanes[0].repos[0].proof content
+
+git-revert .
 exec aw sweep --apply --json
 json stdout .lanes[0].action keep
-stdout 'not proven merged: 2 commits not in'
+stdout 'not proven merged: 2 commits not in .*: its head is not there, no commit there has the same patch, and merging it would change 2 files'
 exists .worktrees/01/a.txt
 
-# A history with merge commits cannot be proven by patches either.
+# A history with merge commits cannot be proven by patches, nor here by content, since the revert
+# undid the lane's changes.
 exec git -C .worktrees/01 merge -q --no-ff -m 'merge main' main
 exec aw sweep --json
-stdout 'its history has merge commits, which patch equivalence cannot prove'
+stdout 'its head is not in .*, its history has merge commits, which patch equivalence cannot prove, and merging it would'

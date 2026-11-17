@@ -1,11 +1,13 @@
 // Package evidence decides whether a lane's work is proven merged (lifecycle.md, "Merge proof"): a
 // repository's head is an ancestor of its base, or its commits are patch-equivalent to the base's
-// in a history without merges, or a forge reports exactly one merged change at exactly this head.
-// Anything else, including anything that cannot be read, is not proof.
+// in a history without merges, or merging it into the base would change nothing, or a forge
+// reports exactly one merged change at exactly this head. Anything else, including anything that
+// cannot be read, is not proof.
 package evidence
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/connor981332/agent-workspace/internal/workspace"
 	"path"
@@ -19,6 +21,7 @@ import (
 const (
 	Ancestor = "ancestor"         // the head is in the base
 	Patch    = "patch-equivalent" // every commit's patch is in the base
+	Content  = "content"          // merging the head into the base would change nothing
 	Forge    = "forge"            // the forge reports this exact head merged
 )
 
@@ -137,25 +140,64 @@ func Check(ctx context.Context, path, baseRef string, o Options) Repo {
 		return unknown("listing the lane's commits failed: %v", err)
 	}
 	if merges != "" {
-		r.Reason = "not in " + baseRef + ", and its history has merge commits, which patch equivalence cannot prove"
-		return r
-	}
-	cherry, err := g.Run(ctx, "cherry", r.Base, r.Head)
-	if err != nil {
-		return unknown("comparing patches failed: %v", err)
-	}
-	var unmerged int
-	for _, line := range strings.Split(strings.TrimSpace(cherry), "\n") {
-		if strings.HasPrefix(line, "+") {
-			unmerged++
+		r.Reason = "not proven merged: its head is not in " + baseRef + ", its history has merge commits, which patch equivalence cannot prove"
+	} else {
+		cherry, err := g.Run(ctx, "cherry", r.Base, r.Head)
+		if err != nil {
+			return unknown("comparing patches failed: %v", err)
 		}
+		var unmerged int
+		for _, line := range strings.Split(strings.TrimSpace(cherry), "\n") {
+			if strings.HasPrefix(line, "+") {
+				unmerged++
+			}
+		}
+		if unmerged == 0 {
+			r.Proof = Patch
+			return r
+		}
+		r.Reason = fmt.Sprintf("not proven merged: %d commit%s not in %s: its head is not there, no commit there has the same patch", unmerged, plural(unmerged), baseRef)
 	}
-	if unmerged == 0 {
-		r.Proof = Patch
-		return r
+	// A squash or rebase merge leaves neither the commits nor their patches in the base, but the
+	// base then holds every change the lane made: merging the lane in would change nothing. This
+	// proves that nothing would be lost, not who merged it, which is what recycling needs. A
+	// conflict, or any difference, leaves the lane unproven.
+	switch ok, why := sameAsBase(ctx, g, r.Base, r.Head); {
+	case ok:
+		r.Proof, r.Reason = Content, ""
+	case why != "":
+		r.Reason += ", and " + why
 	}
-	r.Reason = fmt.Sprintf("not proven merged: %d commit%s not in %s: its head is not there, and no commit there has the same patch", unmerged, plural(unmerged), baseRef)
 	return r
+}
+
+// sameAsBase reports whether merging head into base would leave base's tree unchanged, and if not,
+// why, in words for a reason.
+func sameAsBase(ctx context.Context, g run.Git, base, head string) (bool, string) {
+	out, err := g.Run(ctx, "merge-tree", "--write-tree", "--no-messages", base, head)
+	merged, _, _ := strings.Cut(strings.TrimSpace(out), "\n")
+	var ge *run.Error
+	switch {
+	case errors.As(err, &ge) && ge.ExitCode() == 1:
+		return false, "merging it would conflict with the base"
+	case errors.As(err, &ge) && (strings.Contains(ge.Stderr, "usage:") || strings.Contains(ge.Stderr, "unknown option")):
+		return false, "this Git cannot compare content (Git 2.38 or later can)"
+	case err != nil:
+		return false, "comparing its content with the base failed"
+	}
+	tree, err := g.Line(ctx, "rev-parse", "--verify", base+"^{tree}")
+	if err != nil {
+		return false, ""
+	}
+	if merged == tree {
+		return true, ""
+	}
+	changed, err := g.Run(ctx, "diff-tree", "-r", "--name-only", tree, merged)
+	if err != nil {
+		return false, "merging it would change the base"
+	}
+	n := len(strings.Fields(changed))
+	return false, fmt.Sprintf("merging it would change %d file%s", n, plural(n))
 }
 
 // declaresInside reports whether a declared path could lie inside dir ("dir/"): one under it, or a

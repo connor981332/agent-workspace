@@ -124,6 +124,7 @@ func Commands() map[string]func(ts *testscript.TestScript, neg bool, args []stri
 		"lane-commit":      cmdLaneCommit,
 		"git-merge":        mergeCmd("merge"),
 		"git-squash":       mergeCmd("squash"),
+		"git-revert":       cmdGitRevert,
 		"git-cherry-pick":  mergeCmd("cherry-pick"),
 		"forge-reply":      cmdForgeReply,
 		"session":          cmdSession,
