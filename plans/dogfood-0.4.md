@@ -9,11 +9,11 @@ result into work.
 
 ## Status
 
-**State:** PARTIALLY IMPLEMENTED
+**State:** FULLY IMPLEMENTED
 
 **Updated:** 2026-11-17
 
-**Branches / MRs:** #107 (this plan and Phase 1), #108 (Phase 2).
+**Branches / MRs:** #107 (this plan and Phase 1), #108 (Phase 2), #109 (Phase 3).
 
 **Done:** triage, decisions and the Claude Code trust experiment (below). Phase 1, each item with a
 scenario or table test that fails on master first. Differences from the plan as written:
@@ -50,9 +50,34 @@ Phase 2, except the manual check 2.5. Differences from the plan as written:
   lane, whether or not it exists yet.
 - 2.5 is pending: the owner runs `aw new` with the dev binary in the work workspace on the Mac.
 
+Phase 3. Differences from the plan as written:
+- 3.1: the design note is "Lazy worktrees" in [docs/spec/sessions.md](../docs/spec/sessions.md),
+  with R21 amended in requirements.md. It was written and applied in one go rather than reviewed
+  first, under the owner's go-ahead to implement the whole plan.
+- 3.2 and decision 6: `needs` already means a project's resources, so dependencies use the
+  existing `depends_on` ("projects this one consumes", which change sets already merge first)
+  instead of a new key. Its names are not validated, as before; `[lanes] eager` is.
+- 3.3: a claim also checks out a project that has the branch `--branch` names, so that a lane
+  started on an existing branch has it wherever it exists (and `aw move-to-lane` keeps working).
+- 3.4: `aw attach --projects` from a session that already has a lane checks them out there.
+  `aw use --lane <lane>` is the human's, as `aw setup <lane>` is.
+- 3.6: a recycled lane keeps its worktrees, clean at the base, rather than going back to the pool
+  with only the eager ones: removing them costs time at every recycle, and claiming the warm lane
+  puts each one on the new branch, which is cheap. A project new to a warm lane runs setup rather
+  than reset, since its worktree is new.
+- 3.8: aw rehearse already runs `aw run <project> env` in both lanes, which now checks each project
+  out on first use, so the lazy path is rehearsed without a separate step.
+- 3.10: the changelog entry is marked **Breaking**, which is how `aw upgrade` calls it out.
+- The acceptance suite's `workspace` command gained `--eager`, which lists every project in
+  `[lanes] eager`, for the 71 scenarios whose lanes need every project; the bench fixture lists its
+  four projects too. New scenarios: `lanes/lazy-worktrees` and `lanes/lazy-worktrees-pool`.
+
+Pending, for the owner: 2.5, and using `aw new`, `aw use` and lazy checkout with the dev binary in
+the work workspace on the Mac before the release is relied on there.
+
 **In progress:** nothing.
 
-**Next step:** Phase 3, starting with its design note (3.1).
+**Next step:** the owner's manual checks above, then the release.
 
 ## Already done, or not acted on
 

@@ -14,4 +14,4 @@ ships its own plan mechanism.
 | [agent-feedback.md](agent-feedback.md) | FULLY IMPLEMENTED | 2026-11-13 | Response to the 0.1.5 agent ergonomics feedback, change requests and owner feature requests, in five phases. |
 | [workspace-audit.md](workspace-audit.md) | FULLY IMPLEMENTED | 2026-11-13 | `aw audit`: an agent discusses an existing workspace configuration against the repositories and aw's newer capabilities, and applies agreed changes through review. |
 | [dogfood-0.3.md](dogfood-0.3.md) | FULLY IMPLEMENTED | 2026-11-17 | Response to the 0.3.0 dogfood feedback: bugs, output, content merge proof, session identity and derived lane state, guard tiers, prerequisites. |
-| [dogfood-0.4.md](dogfood-0.4.md) | PARTIALLY IMPLEMENTED | 2026-11-17 | Response to the 0.4.0 dogfood feedback: guard and sweep bugs, scans that skip secrets, no trust prompts on `aw new`, lazy worktrees. |
+| [dogfood-0.4.md](dogfood-0.4.md) | FULLY IMPLEMENTED | 2026-11-17 | Response to the 0.4.0 dogfood feedback: guard and sweep bugs, scans that skip secrets, no trust prompts on `aw new`, lazy worktrees. |
