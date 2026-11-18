@@ -1,0 +1,31 @@
+# aw new starts Claude Code without --add-dir, which makes Claude Code ask to trust each project's
+# repository. The owner checkout's local settings, which Claude Code reads in a worktree, list each
+# project's .worktrees directory instead: file access only, for every lane, including one made
+# after a session started. A workspace set up before this gets the entries at its next claim.
+# req: R21 R59
+# source: dogfood of 0.4.0 (plans/dogfood-0.4.md Phase 2)
+# milestone: M12
+
+stubs claude
+owner-may-change
+workspace shop --init
+exec aw setup
+exec aw new 'fix checkout tax'
+exec cat $STUB_LOG
+! stdout 'add-dir'
+grep '"additionalDirectories"' .claude/settings.local.json
+grep '/web/\.worktrees"' .claude/settings.local.json
+grep '/api/\.worktrees"' .claude/settings.local.json
+exists web/.worktrees api/.worktrees
+
+# A file an older aw wrote, without them, gets them at the next claim.
+exec sh -c 'printf "{\"permissions\": {\"allow\": [\"Bash(make)\"]}}\n" > .claude/settings.local.json'
+exec aw attach 'second lane'
+grep '/web/\.worktrees"' .claude/settings.local.json
+grep 'Bash\(make\)' .claude/settings.local.json
+
+# aw doctor reports a missing entry, with the fix.
+exec sh -c 'printf "{}\n" > .claude/settings.local.json'
+exec aw doctor
+stdout 'does not list .*so Claude Code in a lane asks about each file'
+stdout 'run bin/aw setup'

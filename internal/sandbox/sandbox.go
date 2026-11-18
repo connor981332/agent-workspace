@@ -36,8 +36,19 @@ type Result struct {
 // Install writes both harnesses' writable paths in root. Claude Code's file is merged, keeping
 // everything else in it. Codex's is aw's own, and one that a person wrote is left alone.
 func Install(root string, writable []string) ([]Result, error) {
+	return InstallWithDirs(root, writable, nil)
+}
+
+// InstallWithDirs is Install, and also lists dirs as Claude Code's additional directories, which
+// it may read and write without asking. The owner checkout lists each project's .worktrees
+// directory: Claude Code reads a worktree session's local settings from the main checkout, so this
+// one entry covers every lane, including a worktree made after the session started (settings
+// reload while a session runs). Unlike --add-dir, a directory listed in settings grants file access
+// only and loads none of its configuration, so Claude Code does not ask to trust its repository
+// (plans/dogfood-0.4.md, "The trust experiment").
+func InstallWithDirs(root string, writable, dirs []string) ([]Result, error) {
 	writable = slices.Compact(slices.Sorted(slices.Values(writable)))
-	c, err := installClaude(root, writable)
+	c, err := installClaude(root, slices.Concat(writable, dirs))
 	if err != nil {
 		return nil, err
 	}
@@ -163,6 +174,39 @@ func Ours(root string) []string {
 		entries, err := os.ReadDir(filepath.Join(root, dir))
 		if err == nil && len(entries) == 1 && entries[0].Name() == filepath.Base(f) {
 			out = append(out, dir+"/")
+		}
+	}
+	return out
+}
+
+// AddClaudeDirs lists dirs as additional directories in Claude Code's settings in root, if that file
+// exists: aw setup creates it, and a claim only fills in what an older aw left out, never creating
+// a file in the owner checkout on its own.
+func AddClaudeDirs(root string, dirs []string) error {
+	if len(MissingDirs(root, dirs)) == 0 {
+		return nil
+	}
+	if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(ClaudeFile))); err != nil {
+		return nil
+	}
+	_, err := installClaude(root, dirs)
+	return err
+}
+
+// MissingDirs reports the directories Claude Code's settings in root do not list as additional
+// directories, for aw doctor.
+func MissingDirs(root string, dirs []string) []string {
+	data, _ := os.ReadFile(filepath.Join(root, filepath.FromSlash(ClaudeFile)))
+	var settings struct {
+		Permissions struct {
+			AdditionalDirectories []string `json:"additionalDirectories"`
+		} `json:"permissions"`
+	}
+	json.Unmarshal(data, &settings) //nolint:errcheck // an unreadable file lists nothing
+	var out []string
+	for _, d := range dirs {
+		if !slices.Contains(settings.Permissions.AdditionalDirectories, d) {
+			out = append(out, d)
 		}
 	}
 	return out

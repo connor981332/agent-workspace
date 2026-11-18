@@ -665,8 +665,41 @@ func (m *Manager) build(ctx context.Context, lane state.Lane, plans []repoPlan, 
 	if _, err := sandbox.Install(root, m.SandboxRoots(filepath.Base(root))); err != nil {
 		return made, err
 	}
+	// The owner checkout's settings are the ones Claude Code reads in a lane: a workspace set up by
+	// an older aw gets the worktree directories here, rather than a prompt for every file. The file
+	// is rewritten only when an entry is missing.
+	if err := sandbox.AddClaudeDirs(m.WS.Owner, m.WorktreeDirs()); err != nil {
+		return made, err
+	}
 	// Set or cleared every time: a warm lane may have been an onboarding lane before.
 	return made, sandbox.AllowRehearse(root, m.Onboarding)
+}
+
+// WorktreeDirs are the directories that hold the projects' lane worktrees, one per project with
+// lanes, created if need be. The owner checkout's Claude Code settings list them, so that a session
+// in any lane reaches its projects without a prompt (sandbox.InstallWithDirs).
+func (m *Manager) WorktreeDirs() []string {
+	var out []string
+	for _, name := range sortedKeys(m.Cfg.Projects) {
+		p := m.Cfg.Projects[name]
+		if p.Directory == "." || p.Lanes == "shared" {
+			continue
+		}
+		dir := filepath.Join(m.WS.Owner, p.Directory, ".worktrees")
+		if _, err := os.Stat(filepath.Join(m.WS.Owner, p.Directory)); err != nil {
+			continue // not cloned yet
+		}
+		if err := os.MkdirAll(dir, 0o755); err == nil {
+			out = append(out, dir)
+		}
+	}
+	return out
+}
+
+// InstallOwnerSandbox writes the owner checkout's harness settings: the Git directories, and for
+// Claude Code the projects' worktree directories.
+func (m *Manager) InstallOwnerSandbox() ([]sandbox.Result, error) {
+	return sandbox.InstallWithDirs(m.WS.Owner, m.SandboxRoots(""), m.WorktreeDirs())
 }
 
 // SandboxRoots are the paths a harness's sandbox must allow, beyond its working directory: every

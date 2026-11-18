@@ -173,7 +173,6 @@ func startLaneSession(cmd *cobra.Command, purpose, harness, branch, role string,
 		fmt.Fprintf(cmd.ErrOrStderr(), "aw: a shell in lane %s; exit it when you are done. The lane stays yours: bin/aw finish hands it off, and bin/aw resume %s --shell comes back.\n", c.Lane.Name, c.Lane.Name)
 	} else {
 		extra = append(launch.SandboxArgs(harness, m.SandboxRoots(c.Dir)), extra...)
-		extra = append(extra, launch.DirArgs(harness, m.SandboxRoots(c.Dir))...)
 	}
 	if useMux {
 		return openInMux(cmd, mx, c.Lane.Name, c.Root, harness, id, append([]string{argv0}, extra...))

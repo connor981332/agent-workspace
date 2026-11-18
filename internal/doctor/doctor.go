@@ -590,6 +590,36 @@ func checkSandboxes(owner string, c *config.Config, add func(Check)) {
 		return
 	}
 	add(Check{Name: "harness sandboxes", Status: OK, Message: "Codex and Claude Code may write the lane, the state and the Git directories"})
+	checkClaudeDirs(owner, c, add)
+}
+
+// checkClaudeDirs checks that Claude Code reaches every lane's project worktrees without asking:
+// the owner checkout's untracked local settings list each project's .worktrees directory.
+func checkClaudeDirs(owner string, c *config.Config, add func(Check)) {
+	var dirs []string
+	for _, name := range slices.Sorted(maps.Keys(c.Projects)) {
+		p := c.Projects[name]
+		if p.Directory == "." || p.Lanes == "shared" {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(owner, p.Directory)); err == nil {
+			dirs = append(dirs, filepath.Join(owner, p.Directory, ".worktrees"))
+		}
+	}
+	if len(dirs) == 0 {
+		return
+	}
+	if missing := sandbox.MissingDirs(owner, dirs); len(missing) > 0 {
+		add(Check{Name: "Claude Code directories", Status: Warn, Message: fmt.Sprintf("%s does not list %s, so Claude Code in a lane asks about each file in those projects", sandbox.ClaudeFile, strings.Join(missing, ", ")),
+			Fix: "run bin/aw setup, which adds them"})
+		return
+	}
+	if _, err := run.In(owner).Run(context.Background(), "ls-files", "--error-unmatch", sandbox.ClaudeFile); err == nil {
+		add(Check{Name: "Claude Code directories", Status: Warn, Message: sandbox.ClaudeFile + " is tracked by Git, so Claude Code holds its directories until the folder is trusted, and asks about each file in a lane's projects until then",
+			Fix: "git rm --cached " + sandbox.ClaudeFile + ", and keep it out of Git (aw setup excludes it)"})
+		return
+	}
+	add(Check{Name: "Claude Code directories", Status: OK, Message: "Claude Code reaches every lane's project worktrees without asking"})
 }
 
 func checkInstructions(owner string, add func(Check)) {

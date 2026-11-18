@@ -13,7 +13,7 @@ result into work.
 
 **Updated:** 2026-11-17
 
-**Branches / MRs:** `feat/dogfood-0.4-phase1` (this plan and Phase 1).
+**Branches / MRs:** #107 (this plan and Phase 1), `feat/dogfood-0.4-phase2` (Phase 2).
 
 **Done:** triage, decisions and the Claude Code trust experiment (below). Phase 1, each item with a
 scenario or table test that fails on master first. Differences from the plan as written:
@@ -39,9 +39,20 @@ scenario or table test that fails on master first. Differences from the plan as 
   The audit's prompt, which carries 6 KB of the changelog, now puts breaking changes first, so that
   the longer changelog doesn't push one out.
 
+Phase 2, except the manual check 2.5. Differences from the plan as written:
+- 2.2: Claude Code reads a worktree session's local settings from the main checkout, so the entries
+  go in the owner checkout's file only, not Codex's. A claim also adds missing entries when that
+  file exists, so a workspace set up by an older aw needs no `aw setup` first; it never creates
+  the file. aw creates each project's `.worktrees` directory, so the entry names a real directory.
+- 2.3: the doctor check is "Claude Code directories". It warns, rather than failing, as the other
+  harness checks do.
+- 2.4: nothing to change: Codex's writable roots already name each project's worktree for the
+  lane, whether or not it exists yet.
+- 2.5 is pending: the owner runs `aw new` with the dev binary in the work workspace on the Mac.
+
 **In progress:** nothing.
 
-**Next step:** Phase 2.
+**Next step:** Phase 3, starting with its design note (3.1).
 
 ## Already done, or not acted on
 
