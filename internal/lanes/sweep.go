@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -44,6 +45,9 @@ type Decision struct {
 	Error  string           `json:"error,omitempty"`
 	lane   state.Lane       `json:"-"`
 	stored []state.LaneRepo `json:"-"`
+	// partial: an earlier removal that did not finish already took some of its worktrees, so it can
+	// only be removed, not recycled.
+	partial bool
 }
 
 // SweepReport is the result of aw sweep.
@@ -180,7 +184,9 @@ func (m *Manager) Sweep(ctx context.Context, o SweepOptions) (*SweepReport, erro
 		}
 	}
 	for _, d := range rep.Lanes {
-		if d.Action == ActionRecycle && pooled >= m.Cfg.Lanes.Pool {
+		if d.Action == ActionRecycle && d.partial {
+			d.Action, d.Reason = ActionDestroy, d.Reason+"; an earlier removal already took some of its worktrees, so its removal is finished"
+		} else if d.Action == ActionRecycle && pooled >= m.Cfg.Lanes.Pool {
 			d.Action, d.Reason = ActionDestroy, d.Reason+"; the pool is full ([lanes] pool), so it is removed"
 		} else if d.Action == ActionRecycle {
 			pooled++
@@ -299,7 +305,14 @@ func (m *Manager) decide(ctx context.Context, d *Decision, sessions []state.Sess
 			keep("%s's worktree is locked (git worktree lock), or its lock cannot be read", repoLabel(r))
 			return
 		}
-		ev := evidence.Check(ctx, r.Path, r.BaseRef, m.evidenceOptions(r))
+		var ev evidence.Repo
+		if _, err := os.Lstat(r.Path); errors.Is(err, fs.ErrNotExist) {
+			// Already removed by an earlier removal that did not finish: what is left is its branch.
+			ev = evidence.CheckRemoved(ctx, owner, r.Path, r.Branch, r.BaseRef)
+			d.partial = true
+		} else {
+			ev = evidence.Check(ctx, r.Path, r.BaseRef, m.evidenceOptions(r))
+		}
 		if held == "" && !ev.Unknown && ev.Clean && ev.Proof == "" {
 			m.forgeProof(ctx, owner, r, &ev)
 		}
