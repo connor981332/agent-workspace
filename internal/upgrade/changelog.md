@@ -2,6 +2,29 @@
 
 Newest first. A line starting with **Breaking:** is called out by `aw upgrade`.
 
+## 0.5.0
+
+- The guard no longer asks the human when a lane's agent reruns its own lane's setup with flags, such as `aw setup <lane> --project <name>` (which aw's own note suggests), `--project=<name>` or `--json`, or names the lane by its number (`1` for `01`). Every command aw tells an agent to run is now tested against the guard.
+- `aw sweep --apply` closes an unfinished cleanup whose lane no longer exists and has no worktree in any repository, instead of reporting it forever; `aw sweep --apply --retry <id>` on such an entry does the same. The report shows one line per unfinished cleanup, and `aw sweep --json` keeps the full detail.
+- `generated`, `local_files` and `accepted_findings` patterns follow `.gitignore`'s rules everywhere: `**` spans any number of directories wherever it appears (not only at the end), a pattern that matches a directory covers everything in it, and a leading `/` anchors a pattern without another slash to the project's root. `"**" = "…"` under `accepted_findings` now accepts every file in a project.
+- `aw rehearse`, `aw inspect` and `aw doctor --projects` no longer read a project's declared `secrets` and `local_files`, their backups (such as `.env.bak`) or its gitignored files, so their findings never come from a file aw keeps agents from reading.
+- A repository's own Git hook that fails in a lane is reported as that hook's failure, with its exit status passed on to Git, instead of "so this call is refused → run bin/aw doctor".
+- `aw rehearse` reports a resource as skipped, naming the port, when your own server holds one of its seats and the two lanes cannot both be served, instead of calling it a collision. "(a fixed port?)" appears only when the lane was not queued.
+
+## 0.4.0
+
+- **Breaking:** a session's identity is set when it starts and changes only through aw's commands, never through its working directory. `aw detach` returns a session to what it was before `aw attach`; `aw pair --session` always succeeds.
+- `aw finish` releases the lane and writes the handoff. A session that ends, or whose process dies, releases its lane too, and `aw` shows a lane that ended without a handoff. Lane states (in progress, ready for review, idle, recyclable) are derived rather than stored; parked stays stored.
+- **Breaking:** a lane sets up a project on first use (`aw run`, `aw serve`, a team command) rather than at claim time. `[lanes] setup = "eager"` keeps the old behaviour, and `aw setup <lane> --project <name>` sets up one project.
+- A claim that finds every lane in use first recycles the lanes nobody holds that are proven merged, as `aw sweep --apply` would.
+- `aw audit` and `aw onboard` run as pair sessions in the owner checkout by default; `--lane` starts one that works alone in a lane.
+- Guards are sorted into tiers. Force pushes, deleting branches, discarding work, `git config`, `git remote`, stopping processes, changing shared containers and reading secret files now ask the human in the harness (where the harness can ask) instead of refusing. Reads from the wrong directory go through with a note. Recovery commands (`aw doctor`, `git status`, `git switch`) are never refused, even with a broken configuration.
+- `[prerequisites.<name>]` with `check`, `fix` and `message`, listed by projects under `prerequisites`: checked once before a setup that needs it, cached briefly, and dependent setups wait for the human to run the fix. `aw doctor --prerequisites` runs them.
+- A fourth merge proof, by content: merging the lane's head into the base changes nothing (Git 2.38 or later). Every recycle not proven by ancestry archives the tip under `refs/aw/archive` first; `aw archives` lists the tips and `aw archives --restore <name>` restores one. `[lanes] archive_retention` (default 30 days) prunes them.
+- `aw sweep --apply <lane>…` aims at named lanes, and every "not proven merged" reason lists the checks it tried.
+- Output is structured on a terminal (live steps, colour, a summary of what needs you) and plain everywhere else, including agent sessions. Long step output goes to a log under `.git/aw/logs/`, whose path the error names.
+- Team hooks in a lane no longer inherit `GIT_DIR` and `GIT_WORK_TREE`, and a recycle never runs a repository's own post-checkout hook. A failed recycle records each repository it reset, and a retry continues from there.
+
 ## 0.3.0
 
 - `aw audit` starts an agent that talks through the workspace's configuration with you: what changed in the repositories, what this aw can do that the aw it was written for could not, and what `aw doctor` suggests. It changes nothing until you agree, and then only what you agreed, on a lane's branch for review. `aw onboard --review` now starts the same audit.

@@ -34,6 +34,13 @@ aw_run() {
 	case $aw_status in
 	0 | 2) exit $aw_status ;;
 	esac
+	# aw git-hook ends by running the repository's own hook in its place, and aw's own refusals
+	# exit 2, so any other status is that hook's, unless the binary could not run at all (126, 127).
+	# It is passed on, so that Git treats it as it would without aw.
+	if [ "${2:-}" = git-hook ] && [ "$aw_status" != 126 ] && [ "$aw_status" != 127 ]; then
+		echo "aw: this repository's own ${3:-} hook exited with status $aw_status; its output is above (aw refused nothing)" >&2
+		exit $aw_status
+	fi
 	echo "aw: $1 exited with status $aw_status, so this call is refused → run bin/aw doctor" >&2
 	exit 2
 }

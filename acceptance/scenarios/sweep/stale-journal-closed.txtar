@@ -1,0 +1,45 @@
+# An unfinished cleanup whose lane no longer exists, with no worktree left in any repository, has
+# nothing left to finish: sweep says so, --apply closes it (a --retry of it included), and the
+# report shows one line per entry, not the step's whole output.
+# req: R25 R31
+# source: dogfood of 0.4.0 (plans/dogfood-0.4.md 1.3)
+# milestone: M12
+
+workspace shop --init
+exec aw attach 'one'
+exec aw attach 'two'
+git-fail '^worktree remove .*/\.worktrees/02$'
+! exec aw sweep --apply --json
+json stdout .unfinished[0].id 2
+exec rm $WORK/.git-fail/git
+
+# Something outside aw removes lane 02 completely.
+exec rm -rf .worktrees/02 web/.worktrees/02 api/.worktrees/02
+exec git worktree prune
+exec git -C web worktree prune
+exec git -C api worktree prune
+exec awtest-sqlite .git/aw/state.db 'DELETE FROM lanes WHERE number = 2'
+
+exec aw sweep
+stdout 'Unfinished: destroy of lane 02 failed .*the lane no longer exists → aw sweep --apply closes it'
+! stdout 'retry 2'
+exec aw sweep --json
+json stdout .stale[0] 2
+
+exec aw sweep --apply --retry 2
+stdout 'Closed unfinished cleanup 2'
+exec aw sweep --json
+! json stdout .unfinished[0]
+! stdout 'Unfinished'
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 1
+
+[projects.web]
+[projects.api]

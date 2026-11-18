@@ -74,8 +74,11 @@ var (
 	secretPrinted = regexp.MustCompile(`(?i)(console\.log|puts|print|logger\.\w+)\(?.*(secret|api_?key|password)`)
 )
 
-// Scan inspects one project's directory.
-func Scan(name, dir, rel string) (*Project, error) {
+// Scan inspects one project's directory. private are the files the project declares as secrets or
+// local files: they, their backups and every gitignored file are not read, since aw keeps agents
+// from reading secrets and its findings land in an agent's transcript (plans/dogfood-0.4.md,
+// decision 8). A local file is not code the project commits, so a finding there is no use anyway.
+func Scan(ctx context.Context, name, dir, rel string, private []string) (*Project, error) {
 	p := &Project{Name: name, Directory: rel, Findings: []Finding{}}
 	exists := func(f string) bool { _, err := os.Stat(filepath.Join(dir, f)); return err == nil }
 	for file, stack := range map[string]string{"package.json": "node", "Gemfile": "ruby", "go.mod": "go", "pyproject.toml": "python", "requirements.txt": "python", "Cargo.toml": "rust", "composer.json": "php", "pom.xml": "java"} {
@@ -118,6 +121,7 @@ func Scan(name, dir, rel string) (*Project, error) {
 		p.Mobile = append(p.Mobile, "ios")
 	}
 	env, ports := map[string]bool{}, map[int]bool{}
+	notRead := NotReadable(ctx, dir, private)
 	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return nil
@@ -133,6 +137,9 @@ func Scan(name, dir, rel string) (*Project, error) {
 			return nil
 		}
 		relFile, _ := filepath.Rel(dir, path)
+		if evidence.Declared(filepath.ToSlash(relFile), notRead) {
+			return nil
+		}
 		scanFile(p, path, filepath.ToSlash(relFile), env, ports)
 		return nil
 	})
@@ -142,6 +149,31 @@ func Scan(name, dir, rel string) (*Project, error) {
 	}
 	slices.Sort(p.Ports)
 	return p, err
+}
+
+// backupSuffixes are what editors and tools add to a file they copy, such as .env.bak.
+var backupSuffixes = []string{".bak", ".orig", ".old", ".swp", "~"}
+
+// NotReadable lists what Scan, and aw rehearse's isolation check, do not read in a project: its declared private files, their
+// backups, and its gitignored files and directories. A directory that is not a repository has
+// nothing gitignored.
+func NotReadable(ctx context.Context, dir string, private []string) []string {
+	var out []string
+	for _, f := range private {
+		f = strings.TrimPrefix(f, "/")
+		out = append(out, f)
+		for _, s := range backupSuffixes {
+			out = append(out, f+s)
+		}
+	}
+	if listed, err := run.In(dir).Run(ctx, "ls-files", "--others", "--ignored", "--exclude-standard", "--directory"); err == nil {
+		for _, e := range strings.Split(strings.TrimRight(listed, "\n"), "\n") {
+			if e != "" {
+				out = append(out, "/"+e) // anchored: an ignored entry is a path, not a name at any depth
+			}
+		}
+	}
+	return out
 }
 
 // shellWords are builtins and keywords, which name no program to install.

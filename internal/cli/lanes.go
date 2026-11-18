@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -134,8 +135,16 @@ report, and --apply, to them.`,
 				if len(rep.UnrecognizedForges) > 0 {
 					fmt.Fprintf(out, "\nforge = \"auto\" recognizes no forge at %s, so a squash-merged lane there cannot be proven merged → set [workspace] forge = \"gitlab\" or \"github\" in workspace.toml\n", ui.Clean(strings.Join(rep.UnrecognizedForges, ", ")))
 				}
+				for _, id := range rep.Closed {
+					fmt.Fprintf(out, "Closed unfinished cleanup %d: its lane no longer exists and no repository has a worktree for it. Its branches and archived tips are untouched (aw archives lists the tips).\n", id)
+				}
 				for _, e := range rep.Open {
-					fmt.Fprintf(out, "Unfinished: %s of lane %02d failed (%s) → aw sweep --apply --retry %d\n", e.Kind, e.Lane, ui.Clean(e.Detail), e.ID)
+					detail := ui.Clean(journalSummary(e.Detail))
+					if slices.Contains(rep.Stale, e.ID) {
+						fmt.Fprintf(out, "Unfinished: %s of lane %02d failed (%s); the lane no longer exists → aw sweep --apply closes it\n", e.Kind, e.Lane, detail)
+						continue
+					}
+					fmt.Fprintf(out, "Unfinished: %s of lane %02d failed (%s) → fix the cause, then aw sweep --apply --retry %d\n", e.Kind, e.Lane, detail, e.ID)
 				}
 				if !apply {
 					n := 0
@@ -472,4 +481,18 @@ leaving without one. Attaching again for the same work takes the lane back.`,
 	}
 	cmd.Flags().BoolVar(&asJSON, "json", false, "print what was released as JSON")
 	return cmd
+}
+
+// journalSummary is the first line of a journal entry's detail, which can hold a hook's whole
+// output: the report repeats every sweep, so it shows one line, and aw sweep --json has the rest.
+func journalSummary(detail string) string {
+	line, rest, _ := strings.Cut(strings.TrimSpace(detail), "\n")
+	const max = 200
+	if r := []rune(line); len(r) > max {
+		line, rest = string(r[:max])+"…", "more"
+	}
+	if strings.TrimSpace(rest) != "" {
+		line += "; aw sweep --json has the full detail"
+	}
+	return line
 }

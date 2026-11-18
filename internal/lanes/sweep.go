@@ -54,6 +54,11 @@ type SweepReport struct {
 	// UnrecognizedForges are the origins' hosts that forge = "auto" did not recognize, so that a
 	// squash-merged lane there could not be proven merged.
 	UnrecognizedForges []string `json:"unrecognized_forges,omitempty"`
+	// Stale are the unfinished entries whose lane no longer exists, by id: nothing is left for a
+	// retry to finish, so --apply closes them.
+	Stale []int `json:"stale,omitempty"`
+	// Closed are the stale entries this --apply closed, by id.
+	Closed []int `json:"closed,omitempty"`
 	// PrunedArchives are the archived tips --apply removed for being older than
 	// [lanes] archive_retention, as "<repository> <ref>".
 	PrunedArchives []string `json:"pruned_archives,omitempty"`
@@ -90,6 +95,34 @@ func (m *Manager) Sweep(ctx context.Context, o SweepOptions) (*SweepReport, erro
 	rep := &SweepReport{Applied: o.Apply, Open: open}
 	if rep.Open == nil {
 		rep.Open = []state.JournalEntry{}
+	}
+	// An entry whose lane is gone, with no worktree left in any repository, has nothing left to
+	// finish: --apply closes it, a retry included, rather than reporting it forever.
+	exists := map[int]bool{}
+	for _, l := range lanes {
+		exists[l.Number] = true
+	}
+	for _, e := range open {
+		if e.Lane == 0 || exists[e.Lane] || m.hasWorktrees(e.Lane) {
+			continue
+		}
+		rep.Stale = append(rep.Stale, e.ID)
+		if !o.Apply {
+			continue
+		}
+		why := "closed by aw sweep --apply: the lane no longer exists and no repository has a worktree for it"
+		if err := m.Store.Write(ctx, func(tx *sql.Tx) error { return state.EndJournal(tx, e.ID, state.JournalDone, e.Detail+" ("+why+")") }); err != nil {
+			return nil, err
+		}
+		rep.Closed = append(rep.Closed, e.ID)
+	}
+	if o.Apply && len(rep.Closed) > 0 {
+		open = slices.DeleteFunc(open, func(e state.JournalEntry) bool { return slices.Contains(rep.Closed, e.ID) })
+		rep.Open = slices.DeleteFunc(rep.Open, func(e state.JournalEntry) bool { return slices.Contains(rep.Closed, e.ID) })
+		if slices.Contains(rep.Closed, o.Retry) {
+			rep.Lanes = []*Decision{}
+			return rep, nil // the retried entry was stale: closing it is the whole retry
+		}
 	}
 	failedLanes := map[int]state.JournalEntry{}
 	retryLane := 0
@@ -182,6 +215,23 @@ func (m *Manager) Sweep(ctx context.Context, o SweepOptions) (*SweepReport, erro
 		rep.Open = []state.JournalEntry{}
 	}
 	return rep, nil
+}
+
+// hasWorktrees reports whether lane n's root, or any project's worktree for it, is still on disk.
+func (m *Manager) hasWorktrees(n int) bool {
+	dir := Dir(n, m.Cfg.Lanes.Max)
+	paths := []string{m.Root(n)}
+	for _, p := range m.Cfg.Projects {
+		if p.Directory != "." {
+			paths = append(paths, filepath.Join(m.WS.Owner, p.Directory, ".worktrees", dir))
+		}
+	}
+	for _, p := range paths {
+		if _, err := os.Lstat(p); err == nil {
+			return true
+		}
+	}
+	return false
 }
 
 // decide examines a lane that is not in the pool. Anything that cannot be read keeps the lane.
