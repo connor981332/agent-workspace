@@ -728,6 +728,16 @@ tokens = ["t"]
 	if err := os.WriteFile(toml, append(data, settings...), 0o644); err != nil {
 		return err
 	}
+	// A baseline from before lazy worktrees (aw 0.5.0) does not know [lanes] eager, and checks every
+	// project out anyway: it gets the same configuration without the line.
+	check := exec.Command(filepath.Join(fx.owner, "bin", "aw"), "config", "validate")
+	check.Dir, check.Env = fx.owner, fx.laneEnv
+	if out, err := check.CombinedOutput(); err != nil && strings.Contains(string(out), "lanes.eager") {
+		settings = strings.Replace(settings, "eager = [\"web\", \"api\", \"android\", \"ios\"]\n", "", 1)
+		if err := os.WriteFile(toml, append(data, settings...), 0o644); err != nil {
+			return err
+		}
+	}
 	env := fx.laneEnv
 	git := func(dir string, args ...string) error {
 		c := exec.Command("git", args...)
