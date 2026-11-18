@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"os/exec"
 	"path"
@@ -287,18 +288,13 @@ func ignoredLocal(ctx context.Context, dir string, declared, generated []string)
 }
 
 // DropAccepted removes the findings in files a person has reviewed, and says how many it removed.
+// The keys follow .gitignore's rules, as generated and local_files do (evidence.Declared): ** spans
+// any number of directories wherever it is, and a pattern without a slash matches at any depth.
 func (p *Project) DropAccepted(accepted map[string]string) int {
+	patterns := slices.Collect(maps.Keys(accepted))
 	before := len(p.Findings)
 	p.Findings = slices.DeleteFunc(p.Findings, func(f Finding) bool {
-		for pattern := range accepted {
-			if dir, ok := strings.CutSuffix(pattern, "/**"); ok && strings.HasPrefix(f.File, dir+"/") {
-				return true
-			}
-			if ok, _ := path.Match(pattern, f.File); ok {
-				return true
-			}
-		}
-		return false
+		return evidence.Declared(f.File, patterns)
 	})
 	return before - len(p.Findings)
 }
