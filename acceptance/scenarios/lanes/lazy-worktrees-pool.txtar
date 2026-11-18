@@ -1,0 +1,50 @@
+# A recycled lane keeps every worktree it had, clean at the base, as a warm lane does. The next claim
+# puts each one on the new lane's branch, not only the eager ones: a worktree in the lane that is not
+# on its branch would hold work aw cannot see. A project checked out later in a warm lane is set up,
+# not reset, since its worktree is new.
+# req: R21 R24 R25
+# source: dogfood of 0.4.0 (plans/dogfood-0.4.md Phase 3)
+# milestone: M12
+
+workspace shop --repos web,api,mobile --init
+exec aw attach 'first'
+cd .worktrees/01
+exec aw use api
+cd ../..
+exec aw sweep --apply --json
+json stdout .lanes[0].action recycle
+exists api/.worktrees/01
+
+env CLAUDE_CODE_SESSION_ID=s-2
+exec aw attach 'second'
+stdout 'Claimed lane 01 second'
+exec git -C api/.worktrees/01 branch --show-current
+stdout '^aw/second$'
+exec git -C web/.worktrees/01 branch --show-current
+stdout '^aw/second$'
+exists .worktrees/01/api
+
+# In the warm lane, a project new to it runs setup, where one it kept runs reset.
+cd .worktrees/01
+exec aw use mobile
+exec aw run mobile true
+exists mobile/set-up
+! exists mobile/was-reset
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 1
+eager = ["web"]
+
+[projects.web]
+[projects.api]
+[projects.mobile]
+[projects.mobile.lifecycle.setup]
+run = "touch set-up"
+[projects.mobile.lifecycle.reset]
+run = "touch was-reset"

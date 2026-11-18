@@ -4,7 +4,7 @@
 # source: C2 tests::t_lane_rm_force_and_drop_data
 # milestone: M2
 
-workspace shop --init
+workspace shop --eager --init
 exec aw attach 'add feature flag'
 lane-commit 01 web/flag.txt 'unmerged work'
 exec git -C web rev-parse aw/feature-flag

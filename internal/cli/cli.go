@@ -83,7 +83,8 @@ func newRoot(stdout, stderr io.Writer) *cobra.Command {
 		Short: "Agent Workspace: parallel lanes for coding agents",
 		Long: `Agent Workspace: parallel lanes for coding agents.
 
-A lane is a worktree of every project, for one piece of work. aw new "<purpose>" creates one and
+A lane is a worktree of the projects one piece of work uses, each checked out on first use (aw use).
+aw new "<purpose>" creates one and
 starts a harness in it; aw attach "<purpose>" claims one for a session already running. The lane is
 named from the purpose. aw lanes lists them, and commands that take a lane accept its name or number.
 
@@ -105,7 +106,7 @@ configuration. On a fresh clone of a workspace already set up, aw setup is all y
 	root.CompletionOptions.HiddenDefaultCmd = true
 
 	root.AddCommand(newVersionCmd(), newConfigCmd(), newInitCmd(), newSetupCmd(), newBackgroundSetupCmd(), newSnapshotCmd(), newRestoreCmd(), newSnapshotsCmd(), newDoctorCmd(), newWhoamiCmd(), newAttachCmd(),
-		newSuperviseCmd(), newInspectCmd(), newRehearseCmd(), newOnboardCmd(), newAddCmd(), newModulesCmd(), newEjectCmd(), newInfraCmd(), newWebhookCmd(), newPlanCmd(), newCheckDocsCmd(), newDelegateCmd(), newMoveToLaneCmd(), newTryCmd(), newChangesetCmd(), newUpgradeCmd(), newUpgradeFinishCmd(), newContainersCmd(), newKeepCmd(), newSweepCmd(), newDiscardCmd(), newParkCmd(false), newParkCmd(true), newFinishCmd(), newDetachCmd(), newRunCmd(), newNewCmd(), newRecapCmd(), newLanesCmd(), newPairCmd(), newResumeCmd(), newOpenCmd(), newServeCmd(), newStopCmd(), newQueueCmd(), newPullCmd(), newPushCmd(), newChangelogCmd(), newAuditCmd(), newNoteCmd(), newResetBranchCmd(), newOptionsCmd(), newArchivesCmd())
+		newSuperviseCmd(), newInspectCmd(), newRehearseCmd(), newOnboardCmd(), newAddCmd(), newModulesCmd(), newEjectCmd(), newInfraCmd(), newWebhookCmd(), newPlanCmd(), newCheckDocsCmd(), newDelegateCmd(), newMoveToLaneCmd(), newTryCmd(), newChangesetCmd(), newUpgradeCmd(), newUpgradeFinishCmd(), newContainersCmd(), newKeepCmd(), newSweepCmd(), newDiscardCmd(), newParkCmd(false), newParkCmd(true), newFinishCmd(), newDetachCmd(), newRunCmd(), newNewCmd(), newRecapCmd(), newLanesCmd(), newPairCmd(), newResumeCmd(), newOpenCmd(), newServeCmd(), newStopCmd(), newQueueCmd(), newPullCmd(), newPushCmd(), newChangelogCmd(), newAuditCmd(), newNoteCmd(), newResetBranchCmd(), newOptionsCmd(), newArchivesCmd(), newUseCmd())
 	root.PersistentPreRunE = refuseAgent
 	return root
 }

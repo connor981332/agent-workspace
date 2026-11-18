@@ -12,6 +12,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/connor981332/agent-workspace/internal/config"
 	"github.com/connor981332/agent-workspace/internal/lanes"
 	"github.com/connor981332/agent-workspace/internal/plans"
 	"github.com/connor981332/agent-workspace/internal/state"
@@ -345,6 +346,8 @@ or its number. aw recap shows each lane in full. It writes nothing.`,
 				State   string `json:"state"`
 				Purpose string `json:"purpose"`
 				Root    string `json:"root"`
+				// Projects are the ones checked out in the lane (lazy worktrees).
+				Projects []string `json:"projects"`
 			}
 			rows := []row{}
 			var sessions []state.Session
@@ -361,7 +364,15 @@ or its number. aw recap shows each lane in full. It writes nothing.`,
 				if st == state.LaneClaimed {
 					st = lanes.QuickState(m.Store.DB(), l, sessions)
 				}
-				rows = append(rows, row{l.Number, lanes.Dir(l.Number, m.Cfg.Lanes.Max), l.Name, st, l.Purpose, m.Root(l.Number)})
+				projects := []string{}
+				if repos, err := state.LaneRepos(m.Store.DB(), l.Number); err == nil {
+					for _, r := range repos {
+						if r.Project != "" {
+							projects = append(projects, r.Project)
+						}
+					}
+				}
+				rows = append(rows, row{l.Number, lanes.Dir(l.Number, m.Cfg.Lanes.Max), l.Name, st, l.Purpose, m.Root(l.Number), projects})
 			}
 			if asJSON {
 				return writeJSON(out, map[string]any{"lanes": rows})
@@ -372,11 +383,21 @@ or its number. aw recap shows each lane in full. It writes nothing.`,
 			}
 			// One row a lane, cut to the terminal's width: the purpose gives way, and the lane's
 			// root is its number under .worktrees (aw lanes --json has the full path).
-			table := [][]string{{"LANE", "NAME", "STATE", "PURPOSE"}}
-			for _, r := range rows {
-				table = append(table, []string{r.Dir, r.Name, r.State, quoted(r.Purpose)})
+			// With lazy worktrees, which projects each lane has checked out; the purpose still gives way.
+			showProjects := lanesMayLackProjects(m.Cfg)
+			head := []string{"LANE", "NAME", "STATE", "PURPOSE"}
+			if showProjects {
+				head = []string{"LANE", "NAME", "STATE", "PROJECTS", "PURPOSE"}
 			}
-			ui.NewOut(out).Table(table, 3)
+			table := [][]string{head}
+			for _, r := range rows {
+				line := []string{r.Dir, r.Name, r.State, quoted(r.Purpose)}
+				if showProjects {
+					line = []string{r.Dir, r.Name, r.State, strings.Join(r.Projects, ","), quoted(r.Purpose)}
+				}
+				table = append(table, line)
+			}
+			ui.NewOut(out).Table(table, len(head)-1)
 			// What to do next is for the human in the owner checkout: an agent does not start
 			// sessions, and in a lane the work is already here.
 			if ids, _ := issuedIdentities(); len(ids) == 0 && m.CallerLane() == 0 && m.Store != nil {
@@ -389,6 +410,21 @@ or its number. aw recap shows each lane in full. It writes nothing.`,
 	}
 	cmd.Flags().BoolVar(&asJSON, "json", false, "print the lanes as JSON")
 	return cmd
+}
+
+// lanesMayLackProjects reports whether lanes in this workspace may lack some of its projects: lazy worktrees, and
+// more than one project with lanes of its own.
+func lanesMayLackProjects(c *config.Config) bool {
+	if c == nil || c.Lanes.Setup == "eager" {
+		return false
+	}
+	n := 0
+	for _, p := range c.Projects {
+		if p.Directory != "." && p.Lanes != "shared" {
+			n++
+		}
+	}
+	return n > 1
 }
 
 func newRecapCmd() *cobra.Command {

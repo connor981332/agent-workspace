@@ -4,7 +4,7 @@
 # source: C1 test_real_hook_and_routing
 # milestone: M3
 
-workspace shop --init
+workspace shop --eager --init
 safeguards
 exec aw attach 'add feature flag'
 cd .worktrees/01

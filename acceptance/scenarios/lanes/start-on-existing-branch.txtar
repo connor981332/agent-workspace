@@ -4,7 +4,7 @@
 # source: C2 tests::t_lane_existing_remote_branch_tracks
 # milestone: M2
 
-workspace shop --init
+workspace shop --eager --init
 # A teammate's branch, pushed to web's origin only.
 exec git clone -q $WORK/remotes/web.git $WORK/teammate
 exec sh -c 'cd "$WORK/teammate" && git switch -qc teammate/search && echo search > search.txt && git add -A && git commit -qm search && git push -q origin teammate/search'

@@ -105,7 +105,7 @@ func warnBorrowedDeps(out io.Writer, ownerDir, laneDir string) {
 
 // startLaneSession claims a lane and replaces this process with the harness in it. It returns only
 // when something stopped that.
-func startLaneSession(cmd *cobra.Command, purpose, harness, branch, role string, useMux, awHooksOnly, onboarding bool, extra []string) error {
+func startLaneSession(cmd *cobra.Command, purpose, harness, branch, role string, projects []string, useMux, awHooksOnly, onboarding bool, extra []string) error {
 	t := timing.Start()
 	w, err := openForWrite()
 	if err != nil {
@@ -141,7 +141,7 @@ func startLaneSession(cmd *cobra.Command, purpose, harness, branch, role string,
 	if useMux {
 		pid = 0 // the harness's own process is recorded by its first hook call
 	}
-	c, err := m.Claim(cmd.Context(), lanes.ClaimRequest{Purpose: purpose, Branch: branch,
+	c, err := m.Claim(cmd.Context(), lanes.ClaimRequest{Purpose: purpose, Branch: branch, Projects: projects,
 		Who: lanes.Identity{Harness: harness, Session: id, PID: pid}, StartsInLane: true})
 	if err != nil {
 		return err
@@ -226,10 +226,11 @@ func laneShellEnv(m *lanes.Manager, lane int) []string {
 
 func newNewCmd() *cobra.Command {
 	var harness, branch, role string
+	var projects []string
 	var useMux bool
 	var shell bool
 	cmd := &cobra.Command{
-		Use:   `new "<purpose>" [--harness h | --shell] [--mux] [--branch b] [-- harness arguments…]`,
+		Use:   `new "<purpose>" [--harness h | --shell] [--mux] [--branch b] [--projects p,…] [-- harness arguments…]`,
 		Short: "Claim a lane and launch a harness in it",
 		Long: `Claim a lane for the purpose (from the warm pool when there is one), then launch the harness in the
 lane root: the individual layer's [user] harness, or --harness. Arguments after -- go to the harness
@@ -255,13 +256,14 @@ environment, for working in the lane yourself.`,
 				}
 				harness = shellHarness
 			}
-			return startLaneSession(cmd, purpose, harness, branch, role, useMux, false, false, extra)
+			return startLaneSession(cmd, purpose, harness, branch, role, projects, useMux, false, false, extra)
 		}),
 	}
 	cmd.Flags().BoolVar(&shell, "shell", false, "start your own shell in the lane, instead of a harness")
 	cmd.Flags().StringVar(&role, "role", "", "the team role this lane works under")
 	cmd.Flags().StringVar(&harness, "harness", "", "the harness to launch (default: [user] harness)")
 	cmd.Flags().StringVar(&branch, "branch", "", "start the lane on this existing branch")
+	cmd.Flags().StringSliceVar(&projects, "projects", nil, "check these projects out at once, besides [lanes] eager; the rest are checked out on first use (bin/aw use)")
 	cmd.Flags().BoolVar(&useMux, "mux", false, "open it in your terminal multiplexer")
 	return cmd
 }

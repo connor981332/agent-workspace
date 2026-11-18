@@ -5,7 +5,7 @@
 # source: dogfood of 0.3.0 (plans/dogfood-0.3.md 2.3, 2.4)
 # milestone: M12
 
-workspace shop --init
+workspace shop --eager --init
 exec aw archives
 stdout 'Nothing is archived'
 exec aw attach 'add feature flag'

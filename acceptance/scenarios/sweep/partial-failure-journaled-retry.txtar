@@ -3,7 +3,7 @@
 # source: C1 test_lanes.py::test_change_before_apply_and_partial_failure
 # milestone: M2
 
-workspace shop --init
+workspace shop --eager --init
 exec aw attach 'one'
 exec aw attach 'two'
 git-fail '^worktree remove .*/\.worktrees/02$'

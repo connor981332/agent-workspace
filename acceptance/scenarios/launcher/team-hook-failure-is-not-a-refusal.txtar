@@ -4,7 +4,7 @@
 # source: dogfood of 0.4.0 (plans/dogfood-0.4.md 1.7)
 # milestone: M12
 
-workspace shop --init
+workspace shop --eager --init
 owner-may-change
 exec sh $WORK/hook.sh
 exec aw setup

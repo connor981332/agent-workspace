@@ -83,6 +83,12 @@ func awaitSetup(ctx context.Context, w *writeContext, m *lanes.Manager, project 
 	if err != nil {
 		return nil // Locate says what is wrong with a lane with no record
 	}
+	if project != "" {
+		// A project the lane has not checked out yet is checked out first (lazy worktrees).
+		if err := checkOut(ctx, w, m, l, []string{project}, stderr); err != nil {
+			return err
+		}
+	}
 	need := lifecycle.Needed(project, after)
 	said, tried := "", false
 	// With lazy setup, the first command that needs a project sets it up, here in the foreground,
@@ -158,6 +164,28 @@ func awaitSetup(ctx context.Context, w *writeContext, m *lanes.Manager, project 
 		}
 	}
 	return nil
+}
+
+// checkOut checks projects out in lane l, if it lacks them, saying so (docs/spec/sessions.md, "Lazy
+// worktrees"). Their own setup waits for first use, as any project's does.
+func checkOut(ctx context.Context, w *writeContext, m *lanes.Manager, l state.Lane, projects []string, stderr io.Writer) error {
+	repos, err := state.LaneRepos(w.store.DB(), l.Number)
+	if err != nil {
+		return err
+	}
+	var lacking []string
+	for _, p := range m.WithDependencies(projects) {
+		if !slices.ContainsFunc(repos, func(r state.LaneRepo) bool { return r.Project == p }) {
+			lacking = append(lacking, p)
+		}
+	}
+	if len(lacking) == 0 {
+		return nil
+	}
+	fmt.Fprintf(stderr, "aw: checking out %s in lane %s, on its first use\n", strings.Join(lacking, ", "), ui.Clean(l.Name))
+	m.Progress = func(line string) { fmt.Fprintln(stderr, "aw: "+line) }
+	_, err = m.Use(ctx, l.Number, projects)
+	return err
 }
 
 // ownHolder is this process holding seats for a lane.

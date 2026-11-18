@@ -8,7 +8,7 @@
 # changed: an unattached session in the owner checkout is refused writes with the aw attach and aw
 # pair instructions (lazy claiming), where C1 allowed them.
 
-workspace shop --init
+workspace shop --eager --init
 safeguards
 session s-1 claude
 exec aw attach 'add feature flag'

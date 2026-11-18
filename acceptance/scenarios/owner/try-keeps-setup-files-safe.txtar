@@ -8,6 +8,7 @@ stubs claude
 workspace shop
 owner-may-change
 exec aw init
+exec sh -c 'printf "\n[lanes]\neager = [\"web\", \"api\"]\n" >> workspace.toml'
 exec aw setup --harness claude
 cp workspace.toml $WORK/owner.toml
 exec aw attach 'checkout tax'

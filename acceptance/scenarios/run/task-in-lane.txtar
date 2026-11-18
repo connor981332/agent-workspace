@@ -4,7 +4,7 @@
 # source: C1 test_generic.py::HostLaneTests::test_single_repo_lane_from_init_to_cleanup
 # milestone: M2
 
-workspace shop --init
+workspace shop --eager --init
 exec aw attach 'add feature flag'
 cd .worktrees/01/web
 exec aw run web

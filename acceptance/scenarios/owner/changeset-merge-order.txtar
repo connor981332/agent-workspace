@@ -4,7 +4,7 @@
 # source: wishlist 12, spec owner decision 2026-11-09
 # milestone: M9
 
-workspace shop --init --forge github
+workspace shop --eager --init --forge github
 safeguards
 exec aw attach 'one'
 lane-commit 01 web/a.txt 'consumer'

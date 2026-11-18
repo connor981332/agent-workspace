@@ -130,6 +130,39 @@ func Plan(c *config.Config, fromPool bool, hooks map[string]string) []Step {
 	return out
 }
 
+// LanePlan is Plan for one lane: only the projects it has checked out (all of them when have is
+// nil), and, in a lane from the pool, setup rather than reset for a project whose worktree is new
+// to it, which the recorded steps show (lazy worktrees, docs/spec/sessions.md).
+func LanePlan(c *config.Config, fromPool bool, hooks map[string]string, have []string, recorded []string) []Step {
+	steps := Plan(c, fromPool, hooks)
+	if fromPool {
+		fresh := map[string]Step{}
+		for _, st := range Plan(c, false, hooks) {
+			if st.Phase == PhaseSetup {
+				fresh[st.Project] = st
+			}
+		}
+		for i, st := range steps {
+			if f, ok := fresh[st.Project]; ok && st.Phase == PhaseReset && slices.Contains(recorded, f.Name) {
+				steps[i] = f
+			}
+		}
+	}
+	if have == nil {
+		return steps
+	}
+	return slices.DeleteFunc(steps, func(st Step) bool { return st.Project != "" && !slices.Contains(have, st.Project) })
+}
+
+// FreshSteps are the names of a newly checked-out project's steps that differ in a lane from the
+// pool: its setup, in place of reset. Recording them makes LanePlan choose them.
+func FreshSteps(c *config.Config, project string) []string {
+	if p := c.Projects[project]; p != nil && p.Lifecycle.Setup != nil {
+		return []string{project + "." + PhaseSetup}
+	}
+	return nil
+}
+
 // Lazy reports whether projects' own steps wait for their first use ([lanes] setup = "lazy").
 func Lazy(c *config.Config) bool { return c.Lanes.Setup != "eager" }
 
@@ -374,6 +407,25 @@ type Runner struct {
 	Owner, CacheDir string
 }
 
+// plan is the lane's plan: the projects it has checked out, as its recorded repositories say.
+func (r *Runner) plan(q state.Querier, fromPool bool) []Step {
+	var have, recorded []string
+	if repos, err := state.LaneRepos(q, r.Lane.Number); err == nil && len(repos) > 0 {
+		have = []string{}
+		for _, rp := range repos {
+			if rp.Project != "" {
+				have = append(have, rp.Project)
+			}
+		}
+	}
+	if steps, err := state.Steps(q, r.Lane.Number, r.Lane.Generation); err == nil {
+		for _, st := range steps {
+			recorded = append(recorded, st.Name)
+		}
+	}
+	return LanePlan(r.Cfg, fromPool, r.Hooks, have, recorded)
+}
+
 // runs reports whether this run runs step s.
 func (r *Runner) runs(s Step) bool {
 	return r.Projects == nil || claimTime(s) || slices.Contains(r.Projects, s.Project)
@@ -392,7 +444,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	steps := Plan(r.Cfg, done.fromPool, r.Hooks)
+	steps := r.plan(r.Store.DB(), done.fromPool)
 	var serial []Step
 	projects := map[string][]Step{}
 	for _, s := range steps {
@@ -458,7 +510,7 @@ func (r *Runner) begin(ctx context.Context) (*begun, error) {
 		} else if !errors.Is(err, state.ErrNotFound) {
 			return err
 		}
-		if err := state.PlanSetup(tx, r.Lane.Number, r.Lane.Generation, b.fromPool, Names(Plan(r.Cfg, b.fromPool, r.Hooks))); err != nil {
+		if err := state.PlanSetup(tx, r.Lane.Number, r.Lane.Generation, b.fromPool, Names(r.plan(tx, b.fromPool))); err != nil {
 			return err
 		}
 		if err := state.SetSetupRunner(tx, r.Lane.Number, pid, start); err != nil {

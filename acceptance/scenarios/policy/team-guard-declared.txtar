@@ -4,7 +4,7 @@
 # source: spec (no candidate source)
 # milestone: M3
 
-workspace shop --init
+workspace shop --eager --init
 exec aw config explain guards.no-apply.action
 exec aw attach 'add feature flag'
 cd .worktrees/01

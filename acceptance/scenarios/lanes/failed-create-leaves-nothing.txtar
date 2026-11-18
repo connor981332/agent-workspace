@@ -4,7 +4,7 @@
 # source: dogfood of 0.1.0-rc.2
 # milestone: M12
 
-workspace shop --init
+workspace shop --eager --init
 git-fail 'worktree add.*api/.worktrees/01'
 ! exec aw attach 'broken work'
 stderr 'injected failure'

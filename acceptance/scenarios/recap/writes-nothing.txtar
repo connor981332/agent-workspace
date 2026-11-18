@@ -5,7 +5,7 @@
 # source: C1 test_recap_is_observational_and_merging_does_not_complete_plan
 # milestone: M2
 
-workspace shop --init
+workspace shop --eager --init
 exec aw attach 'first thing'
 lane-commit 01 web/a.txt 'done'
 exec aw finish first-thing --summary 'Done.'

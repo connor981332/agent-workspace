@@ -4,7 +4,7 @@
 # source: release run of v0.1.0, e2e/rehearse-two-projects
 # milestone: M12
 
-workspace shop --init
+workspace shop --eager --init
 owner-may-change
 exec sh $WORK/race.sh
 env PATH=$WORK/race:$PATH

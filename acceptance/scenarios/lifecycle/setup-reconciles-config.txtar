@@ -6,7 +6,7 @@
 # milestone: M12
 
 owner-may-change
-workspace shop --init
+workspace shop --eager --init
 exec aw attach 'old lane'
 ! exists .worktrees/01/web/.env
 

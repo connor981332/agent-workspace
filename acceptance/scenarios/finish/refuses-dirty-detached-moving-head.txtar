@@ -4,7 +4,7 @@
 # source: C1 test_lanes.py::test_local_delivery_validation_concurrency_and_release_retry
 # milestone: M2
 
-workspace shop --init
+workspace shop --eager --init
 exec aw attach 'add feature flag'
 exec git -C web/.worktrees/01 switch -q -c other
 ! exec aw finish feature-flag --summary 'done'

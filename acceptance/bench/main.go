@@ -694,6 +694,7 @@ func (fx *fixture) addLaneOps(tmp, launcher string) error {
 [lanes]
 max = %d
 pool = %d
+eager = ["web", "api", "android", "ios"]
 
 [projects.web.servers.benchserve]
 command = "printf x > \"$AW_BENCH_FIFO\"; exec sleep 300"

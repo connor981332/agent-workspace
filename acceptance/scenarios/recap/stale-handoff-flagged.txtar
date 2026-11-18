@@ -4,7 +4,7 @@
 # source: C1 test_finish_no_plan_idempotence_and_session
 # milestone: M2
 
-workspace shop --init
+workspace shop --eager --init
 exec aw attach 'add feature flag'
 lane-commit 01 web/flag.txt 'flag'
 exec aw finish feature-flag --summary 'Adds the flag. Verify the toggle by hand.'

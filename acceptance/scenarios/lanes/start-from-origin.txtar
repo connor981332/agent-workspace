@@ -6,7 +6,7 @@
 # source: RideTracker dogfood, 2026-11-12 (base commits shown in every lane)
 # milestone: M12
 
-workspace shop --init --repos web,api
+workspace shop --eager --init --repos web,api
 owner-may-change
 
 # web has a commit origin lacks; api is on another branch.

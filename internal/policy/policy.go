@@ -103,6 +103,33 @@ type Scope struct {
 	// Unprepared are the lane's projects whose setup waits for its first use (lazy setup), by the
 	// physical directory of their worktree.
 	Unprepared map[string]string
+	// NotCheckedOut are the projects the lane has no worktree of yet (lazy worktrees), by the
+	// physical path their link in the lane root would have.
+	NotCheckedOut map[string]string
+}
+
+// notCheckedOut is the project whose missing link in the lane root a path is under: a path there
+// would create a plain directory in the lane's worktree of the workspace repository, and reads find
+// nothing. One Lstat, so that a project checked out since the hook read the state counts as there.
+func (s Scope) notCheckedOut(abs string) string {
+	if s.Role != Lane || len(s.NotCheckedOut) == 0 || abs == "" {
+		return ""
+	}
+	for dir, project := range s.NotCheckedOut {
+		if within(abs, dir) {
+			if _, err := os.Lstat(dir); err == nil {
+				return ""
+			}
+			return project
+		}
+	}
+	return ""
+}
+
+// useRedirect refuses a path in a project the lane has not checked out, naming the command that
+// checks it out (the redirect tier).
+func (s Scope) useRedirect(project string) Decision {
+	return deny("not-checked-out", "project %s isn't checked out in lane %s yet, so it has no files there → run bin/aw use %s, which checks it out on the lane's branch, then try again", project, s.LaneName, project)
 }
 
 // safeguard reports whether the team turned on an optional group of rules.
@@ -223,6 +250,9 @@ func decideFiles(s Scope, c Call, cwd shell.Dir) Decision {
 			p = s.Home + p[1:]
 		}
 		abs, _ := absolute(p, cwd)
+		if project := s.notCheckedOut(abs); project != "" {
+			return s.useRedirect(project)
+		}
 		if !s.isSecret(abs) {
 			if c.Tool == Read {
 				if n := s.ownerCopyNote(abs, p); n != "" && !slices.Contains(notes, n) {

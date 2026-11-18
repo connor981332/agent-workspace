@@ -5,7 +5,7 @@
 # source: plans/agent-feedback.md, item 9
 # milestone: M12
 
-workspace shop --init
+workspace shop --eager --init
 exec aw setup
 owner-snapshot
 exec aw attach 'add feature flag'

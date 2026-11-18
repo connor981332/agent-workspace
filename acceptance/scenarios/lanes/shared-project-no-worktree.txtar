@@ -16,6 +16,9 @@ name = "Shop"
 namespace = "shop"
 schema = 1
 
+[lanes]
+eager = ["web"]
+
 [projects.web]
 
 [projects.api]

@@ -195,7 +195,10 @@ func prependPath(ts *testscript.TestScript, dir string) {
 	ts.Setenv("PATH", dir+string(os.PathListSeparator)+ts.Getenv("PATH"))
 }
 
-// workspace <name> [--single] [--repos a,b] [--forge github|gitlab|none]
+// workspace <name> [--single] [--init] [--eager] [--repos a,b] [--forge github|gitlab|none]
+//
+// --eager lists every project in [lanes] eager, for a scenario whose lanes need each project
+// checked out from the start rather than on first use.
 func cmdWorkspace(ts *testscript.TestScript, neg bool, args []string) {
 	if neg {
 		ts.Fatalf("unsupported: ! workspace")
@@ -205,15 +208,17 @@ func cmdWorkspace(ts *testscript.TestScript, neg bool, args []string) {
 		ts.Fatalf("workspace: this scenario already has a workspace at %s", st.owner)
 	}
 	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
-		ts.Fatalf("usage: workspace <name> [--single] [--init] [--repos a,b] [--forge github|gitlab|none]")
+		ts.Fatalf("usage: workspace <name> [--single] [--init] [--eager] [--repos a,b] [--forge github|gitlab|none]")
 	}
-	name, single, repos, forge, initialize := args[0], false, []string{"web", "api"}, "none", false
+	name, single, repos, forge, initialize, eager := args[0], false, []string{"web", "api"}, "none", false, false
 	for i := 1; i < len(args); i++ {
 		switch args[i] {
 		case "--single":
 			single = true
 		case "--init":
 			initialize = true
+		case "--eager":
+			eager = true
 		case "--repos", "--forge":
 			if i+1 == len(args) {
 				ts.Fatalf("workspace: %s needs a value", args[i])
@@ -274,6 +279,9 @@ func cmdWorkspace(ts *testscript.TestScript, neg bool, args []string) {
 		// Consumed: left at $WORK, it would make $WORK itself look like a workspace.
 		ts.Check(os.Rename(filepath.Join(work, "workspace.toml"), filepath.Join(work, ".workspace.toml")))
 	}
+	if haveTeam == nil && eager && !single {
+		team = []byte(withEager(string(team), repos))
+	}
 	if haveTeam == nil && !initialize {
 		files["workspace.toml"] = string(team)
 	}
@@ -324,6 +332,11 @@ func cmdWorkspace(ts *testscript.TestScript, neg bool, args []string) {
 		ts.Check(ts.Exec("aw", "init"))
 		if haveTeam == nil {
 			ts.Check(os.WriteFile(filepath.Join(owner, "workspace.toml"), team, 0o644))
+		} else if eager && !single {
+			path := filepath.Join(owner, "workspace.toml")
+			data, err := os.ReadFile(path)
+			ts.Check(err)
+			ts.Check(os.WriteFile(path, []byte(withEager(string(data), repos[1:])), 0o644))
 		}
 		git(ts, owner, "add", "-A")
 		git(ts, owner, "commit", "-q", "-m", "Set up Agent Workspace")
@@ -331,6 +344,27 @@ func cmdWorkspace(ts *testscript.TestScript, neg bool, args []string) {
 		ts.Check(ts.Exec("aw", "version"))
 	}
 	st.snap = takeSnapshot(ts)
+}
+
+// withEager adds the projects to [lanes] eager in a workspace.toml: under its [lanes] table when it
+// has one, otherwise in a new one at the end.
+func withEager(toml string, projects []string) string {
+	quoted := make([]string, len(projects))
+	for i, p := range projects {
+		quoted[i] = strconv.Quote(p)
+	}
+	line := "eager = [" + strings.Join(quoted, ", ") + "]\n"
+	if strings.HasPrefix(toml, "[lanes]\n") {
+		return "[lanes]\n" + line + toml[len("[lanes]\n"):]
+	}
+	if i := strings.Index(toml, "\n[lanes]\n"); i >= 0 {
+		at := i + len("\n[lanes]\n")
+		return toml[:at] + line + toml[at:]
+	}
+	if toml != "" && !strings.HasSuffix(toml, "\n") {
+		toml += "\n"
+	}
+	return toml + "\n[lanes]\n" + line
 }
 
 // stubs <name>…

@@ -5,7 +5,7 @@
 # source: dogfood, RideTracker lanes kept by lib/generated/ and bin/lib/rt_tools/__pycache__/
 # milestone: M2
 
-workspace shop --init
+workspace shop --eager --init
 exec sh -c 'printf "lib/generated/\n" > web/.gitignore && git -C web add .gitignore && git -C web commit -qm ignore && git -C web push -q'
 exec sh -c 'printf "__pycache__/\n" >> .gitignore && git add .gitignore && git commit -qm ignore && git push -q'
 owner-snapshot

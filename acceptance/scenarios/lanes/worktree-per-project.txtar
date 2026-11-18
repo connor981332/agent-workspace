@@ -4,7 +4,7 @@
 # source: C2 tests::t_lane_new_makes_worktree_env_and_links
 # milestone: M2
 
-workspace shop --init --repos web,api,mobile
+workspace shop --eager --init --repos web,api,mobile
 exec aw attach 'add feature flag' --json
 json stdout .lane 01
 json stdout .name feature-flag

@@ -3,7 +3,7 @@
 # source: C1 test_setup_failure_no_wait_and_server_refusal
 # milestone: M3
 
-workspace shop --init
+workspace shop --eager --init
 exec aw attach 'add feature flag'
 cd .worktrees/01
 ! exec awtest-hook bash 'cd web && bin/rails server -p 3001'

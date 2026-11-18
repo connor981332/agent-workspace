@@ -3,7 +3,7 @@
 # source: spec
 # milestone: M5
 
-workspace shop --init
+workspace shop --eager --init
 exec aw attach 'add feature flag'
 cd .worktrees/01
 ! exec aw run web true

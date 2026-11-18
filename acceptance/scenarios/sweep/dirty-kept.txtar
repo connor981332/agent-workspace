@@ -3,7 +3,7 @@
 # source: C2 tests::t_lane_rm_protects_unsaved_work
 # milestone: M2
 
-workspace shop --init
+workspace shop --eager --init
 exec aw attach 'add feature flag'
 exec sh -c 'echo edit >> web/.worktrees/01/README.md'
 exec aw sweep --apply --json

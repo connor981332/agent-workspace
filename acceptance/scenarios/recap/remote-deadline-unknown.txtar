@@ -5,7 +5,7 @@
 # source: C1 test_deduplication_owner_action_and_remote_budget
 # milestone: M2
 
-workspace shop --init --forge github
+workspace shop --eager --init --forge github
 exec aw attach 'add feature flag'
 lane-commit 01 web/a.txt 'work'
 lane-commit 01 api/b.txt 'work'

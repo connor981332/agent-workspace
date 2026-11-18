@@ -1,0 +1,19 @@
+# Two first uses of the same project at once, such as two aw run commands in one lane, check it out
+# once: the second waits for the first and finds it there.
+# req: R21
+# source: dogfood of 0.4.0 (plans/dogfood-0.4.md Phase 3)
+# milestone: M12
+
+workspace shop --init
+exec aw attach 'checkout tax'
+cd .worktrees/01
+exec aw run api true &
+exec aw run api true &
+exec aw use api &
+wait
+exists api/README.md
+exec git -C api branch --show-current
+stdout '^aw/checkout-tax$'
+exec aw lanes --json
+json stdout .lanes[0].projects[0] api
+! json stdout .lanes[0].projects[1]

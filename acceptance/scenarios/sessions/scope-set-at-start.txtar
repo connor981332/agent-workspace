@@ -5,7 +5,7 @@
 # source: plans/dogfood-0.3.md 5.2 (docs/spec/sessions.md, "Scope is set when a session starts")
 # milestone: M12
 
-workspace shop --init
+workspace shop --eager --init
 exec aw attach 'add feature flag'
 
 # Started in the owner checkout: unattached, wherever it goes.
