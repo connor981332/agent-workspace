@@ -42,7 +42,7 @@ func laneArg(m *lanes.Manager, args []string) (state.Lane, error) {
 }
 
 func newSweepCmd() *cobra.Command {
-	var apply, asJSON bool
+	var apply, asJSON, pushed bool
 	var retry int
 	cmd := &cobra.Command{
 		Use:   "sweep [lane…]",
@@ -54,7 +54,12 @@ base branch, or its commits are patch-equivalent to the base's, or (with forge s
 reports exactly that head merged. A gone remote branch, a handoff or a quiet session proves
 nothing. Recycled lanes return to the warm pool; lanes beyond [lanes] pool, or older than
 [lanes] retention in it, are removed. Without --apply nothing is changed. Naming lanes limits the
-report, and --apply, to them.`,
+report, and --apply, to them.
+
+A lane whose work is not merged yet but is safe on the forge is reported as reclaim: every
+repository is clean, and each one is proven merged or the forge reports an open change whose head
+is exactly the repository's head. Plain --apply leaves it alone; --pushed --apply archives its
+branches under refs/aw/archive/<name>/<time>, as aw discard does, then removes it.`,
 		Args: cobra.ArbitraryArgs,
 		RunE: run(func(cmd *cobra.Command, args []string) error {
 			w, err := openForWrite()
@@ -74,7 +79,7 @@ report, and --apply, to them.`,
 				}
 				only = append(only, l.Number)
 			}
-			rep, err := m.Sweep(cmd.Context(), lanes.SweepOptions{Apply: apply, Caller: m.CallerLane(), Retry: retry, Only: only})
+			rep, err := m.Sweep(cmd.Context(), lanes.SweepOptions{Apply: apply, Caller: m.CallerLane(), Retry: retry, Only: only, Pushed: pushed})
 			if err != nil {
 				return err
 			}
@@ -114,18 +119,23 @@ report, and --apply, to them.`,
 						o.Error("%s: %s", d.Dir, ui.Clean(d.Error))
 					}
 				}
-				var next []*lanes.Decision
-				for _, d := range rep.Lanes {
-					if d.Action == lanes.ActionKeep && len(d.Next) > 0 {
-						next = append(next, d)
+				for _, list := range []struct{ action, title string }{
+					{lanes.ActionKeep, "To recycle a kept lane:"},
+					{lanes.ActionReclaim, "To reclaim a lane whose work is in review:"},
+				} {
+					var next []*lanes.Decision
+					for _, d := range rep.Lanes {
+						if d.Action == list.action && len(d.Next) > 0 && d.Result == "" {
+							next = append(next, d)
+						}
 					}
-				}
-				if len(next) > 0 {
-					fmt.Fprintln(out, "\nTo recycle a kept lane:")
-					for _, d := range next {
-						fmt.Fprintf(out, "%s %s\n", d.Dir, ui.Clean(d.Name))
-						for _, step := range d.Next {
-							fmt.Fprintf(out, "   %s\n", ui.Clean(step))
+					if len(next) > 0 {
+						fmt.Fprintln(out, "\n"+list.title)
+						for _, d := range next {
+							fmt.Fprintf(out, "%s %s\n", d.Dir, ui.Clean(d.Name))
+							for _, step := range d.Next {
+								fmt.Fprintf(out, "   %s\n", ui.Clean(step))
+							}
 						}
 					}
 				}
@@ -147,13 +157,19 @@ report, and --apply, to them.`,
 					fmt.Fprintf(out, "Unfinished: %s of lane %02d failed (%s) → fix the cause, then aw sweep --apply --retry %d\n", e.Kind, e.Lane, detail, e.ID)
 				}
 				if !apply {
-					n := 0
+					n, r := 0, 0
 					for _, d := range rep.Lanes {
-						if d.Action == lanes.ActionRecycle || d.Action == lanes.ActionDestroy {
+						switch d.Action {
+						case lanes.ActionRecycle, lanes.ActionDestroy:
 							n++
+						case lanes.ActionReclaim:
+							r++
 						}
 					}
-					if n > 0 {
+					switch {
+					case pushed && n+r > 0:
+						fmt.Fprintf(out, "Nothing was changed. If this looks right, run aw sweep --pushed --apply to recycle or remove %d lane(s).\n", n+r)
+					case n > 0:
 						fmt.Fprintf(out, "Nothing was changed. If this looks right, run aw sweep --apply to recycle or remove %d lane(s).\n", n)
 					}
 				}
@@ -168,6 +184,7 @@ report, and --apply, to them.`,
 	}
 	cmd.Flags().BoolVar(&apply, "apply", false, "recycle and remove the lanes the preview lists")
 	cmd.Flags().IntVar(&retry, "retry", 0, "retry the cleanup that failed with this journal id")
+	cmd.Flags().BoolVar(&pushed, "pushed", false, "also remove the lanes whose work is in an open merge request at exactly their head, archiving their branches first")
 	cmd.Flags().BoolVar(&asJSON, "json", false, "print the decisions as JSON")
 	return cmd
 }

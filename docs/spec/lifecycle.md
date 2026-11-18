@@ -283,6 +283,20 @@ data and the worktrees are removed. Every step is journaled.
 Individuals can set `auto_sweep = true`, which recycles proven-merged lanes in the background. It is
 safe because it uses the same proof.
 
+## Reclaiming work in review
+
+A lane whose work is pushed and waiting on review is idle, but it still counts against `[lanes]
+max` and holds its disk. `aw sweep` reports it as `reclaim`, not `keep`, when no session holds it,
+it has no open notes, and every repository in it is clean and either proven merged or in an open
+change that the forge reports at exactly the repository's head (a draft counts). Anything less,
+such as a change at an older head, a closed one, or a forge that cannot be asked, keeps it.
+
+Plain `aw sweep --apply` leaves such a lane alone. `aw sweep --pushed --apply` re-checks it, then
+archives each unmerged branch under `refs/aw/archive/<name>/<time>`, as `aw discard` does, and
+destroys the lane: `teardown` runs and providers drop its data. To continue the work after review,
+`aw new --branch <branch>` starts a lane on the pushed branch. Like `aw discard`, it is the human's:
+a maintenance delegation does not cover `--pushed`.
+
 ## Parking and discarding
 
 - `aw park <lane>` releases the lane's leases, stops its servers and protects it indefinitely.

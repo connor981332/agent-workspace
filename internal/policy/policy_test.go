@@ -281,6 +281,7 @@ func TestCommandRules(t *testing.T) {
 			{"env FOO=1 bin/aw delegate --for 1h", Deny, "owner-only"},
 			{"bin/aw sweep", Allow, ""},
 			{"bin/aw sweep --apply", Deny, "owner-only"},
+			{"bin/aw sweep --pushed --apply", Deny, "owner-only"},
 			{"bin/aw finish --summary done", Allow, ""},
 			// Destructive Git.
 			{"git push --force origin aw/x", Deny, "git"},
@@ -694,5 +695,14 @@ func TestOwnerCopyNote(t *testing.T) {
 	}
 	if d := Decide(s, Call{Tool: Shell, Cwd: f.lane, Command: "touch " + quote(owner)}); d.Verdict != Deny || !strings.Contains(d.Message, quote(lane)) {
 		t.Errorf("writing the owner's copy: %s (%s)", d.Verdict, d.Message)
+	}
+}
+
+// A maintenance delegation covers sweeping proven-merged lanes, never reclaiming unmerged ones.
+func TestSweepPushedIsNotDelegable(t *testing.T) {
+	for args, want := range map[string]bool{"--apply": true, "--pushed --apply": false, "--pushed=true --apply": false} {
+		if got := Delegable("sweep", strings.Fields(args)); got != want {
+			t.Errorf("Delegable(sweep %s) = %v, want %v", args, got, want)
+		}
 	}
 }

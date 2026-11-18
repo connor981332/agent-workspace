@@ -1,5 +1,6 @@
-# GitHub's answer for exactly the lane's head decides: an open or closed pull request keeps the lane,
-# a merged one proves it (here a squash merge, which local evidence cannot prove).
+# GitHub's answer for exactly the lane's head decides: an open pull request makes the lane
+# reclaimable (aw sweep --pushed), a closed one keeps it, and a merged one proves it (here a squash
+# merge, which local evidence cannot prove).
 # req: R71
 # source: C1 test_generic.py::ForgeTests::test_exact_states
 # milestone: M2
@@ -14,10 +15,11 @@ git-revert .
 stubs gh
 forge-reply gh '^repos/acceptance/solo/pulls\?state=all&head=acceptance%3Aaw%2Ffeature-flag&base=main&per_page=100&page=1$' $WORK/pulls.json
 
+# Open at exactly its head, it is safe on the forge but not merged: reclaimable, never recycled.
 exec sh $WORK/pull.sh open null
 exec aw sweep --json
-json stdout .lanes[0].action keep
-stdout '\(github: change !7 is opened\)'
+json stdout .lanes[0].action reclaim
+stdout 'pushed and in review: solo: change !7 is open at '
 
 exec sh $WORK/pull.sh closed null
 exec aw sweep --json
