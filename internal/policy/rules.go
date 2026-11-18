@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/connor981332/agent-workspace/internal/shell"
@@ -352,7 +353,7 @@ func ownerOnlyRule(s Scope, c shell.Command) Decision {
 	if sub == "setup" && ownLaneSetup(s, rest) {
 		return allow()
 	}
-	if sub == "rehearse" && s.LaneRoot != "" && (len(rest) == 0 || ownLaneSetup(s, rest)) {
+	if sub == "rehearse" && s.LaneRoot != "" && (len(rest) == 0 || len(rest) == 1 && rest[0].Known && ownLaneRef(s, rest[0].Text)) {
 		return allow() // on a throwaway copy of its own lane; aw checks the lane again when it runs
 	}
 	if s.Delegated && delegable(sub, rest) {
@@ -427,13 +428,49 @@ func Delegable(command string, args []string) bool {
 }
 
 // ownLaneSetup reports whether this is a lane agent retrying its own lane's setup: its hooks are the
-// team's reviewed configuration, and a failed step's error tells the agent to run this. A lane is
-// named exactly here. aw checks the lane again when the command runs.
+// team's reviewed configuration, and a failed step's error tells the agent to run this, often with
+// --project. The lane is named by its name, its directory or its number, and the only flags are
+// the ones that make sense with a lane. aw checks the lane again when the command runs.
 func ownLaneSetup(s Scope, rest []shell.Word) bool {
-	if s.LaneRoot == "" || len(rest) != 1 || !rest[0].Known {
+	if s.LaneRoot == "" {
 		return false
 	}
-	return rest[0].Text == s.LaneName || rest[0].Text == filepath.Base(s.LaneRoot)
+	lane := ""
+	for i := 0; i < len(rest); i++ {
+		w := rest[i]
+		if !w.Known {
+			return false
+		}
+		switch t := w.Text; {
+		case t == "--json":
+		case t == "--project":
+			if i+1 >= len(rest) || !rest[i+1].Known || strings.HasPrefix(rest[i+1].Text, "-") {
+				return false
+			}
+			i++
+		case strings.HasPrefix(t, "--project="):
+		case strings.HasPrefix(t, "-"):
+			return false
+		default:
+			if lane != "" {
+				return false
+			}
+			lane = t
+		}
+	}
+	return lane != "" && ownLaneRef(s, lane)
+}
+
+// ownLaneRef reports whether a lane argument names the caller's own lane: its name, its directory
+// (01), or its number (1).
+func ownLaneRef(s Scope, ref string) bool {
+	dir := filepath.Base(s.LaneRoot)
+	if ref == s.LaneName || ref == dir {
+		return true
+	}
+	n, err := strconv.Atoi(ref)
+	m, err2 := strconv.Atoi(dir)
+	return err == nil && err2 == nil && n == m
 }
 
 // gitGlobal splits git's global options from the subcommand.

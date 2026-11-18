@@ -1,6 +1,7 @@
-# The guard lets a lane agent retry its own lane's setup, and nothing wider.
+# The guard lets a lane agent retry its own lane's setup, with the flags that go with a lane and
+# the lane named any way the command accepts, and nothing wider.
 # req: R31 R64
-# source: spec owner decision 2026-11-08
+# source: spec owner decision 2026-11-08; dogfood 0.4 bug report (flags, lane number)
 # milestone: M5
 
 workspace shop --init
@@ -8,9 +9,27 @@ env CLAUDE_CODE_SESSION_ID=s-1
 exec aw attach 'first'
 cd .worktrees/01
 exec awtest-hook bash 'aw setup first'
-! stdout 'deny'
+! stdout 'deny|"ask"'
 exec awtest-hook bash 'aw setup 01'
-! stdout 'deny'
+! stdout 'deny|"ask"'
+exec awtest-hook bash 'aw setup 1'
+! stdout 'deny|"ask"'
+exec awtest-hook bash 'bin/aw setup first --project web'
+! stdout 'deny|"ask"'
+exec awtest-hook bash 'aw setup first --project=web --json'
+! stdout 'deny|"ask"'
+exec awtest-hook bash 'aw setup --project web --project api 01'
+! stdout 'deny|"ask"'
+exec awtest-hook bash 'cd /tmp && aw setup first --project web | tail -5'
+! stdout 'deny|"ask"'
+exec awtest-hook bash 'aw setup first --containers'
+stdout '"permissionDecision":"ask"'
+exec awtest-hook bash 'aw setup first other'
+stdout '"permissionDecision":"ask"'
+exec awtest-hook bash 'aw setup 2 --project web'
+stdout '"permissionDecision":"ask"'
+exec awtest-hook bash 'aw setup --project web'
+stdout '"permissionDecision":"ask"'
 ! exec awtest-hook -harness codex bash 'aw setup'
 stderr 'only the human'
 ! exec awtest-hook -harness codex bash 'aw setup other'
