@@ -2,6 +2,14 @@
 
 Newest first. A line starting with **Breaking:** is called out by `aw upgrade`.
 
+## 0.6.0
+
+- `aw sweep` reports a lane whose work is pushed and waiting in review as `reclaim`, not `keep`: no session holds it, it has no open notes, and every repository is clean and either proven merged or in an open merge request that the forge reports at exactly the repository's head. `aw sweep --pushed --apply` archives its branches under `refs/aw/archive`, as `aw discard` does, and removes it; plain `--apply` leaves it alone. A maintenance delegation does not cover `--pushed`.
+- `aw rehearse` says when a lane's setup is waiting on an unmet prerequisite, with the prerequisite's fix, as soon as it starts waiting and again every minute, instead of printing nothing until it is met. A step stopped by the rehearsal's time limit says so, and the teardown after it gets its own time.
+- `accepted_findings` keys of `"**"`, `"**/*"` and `"/**"` now accept every file in a project at any depth in `aw doctor --projects` and `aw inspect`, as the 0.5.0 notes said; before, they matched one directory level, and `"/**"` failed validation.
+- Removing a lane no longer fails with "not fully merged" when the owner checkout is on a branch behind the default branch: aw deletes the branch once its own merge proof holds, whatever the owner checkout is on.
+- `aw sweep --apply --retry` finishes a removal that stopped after taking some of a lane's worktrees, instead of refusing it as a worktree on a detached HEAD. A removed worktree whose branch has unmerged work still keeps the lane.
+
 ## 0.5.0
 
 - **Breaking:** a lane checks a project out on first use, as it already set one up on first use. A new lane has only the projects in the new `[lanes] eager` list, those `aw new --projects` or `aw attach --projects` name, and what they `depends_on`. `bin/aw use <project>` checks out another, on the lane's branch, and `aw run`, `aw serve` and team commands do it for you. Until then the guard redirects a path under a missing project to `bin/aw use`. A workspace whose agents expect every project in every lane sets `eager`, or keeps `[lanes] setup = "eager"`, which still means every project at claim time. The workspace's own `prepare` and data providers run before most projects are checked out, so one that reads a project's directory needs that project in `eager`. `aw audit` proposes `eager` and `depends_on`.
