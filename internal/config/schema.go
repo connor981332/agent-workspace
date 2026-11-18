@@ -111,7 +111,7 @@ func oneOfEach(allowed ...string) func(v any) (string, string) {
 
 var (
 	nameRE      = regexp.MustCompile(`^[a-z][a-z0-9-]{0,39}$`)
-	acceptedRE  = regexp.MustCompile(`^[^\s/][^\s]*$`)
+	acceptedRE  = regexp.MustCompile(`^/?[^\s/][^\s]*$`)
 	namespaceRE = regexp.MustCompile(`^[a-z][a-z0-9]{0,19}$`)
 	nameFix     = "use lowercase letters, digits and hyphens, starting with a letter (at most 40 characters)"
 )
@@ -224,8 +224,9 @@ var schema = table("",
 			"local_files", strList("Gitignored files that are not secrets, such as a local properties file or a large generated "+
 				"schema, copied into every new lane from the owner checkout, relative to the project. Only the files named here are "+
 				"copied, as a clone where the file system can. Use secrets for anything an agent should not read."),
-			"accepted_findings", mapOf("Readiness findings a person has reviewed, by file: the key is a path relative to the project "+
-				"(dir/** matches a directory), and the value says why it is fine. aw rehearse and aw doctor --projects skip them; rehearsal "+
+			"accepted_findings", mapOf("Readiness findings a person has reviewed, by file: the key is a path relative to the project, "+
+				"matched as in .gitignore (** spans any number of directories, a key without a slash matches at any depth, "+
+				"a leading / anchors it, and dir/** matches a directory), and the value says why it is fine. aw rehearse and aw doctor --projects skip them; rehearsal "+
 				"still refuses a script that names the Compose project of an accepted Compose file, since starting it would reach the real one. "+
 				`For example: [projects.web.accepted_findings] followed by ".claude/settings.local.json" = "personal permissions, not server configuration".`,
 				acceptedRE, "name a file relative to the project, e.g. \".env.template\" or \"ci/**\"", str("")),

@@ -1,0 +1,36 @@
+# accepted_findings keys follow .gitignore's rules in aw doctor --projects: a leading ** spans any
+# number of directories, so "**" accepts every file in a project however deep, and a leading /
+# anchors a key to the project's root (#111).
+# req: R89
+# source: issue #111 (0.5.0 dogfood report)
+# milestone: M11
+
+owner-may-change
+workspace solo --single --init
+exec mkdir -p a/b/c
+cp $WORK/app.js app.js
+cp $WORK/app.js a/app.js
+cp $WORK/app.js a/b/c/app.js
+! exec aw doctor --projects
+stdout 'a/b/c/app.js'
+
+exec sh -c 'cp workspace.toml $WORK/team.toml && printf "\n[projects.solo.accepted_findings]\n\"**\" = \"reviewed\"\n" >> workspace.toml'
+exec aw doctor --projects
+stdout 'No project has anything'
+
+exec sh -c 'cp $WORK/team.toml workspace.toml && printf "\n[projects.solo.accepted_findings]\n\"**/*\" = \"reviewed\"\n" >> workspace.toml'
+exec aw doctor --projects
+stdout 'No project has anything'
+
+exec sh -c 'cp $WORK/team.toml workspace.toml && printf "\n[projects.solo.accepted_findings]\n\"/**\" = \"reviewed\"\n" >> workspace.toml'
+exec aw doctor --projects
+stdout 'No project has anything'
+
+exec sh -c 'cp $WORK/team.toml workspace.toml && printf "\n[projects.solo.accepted_findings]\n\"/app.js\" = \"reviewed\"\n" >> workspace.toml'
+! exec aw doctor --projects
+! stdout ' app.js:1'
+stdout 'a/app.js:1'
+stdout 'a/b/c/app.js:1'
+
+-- app.js --
+fetch("http://localhost:3000/x")
