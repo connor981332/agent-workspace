@@ -1,0 +1,24 @@
+# A repository's own Git hook that fails in a lane is reported as that hook's failure, with its
+# status passed on to Git, not as aw refusing the call.
+# req: R55 R59
+# source: dogfood of 0.4.0 (plans/dogfood-0.4.md 1.7)
+# milestone: M12
+
+workspace shop --init
+owner-may-change
+exec sh $WORK/hook.sh
+exec aw setup
+exec aw attach 'hooked work'
+cd web/.worktrees/01
+! exec git commit -q --allow-empty -m 'lane'
+stderr 'the team check failed'
+stderr 'this repository''s own pre-commit hook exited with status 1; its output is above \(aw refused nothing\)'
+! stderr 'so this call is refused'
+
+-- hook.sh --
+cat > web/.git/hooks/pre-commit <<'EOS'
+#!/bin/sh
+echo "the team check failed" >&2
+exit 1
+EOS
+chmod +x web/.git/hooks/pre-commit
