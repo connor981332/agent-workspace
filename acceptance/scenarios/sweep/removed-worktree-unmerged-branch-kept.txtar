@@ -1,0 +1,33 @@
+# A project worktree that is already gone leaves its branch to be proven: a branch with work not in
+# the base keeps the lane, as a worktree's would, and is not deleted (#113).
+# req: R31 R34
+# source: issue #113 (0.5.0 dogfood report)
+# milestone: M5
+
+workspace shop --eager --init
+exec aw attach 'one'
+lane-commit 01 web/x.txt 'unmerged work'
+env AW_SESSION=
+env AW_SESSION_PID=
+exec git -C web worktree remove --force .worktrees/01
+exec aw sweep --apply --json
+json stdout .lanes[0].action keep
+stdout 'web: not proven merged: 1 commit'
+! stdout 'detached HEAD'
+exec git -C web rev-parse --verify --quiet refs/heads/aw/one
+exists api/.worktrees/01
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[projects.web]
+directory = "web"
+
+[projects.api]
+directory = "api"

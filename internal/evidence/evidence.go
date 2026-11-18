@@ -23,6 +23,9 @@ const (
 	Patch    = "patch-equivalent" // every commit's patch is in the base
 	Content  = "content"          // merging the head into the base would change nothing
 	Forge    = "forge"            // the forge reports this exact head merged
+	// Gone is not a proof of a merge: the worktree and the branch were both already removed, by an
+	// earlier removal of the lane that did not finish, so nothing of the lane is left to lose.
+	Gone = "gone"
 )
 
 // Repo is what is known about one repository of a lane.
@@ -127,7 +130,39 @@ func Check(ctx context.Context, path, baseRef string, o Options) Repo {
 		}
 	}
 	r.Clean = r.Dirty == ""
+	return prove(ctx, g, r, baseRef)
+}
 
+// CheckRemoved examines a repository whose worktree an earlier removal of the lane already took
+// away, so that a retry can finish what it started (#113). With no worktree there is no uncommitted
+// work: what is left to protect is the branch, in the owner checkout at owner, and it is proven or
+// not as Check proves a worktree's head. With the branch gone too, nothing is left.
+func CheckRemoved(ctx context.Context, owner, path, branch, baseRef string) Repo {
+	r := Repo{Path: path, Branch: branch, BaseRef: baseRef, Clean: true}
+	g := run.In(owner)
+	if branch == "" {
+		r.Proof = Gone
+		return r
+	}
+	head, err := g.Line(ctx, "rev-parse", "--verify", "--quiet", "refs/heads/"+branch)
+	if err != nil {
+		r.Proof = Gone
+		return r
+	}
+	r.Head = head
+	if r.Base, err = g.Line(ctx, "rev-parse", "--verify", baseRef+"^{commit}"); err != nil {
+		r.Unknown, r.Reason = true, fmt.Sprintf("its base %s cannot be read", baseRef)
+		return r
+	}
+	return prove(ctx, g, r, baseRef)
+}
+
+// prove works out whether r.Head is merged into r.Base, in the repository g.
+func prove(ctx context.Context, g run.Git, r Repo, baseRef string) Repo {
+	unknown := func(format string, args ...any) Repo {
+		r.Unknown, r.Reason = true, fmt.Sprintf(format, args...)
+		return r
+	}
 	switch ok, err := g.OK(ctx, "merge-base", "--is-ancestor", r.Head, r.Base); {
 	case err != nil:
 		return unknown("checking ancestry failed: %v", err)

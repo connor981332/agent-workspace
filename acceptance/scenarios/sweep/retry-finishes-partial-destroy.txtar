@@ -1,0 +1,43 @@
+# A retry finishes a removal that stopped part way: a project worktree the failed attempt already
+# removed counts as removed, and only its branch is left to prove and delete. It is not mistaken
+# for a worktree on a detached HEAD (#113).
+# req: R31 R34
+# source: issue #113 (0.5.0 dogfood report)
+# milestone: M5
+
+workspace shop --eager --init
+exec aw attach 'one'
+env AW_SESSION=
+env AW_SESSION_PID=
+git-fail 'update-ref -d refs/heads/aw/one '
+! exec aw sweep --apply --json
+json stdout .lanes[0].result failed
+exec rm $WORK/.git-fail/git
+! exists web/.worktrees/01
+exists api/.worktrees/01
+exec git -C web rev-parse --verify --quiet refs/heads/aw/one
+
+exec aw sweep --json
+! stdout 'detached HEAD'
+exec aw sweep --apply --retry 1 --json
+json stdout .lanes[0].result done
+stdout 'an earlier removal already took some of its worktrees'
+! exists .worktrees/01
+! exists api/.worktrees/01
+! exec git -C web rev-parse --verify --quiet refs/heads/aw/one
+! exec git -C api rev-parse --verify --quiet refs/heads/aw/one
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[projects.web]
+directory = "web"
+
+[projects.api]
+directory = "api"
