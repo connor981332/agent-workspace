@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -80,15 +81,19 @@ func auditPrompt(ws *workspace.Workspace, c *config.Config, focus string) string
 		if len(changes) == 0 {
 			b.WriteString(" Nothing in aw's changelog has changed since.")
 		} else {
-			fmt.Fprintf(&b, " What changed in aw since %s, newest first (bin/aw changelog --json lists the configuration keys each item names):\n", since)
+			fmt.Fprintf(&b, " What changed in aw since %s, breaking changes first, then newest first (bin/aw changelog --json lists the configuration keys each item names):\n", since)
+			// A breaking change is never the one left out for want of room.
+			ordered := slices.Concat(
+				slices.DeleteFunc(slices.Clone(changes), func(ch audit.Change) bool { return !ch.Breaking }),
+				slices.DeleteFunc(slices.Clone(changes), func(ch audit.Change) bool { return ch.Breaking }))
 			used := 0
-			for i, ch := range changes {
+			for i, ch := range ordered {
 				line := "- " + ch.Version + ": " + ch.Text + "\n"
 				if ch.Breaking {
 					line = "- " + ch.Version + ", breaking: " + ch.Text + "\n"
 				}
-				if used+len(line) > maxChangelogPrompt {
-					fmt.Fprintf(&b, "- and %d more: read them with bin/aw changelog\n", len(changes)-i)
+				if used+len(line) > maxChangelogPrompt && !ch.Breaking {
+					fmt.Fprintf(&b, "- and %d more: read them with bin/aw changelog\n", len(ordered)-i)
 					break
 				}
 				b.WriteString(line)
