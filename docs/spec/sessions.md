@@ -102,16 +102,56 @@ servers stop), which also happens on detach, session end, process death and the 
 
 ## Lazy per-project setup
 
-Claiming a lane creates its worktrees, links and copies, and runs the workspace-level steps
-(`prepare`, data providers). A project's own steps (install, its lifecycle hooks, its checkout hook)
-run the first time the lane needs that project: `aw run`, `aw serve` or a team command in it. These
-already wait for the steps they need (`lifecycle.Needed`); they now start them if nothing has.
-`aw setup <lane>` runs everything, as today, and `--project <name>` one project. The guard's hook
-cannot start a setup, since it must stay fast and read-only, so a first *edit* in a project does not
-set it up; the first command that runs something there does. A command an agent runs directly in a
-project not set up yet is let through with a note naming `bin/aw run <project>` and
-`bin/aw setup <lane> --project <name>` (the warn tier). `[lanes] setup = "eager"` keeps every step
-at claim time, for a team whose agents run projects' commands directly.
+Claiming a lane creates the worktrees of the projects it starts with (see "Lazy worktrees" below),
+their links and copies, and runs the workspace-level steps (`prepare`, data providers) and each of
+those projects' `prepare`, which writes the env files commands read. A project's other steps
+(install, its lifecycle hooks, its checkout hook) run the first time the lane needs that project:
+`aw run`, `aw serve` or a team command in it. These already wait for the steps they need
+(`lifecycle.Needed`); they now start them if nothing has. `aw setup <lane>` runs everything, as
+today, and `--project <name>` one project. The guard's hook cannot start a setup, since it must
+stay fast and read-only, so a first *edit* in a project does not set it up; the first command that
+runs something there does. A command an agent runs directly in a project not set up yet is let
+through with a note naming `bin/aw run <project>` and `bin/aw setup <lane> --project <name>` (the
+warn tier).
+
+## Lazy worktrees
+
+From plans/dogfood-0.4.md (decisions 3 to 6). In a workspace of fifteen projects most lanes touch
+two or three, and a worktree costs time at claim and at recycle, disk, and noise in `aw lanes` and
+`aw sweep`. So a lane checks a project out on first use, as it already sets one up on first use.
+
+- **What a claim creates.** The projects in `[lanes] eager`, those named with `aw new --projects`
+  or `aw attach --projects`, and everything they `need`, recursively. `[lanes] setup = "eager"`
+  makes every project eager, for both checkout and setup, as before. A single-repository workspace
+  (project `directory = "."`) always has its one project: the lane root is its worktree. A warm
+  lane from the pool keeps the worktrees it already has, and the claim puts each of them on the new
+  lane's branch too: switching an existing worktree is cheap, and a worktree in the lane that is not
+  on its branch would be work aw cannot see.
+- **`bin/aw use <project>…`** adds projects to the caller's own lane: their worktrees on the lane's
+  branch, everything they need, their secret links, local files and link from the lane root, then
+  each one's `prepare`. Its other setup steps wait for first use, unless the project is eager. It is
+  idempotent, any agent may run it in its own lane without being asked, and it shows progress.
+  `aw run` and `aw serve` call it first for a project the lane does not have yet.
+- **What an agent sees first.** The lane root has links only to the projects it has. The generated
+  instructions list the workspace's projects and `bin/aw use`. A file tool or a shell command that
+  names a path under `<lane>/<project>` for a project the lane does not have is refused with "web
+  isn't checked out in lane 03 → run bin/aw use web": the redirect tier, since the agent fixes it
+  with one command and the human isn't asked. The hook decides this from the lane's recorded
+  repositories and a `Lstat`, so it stays read-only and within its budget. Without the redirect, a
+  write there would create a plain directory in the workspace repository's lane worktree.
+- **Dependencies.** `[projects.<name>] needs = ["<project>", …]` names the projects whose worktrees a
+  project's build or tests read. Using a project checks out what it needs first. Validation refuses
+  an unknown name and a cycle.
+- **Workspace-level steps.** The workspace's `prepare` and data providers run at claim time, before
+  most projects are checked out, so they may not assume that any project's directory exists in the
+  lane. The audit and design skills check for this; a team whose `prepare` needs a project lists it
+  in `eager`.
+- **Recycling and the pool.** Sweep, merge proof, discard and recycle already act on the lane's
+  recorded repositories, so a lane with some projects is proven, recycled and removed like any
+  other. A recycled lane keeps its worktrees, clean at the base, as a warm lane does today.
+- **Claude Code.** The owner checkout's local settings list each project's `.worktrees` directory
+  (architecture.md), and they reload while a session runs, so a worktree added by `aw use` is
+  reachable without a prompt or a restart.
 
 ## Capacity
 

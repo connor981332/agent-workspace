@@ -60,8 +60,10 @@ expected but can follow.
 
 ## Lanes (wishlist 4, 12, 14)
 
-- **R21.** A lane has a worktree in every project configured for lanes, all on the lane's branch, plus
-  its own provisioned data.
+- **R21.** A lane has a worktree, on the lane's branch, in each project configured for lanes that it
+  uses: the eager projects from its claim, and any other from its first use (`aw use`, `aw run`,
+  `aw serve`), with the projects each one needs. It has its own provisioned data. (Amended by
+  plans/dogfood-0.4.md: it was a worktree in every project.)
 - **R22.** A lane is identified to people by a name derived from its purpose, never by a GUID.
 - **R23.** Lanes belong to work. A lane survives the end, crash or restart of any session attached to
   it. A session holds a lane only while it is alive and has not released it, and every session has
