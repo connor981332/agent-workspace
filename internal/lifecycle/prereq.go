@@ -27,6 +27,7 @@ const (
 	prereqUnmetFor  = 10 * time.Second
 	prereqTimeout   = 20 * time.Second
 	prereqPoll      = 5 * time.Second
+	prereqRemind    = time.Minute // how often a wait that has not changed is said again
 	prereqWaitLimit = 30 * time.Minute
 	prereqFile      = "prerequisites.json"
 )
@@ -137,15 +138,17 @@ func ProjectPrereqs(c *config.Config, project string) []string {
 }
 
 // awaitPrereqs holds a project's setup until its prerequisites are met (decision 8): the step shows
-// as waiting on the human, keeps its place, and is checked again every few seconds. It reports false
-// when the wait ends without them, as when the human stops it or after half an hour.
+// as waiting on the human, keeps its place, and is checked again every few seconds. The wait is said
+// at once and again every minute while it lasts, so that a command in the foreground never waits in
+// silence (#110). It reports false when the wait ends without them, as when the human stops it or
+// after half an hour.
 func (r *Runner) awaitPrereqs(ctx context.Context, s Step, wait func(detail string)) (bool, string) {
 	names := ProjectPrereqs(r.Cfg, s.Project)
 	if len(names) == 0 || r.Owner == "" {
 		return true, ""
 	}
 	deadline := time.Now().Add(prereqWaitLimit)
-	said := ""
+	said, saidAt := "", time.Time{}
 	for {
 		var unmet []string
 		for _, n := range names {
@@ -157,8 +160,8 @@ func (r *Runner) awaitPrereqs(ctx context.Context, s Step, wait func(detail stri
 			return true, ""
 		}
 		detail := "waiting on you: " + strings.Join(unmet, "; ")
-		if detail != said {
-			said = detail
+		if detail != said || time.Since(saidAt) >= prereqRemind {
+			said, saidAt = detail, time.Now()
 			wait(detail)
 		}
 		if time.Now().After(deadline) {
