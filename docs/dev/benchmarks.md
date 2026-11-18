@@ -442,3 +442,25 @@ regression also passes under `go test -race ./internal/sandbox`; full unit/vet/a
 | serve-free-seat | 100 | 8.98 | 10.13 | 29.86 | 42.80 | 50.00 | pass |
 | grant-next | 100 | 27.82 | 35.01 | 44.85 | 45.03 | 50.00 | pass |
 | preempt | 100 | 7.90 | 9.21 | 9.61 | 36.14 | 50.00 | pass |
+
+### Linux laptop, 2026-11-17, v0.5.0 candidate (lazy worktrees)
+
+The same laptop, candidate code at `4f94011` (plans/dogfood-0.4.md Phases 1 to 3). Full absolute run
+with `TMPDIR=~/.cache/aw-tmp GOTMPDIR=~/.cache/aw-tmp go run ./bench`; no other aw tests or builds
+ran during measurement; host load was about 2. The fixture now lists its four projects in
+`[lanes] eager`, so lane operations measure the same work as before. Every absolute budget passes.
+An earlier run on the same code had `grant-next` over budget under load; run back to back with
+master's own bench at half scale, the two were the same (p99 44.8 ms each).
+
+| Operation | n | p50 ms | p95 ms | p99 ms | max ms | limit ms | result |
+|---|---|---|---|---|---|---|---|
+| hook | 1000 | 5.28 | 6.03 | 6.52 | 7.57 | 8.00 | pass |
+| whoami | 500 | 4.22 | 4.80 | 5.07 | 5.50 | 10.00 | pass |
+| config-get | 500 | 4.17 | 4.88 | 5.32 | 5.73 | 10.00 | pass |
+| attach-from-pool | 100 | 63.27 | 75.95 | 80.90 | 111.93 | 100.00 | pass |
+| new-until-harness | 100 | 66.45 | 82.54 | 83.66 | 106.30 | 150.00 | pass |
+| dashboard | 200 | 58.00 | 61.30 | 64.58 | 69.56 | 100.00 | pass |
+| ref-hook | 1000 | 5.11 | 6.08 | 6.59 | 7.65 | 8.00 | pass |
+| serve-free-seat | 100 | 9.15 | 10.24 | 10.44 | 30.58 | 50.00 | pass |
+| grant-next | 100 | 28.12 | 44.57 | 44.87 | 44.94 | 50.00 | pass |
+| preempt | 100 | 8.00 | 10.67 | 17.78 | 35.89 | 50.00 | pass |
