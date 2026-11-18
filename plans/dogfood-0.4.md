@@ -13,7 +13,7 @@ result into work.
 
 **Updated:** 2026-11-17
 
-**Branches / MRs:** #107 (this plan and Phase 1), `feat/dogfood-0.4-phase2` (Phase 2).
+**Branches / MRs:** #107 (this plan and Phase 1), #108 (Phase 2).
 
 **Done:** triage, decisions and the Claude Code trust experiment (below). Phase 1, each item with a
 scenario or table test that fails on master first. Differences from the plan as written:
