@@ -29,6 +29,9 @@ const (
 	ActionRecycle = "recycle" // reset to the base and returned to the pool
 	ActionDestroy = "destroy" // removed: beyond the pool size, or past retention
 	ActionPooled  = "pooled"  // a warm lane that stays in the pool
+	// ActionReclaim: removed only with --pushed. The lane's work is not merged, but the forge holds
+	// it, in an open change at exactly the lane's head, so its branches are archived and it is removed.
+	ActionReclaim = "reclaim"
 )
 
 // Decision is what sweep does with one lane, and why.
@@ -76,6 +79,9 @@ type SweepOptions struct {
 	// Only, when set, are the lanes to report and act on; the rest are left alone.
 	Only []int
 	Now  time.Time
+	// Pushed also removes the lanes whose unmerged work is in an open change on the forge at exactly
+	// their heads (ActionReclaim). Without it, those lanes are reported and left alone.
+	Pushed bool
 }
 
 // Sweep decides, for every lane, whether it is kept, recycled or destroyed. With Apply, it carries
@@ -158,7 +164,7 @@ func (m *Manager) Sweep(ctx context.Context, o SweepOptions) (*SweepReport, erro
 		// The proof is still worked out, so that whoever fixes the failure can see whether the lane
 		// is safe to recycle.
 		if e, ok := failedLanes[l.Number]; ok && o.Retry != e.ID {
-			d.Action, d.Reason = ActionKeep, fmt.Sprintf("an earlier %s failed (%s) → fix the cause, then aw sweep --apply --retry %d", e.Kind, e.Detail, e.ID)
+			d.Action, d.Reason = ActionKeep, fmt.Sprintf("an earlier %s failed (%s) → fix the cause, then aw sweep --apply%s --retry %d", e.Kind, e.Detail, pushedFlag(e.Kind), e.ID)
 			d.Next = nil
 		}
 	}
@@ -202,7 +208,7 @@ func (m *Manager) Sweep(ctx context.Context, o SweepOptions) (*SweepReport, erro
 		return rep, nil
 	}
 	for _, d := range rep.Lanes {
-		if d.Action != ActionRecycle && d.Action != ActionDestroy {
+		if d.Action != ActionRecycle && d.Action != ActionDestroy && (d.Action != ActionReclaim || !o.Pushed) {
 			continue
 		}
 		if retryLane != 0 && d.Number != retryLane {
@@ -335,6 +341,11 @@ func (m *Manager) decide(ctx context.Context, d *Decision, sessions []state.Sess
 		keep("%s", held)
 		return
 	}
+	if pushed, ok := inReview(d.Repos, d.stored); ok && len(reasons) > 0 {
+		d.Action, d.Reason = ActionReclaim, "pushed and in review: "+strings.Join(pushed, "; ")
+		d.Next = []string{fmt.Sprintf("aw sweep --pushed --apply %s removes it: its branches are archived under %s%s first, and its lane data is dropped", l.Name, ArchivePrefix, l.Name)}
+		return
+	}
 	if len(reasons) > 0 {
 		prefix := ""
 		if state.HandedOff(m.Store.DB(), l.Number, l.Generation) {
@@ -345,6 +356,44 @@ func (m *Manager) decide(ctx context.Context, d *Decision, sessions []state.Sess
 	}
 	d.Action, d.Reason = ActionRecycle, "every repository is clean and proven merged"
 }
+
+// inReview reports whether a lane whose repositories are all clean can be reclaimed: each one is
+// proven merged, or the forge reports an open change whose head is exactly the repository's head,
+// and at least one is in such a change. It says, for each change, where the work is.
+func inReview(repos []evidence.Repo, stored []state.LaneRepo) ([]string, bool) {
+	if len(repos) != len(stored) {
+		return nil, false
+	}
+	var pushed []string
+	for i, ev := range repos {
+		switch {
+		case ev.Unknown || !ev.Clean:
+			return nil, false
+		case ev.Proof != "":
+			continue
+		}
+		ch, _ := ev.Forge.(*forge.Change)
+		if ch == nil || ch.Availability != forge.Verified || ch.State != "opened" || ch.SourceHead != ev.Head || ev.Head == "" {
+			return nil, false
+		}
+		draft := ""
+		if ch.Draft {
+			draft = "draft "
+		}
+		pushed = append(pushed, fmt.Sprintf("%s: %schange !%d is open at %s", repoLabel(stored[i]), draft, ch.IID, short(ev.Head)))
+	}
+	return pushed, len(pushed) > 0
+}
+
+// pushedFlag is the flag a sweep needs to carry out an action again.
+func pushedFlag(action string) string {
+	if action == ActionReclaim {
+		return " --pushed"
+	}
+	return ""
+}
+
+func short(sha string) string { return sha[:min(len(sha), 12)] }
 
 // cleanStep says how to make a repository clean enough to recycle.
 func cleanStep(r state.LaneRepo, ev evidence.Repo) string {
@@ -484,7 +533,11 @@ func (m *Manager) apply(ctx context.Context, d *Decision, o SweepOptions) error 
 		}
 		current, _ := state.Sessions(m.Store.DB())
 		m.decide(ctx, recheck, current, o.Caller)
-		if recheck.Action != ActionRecycle || recheck.fingerprint() != before {
+		want := ActionRecycle // a lane removed for a full pool was decided recyclable
+		if d.Action == ActionReclaim {
+			want = ActionReclaim
+		}
+		if recheck.Action != want || recheck.fingerprint() != before {
 			d.Result, d.Reason = "skipped", "it changed since it was checked: "+recheck.Reason
 			return nil
 		}
@@ -520,7 +573,7 @@ func (m *Manager) apply(ctx context.Context, d *Decision, o SweepOptions) error 
 	if err == nil {
 		d.Result = "done"
 	} else {
-		err = fmt.Errorf("%w → fix the cause, then aw sweep --apply --retry %d", err, jid)
+		err = fmt.Errorf("%w → fix the cause, then aw sweep --apply%s --retry %d", err, pushedFlag(d.Action), jid)
 	}
 	return err
 }

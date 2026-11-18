@@ -393,7 +393,8 @@ func ownerOnlyRule(s Scope, c shell.Command) Decision {
 	if sub == "archives" && hasArg(rest, "--restore") {
 		return ask("owner-only", "aw archives --restore makes branches in the owner's repositories, which only the human does%s → approve it if you asked for this; aw archives, without --restore, lists them", where)
 	}
-	if sub == "sweep" && !s.Delegated && (hasArg(rest, "--apply") || hasArg(rest, "--retry")) {
+	if sub == "sweep" && (hasArg(rest, "--apply") || hasArg(rest, "--retry")) {
+		// A maintenance delegation was allowed above; --pushed removes unmerged work, which none covers.
 		return ask("owner-only", "aw sweep --apply removes lanes, which only the human does%s → approve it if you asked for this; aw sweep, without --apply, shows what it would do", where)
 	}
 	return allow()
@@ -419,10 +420,13 @@ func delegable(sub string, rest []shell.Word) bool {
 }
 
 // Delegable reports whether an aw command is covered by a maintenance delegation. Starting agents,
-// discarding work, granting anything, changing the pin and removing containers never are.
+// discarding work (aw sweep --pushed removes unmerged lanes), granting anything, changing the pin
+// and removing containers never are.
 func Delegable(command string, args []string) bool {
 	switch command {
-	case "setup", "park", "unpark", "sweep":
+	case "sweep":
+		return !slices.ContainsFunc(args, func(a string) bool { return a == "--pushed" || strings.HasPrefix(a, "--pushed=") })
+	case "setup", "park", "unpark":
 		return true
 	case "containers":
 		return len(args) > 0 && args[0] == "up"

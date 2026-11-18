@@ -71,7 +71,9 @@ expected but can follow.
 - **R24.** Claiming a lane from the warm pool must be near-instant (see [speed.md](speed.md)).
 - **R25.** Cleanup removes a lane only when every repository in it is clean and its work is proven
   merged (see [lifecycle.md](lifecycle.md#merge-proof)). A gone remote branch, a handoff or a quiet
-  session proves nothing.
+  session proves nothing. The one exception is asked for by name: `aw sweep --pushed --apply` also
+  removes a clean lane whose unmerged work the forge holds in an open change at exactly its head,
+  archiving its branches first (see [lifecycle.md](lifecycle.md#reclaiming-work-in-review)).
 - **R26.** Proven-merged lanes are recycled into a warm pool of configurable size. Lanes beyond the
   pool size or past the retention age are destroyed.
 - **R27.** Abandoning unmerged work requires an explicit command, and the branches are archived under

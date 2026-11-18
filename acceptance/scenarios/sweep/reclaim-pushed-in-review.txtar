@@ -1,0 +1,70 @@
+# A lane whose work is not merged but sits in an open merge request at exactly its head is reported
+# as reclaim. Plain --apply leaves it; --pushed --apply archives its branch and removes it. A head the
+# merge request does not have, a closed one, or uncommitted work keeps the lane.
+# req: R25 R27
+# source: issue 116
+# milestone: M2
+
+workspace solo --single --init --forge gitlab
+exec aw attach 'add feature flag'
+lane-commit 01 a.txt 'first'
+stubs glab
+forge-reply glab '^projects/acceptance%2Fsolo/merge_requests\?' $WORK/mrs.json
+forge-reply glab '^projects/acceptance%2Fsolo/merge_requests/[0-9]+$' $WORK/mr.json
+forge-reply glab '^projects/acceptance%2Fsolo$' $WORK/project.json
+
+# Open at the lane's head: reclaimable.
+exec sh $WORK/mr.sh opened HEAD
+exec aw sweep --json
+json stdout .lanes[0].action reclaim
+stdout '"reason": "pushed and in review: solo: change !3 is open at [0-9a-f]{12}"'
+exec aw sweep
+stdout '^01  feature-flag  reclaim  pushed and in review: solo: change !3 is open at '
+stdout '^To reclaim a lane whose work is in review:$'
+stdout '^   aw sweep --pushed --apply feature-flag removes it: its branches are archived under refs/aw/archive/feature-flag first, and its lane data is dropped$'
+! stdout 'Nothing was changed'
+exec aw sweep --pushed
+stdout 'run aw sweep --pushed --apply to recycle or remove 1 lane'
+
+# Plain --apply leaves it alone.
+exec aw sweep --apply --json
+json stdout .lanes[0].action reclaim
+! stdout '"result"'
+exec git -C .worktrees/01 symbolic-ref --short HEAD
+stdout '^aw/feature-flag$'
+
+# The merge request has an older head: the lane's last commit is only here, so it is kept.
+exec sh $WORK/mr.sh opened HEAD~1
+exec aw sweep --json
+json stdout .lanes[0].action keep
+# Closed at its head: kept.
+exec sh $WORK/mr.sh closed HEAD
+exec aw sweep --json
+json stdout .lanes[0].action keep
+stdout '\(gitlab: change !3 is closed\)'
+# Uncommitted work: kept, though the merge request is open at its head.
+exec sh $WORK/mr.sh opened HEAD
+exec sh -c 'echo wip > "$OWNER/.worktrees/01/wip.txt"'
+exec aw sweep --pushed --apply --json
+json stdout .lanes[0].action keep
+exec rm $OWNER/.worktrees/01/wip.txt
+
+# --pushed --apply archives the branch, then removes the lane.
+exec git -C .worktrees/01 rev-parse HEAD
+cp stdout $WORK/head
+exec aw sweep --pushed --apply --json
+json stdout .lanes[0].action reclaim
+json stdout .lanes[0].result done
+! exists .worktrees/01
+! exec git rev-parse --verify --quiet refs/heads/aw/feature-flag
+exec sh -c 'git for-each-ref --format="%(objectname)" refs/aw/archive/feature-flag/ | cmp - "$WORK/head"'
+exec aw sweep --json
+stdout '"lanes": \[\]'
+
+-- project.json --
+{"id": 10}
+-- mr.sh --
+# mr.sh <state> <revision of the lane the merge request's head is at>
+head=$(git -C "$OWNER/.worktrees/01" rev-parse "$2")
+printf '[{"iid": 3, "source_branch": "aw/feature-flag", "target_branch": "main", "source_project_id": 10, "target_project_id": 10}]' > "$WORK/mrs.json"
+printf '{"iid": 3, "state": "%s", "draft": false, "diff_refs": {"head_sha": "%s"}}' "$1" "$head" > "$WORK/mr.json"
