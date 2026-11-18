@@ -573,8 +573,8 @@ func (m *Manager) recycle(ctx context.Context, d *Decision) error {
 	})
 }
 
-// deleteBranch deletes a proven-merged lane branch: with -d when Git itself sees it merged, and
-// with -D only when it still points at the head that was proven.
+// deleteBranch deletes a proven-merged lane branch, only while it still points at the head that
+// was proven.
 func deleteBranch(ctx context.Context, g run.Git, branch string, ev evidence.Repo) error {
 	if branch == "" {
 		return nil
@@ -586,12 +586,20 @@ func deleteBranch(ctx context.Context, g run.Git, branch string, ev evidence.Rep
 	if head != ev.Head {
 		return fmt.Errorf("branch %s moved to %s after it was proven merged at %s; it was kept", branch, head[:12], ev.Head[:12])
 	}
-	flag := "-d"
-	if ev.Proof != evidence.Ancestor {
-		flag = "-D"
+	return dropBranch(ctx, g, branch, head)
+}
+
+// dropBranch deletes a lane branch that aw has proven merged (or archived) at head. aw's proof is
+// against the lane's base, so Git's own check is not asked: git branch -d judges "merged" against
+// the current HEAD or the branch's upstream, and the owner checkout may be on any branch (#112).
+// The ref is deleted only if it still points at head, so commits made since are never lost, and
+// the branch's configuration (its upstream) goes with it, as git branch -D would.
+func dropBranch(ctx context.Context, g run.Git, branch, head string) error {
+	if _, err := g.Run(ctx, "update-ref", "-d", "refs/heads/"+branch, head); err != nil {
+		return err
 	}
-	_, err = g.Run(ctx, "branch", flag, branch)
-	return err
+	_, _ = g.Run(ctx, "config", "--remove-section", "branch."+branch) // fails only when there is none
+	return nil
 }
 
 // destroy removes a lane: its project worktrees, then the lane root, then its record. Nothing is
@@ -640,17 +648,17 @@ func (m *Manager) destroy(ctx context.Context, l state.Lane, stored []state.Lane
 		}
 		if r.Branch != "" {
 			if head, err := g.Line(ctx, "rev-parse", "--verify", "--quiet", "refs/heads/"+r.Branch); err == nil {
-				flag := "-d"
-				if archived {
-					flag = "-D" // its head is under refs/aw/archive
-				} else if ok, _ := g.OK(ctx, "merge-base", "--is-ancestor", head, r.BaseRef); !ok {
-					// Proven by patch, content or the forge: archived first, as a recycle does.
-					if err := archiveTip(ctx, g, l.Name, head, time.Now()); err != nil {
-						return err
+				// Archived, its head is under refs/aw/archive. Otherwise it was proven merged into
+				// its base: by ancestry, or by patch, content or the forge, which archive it first, as
+				// a recycle does.
+				if !archived {
+					if ok, _ := g.OK(ctx, "merge-base", "--is-ancestor", head, r.BaseRef); !ok {
+						if err := archiveTip(ctx, g, l.Name, head, time.Now()); err != nil {
+							return err
+						}
 					}
-					flag = "-D"
 				}
-				if _, err := g.Run(ctx, "branch", flag, r.Branch); err != nil {
+				if err := dropBranch(ctx, g, r.Branch, head); err != nil {
 					return err
 				}
 			}

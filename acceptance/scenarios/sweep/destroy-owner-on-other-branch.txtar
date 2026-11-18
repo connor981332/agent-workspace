@@ -1,0 +1,38 @@
+# A lane proven merged into the default branch is removed whichever branch the owner checkout is on,
+# even one behind the default branch: aw's proof decides, not Git's view from the owner's HEAD (#112).
+# req: R31 R34
+# source: issue #112 (0.5.0 dogfood report)
+# milestone: M5
+
+workspace shop --eager --init
+owner-may-change
+exec git -C web commit -q --allow-empty -m 'ahead on main'
+exec git -C web push -q origin HEAD:main
+exec git -C web switch -q -c feature HEAD~1
+exec aw attach 'one'
+exec git -C web merge-base --is-ancestor aw/one origin/main
+! exec git -C web merge-base --is-ancestor aw/one HEAD
+env AW_SESSION=
+env AW_SESSION_PID=
+exec aw sweep --apply --json
+json stdout .lanes[0].result done
+! exists .worktrees/01
+! exists web/.worktrees/01
+! exec git -C web rev-parse --verify --quiet refs/heads/aw/one
+exec git -C web symbolic-ref --short HEAD
+stdout '^feature$'
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[projects.web]
+directory = "web"
+
+[projects.api]
+directory = "api"
