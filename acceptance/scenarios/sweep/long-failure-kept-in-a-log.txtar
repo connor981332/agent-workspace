@@ -19,7 +19,7 @@ real=$(command -v git)
 cat > "$WORK/wrap/git" <<EOS
 #!/bin/sh
 case "\$*" in
-*"branch -d aw/one"*)
+*"update-ref -d refs/heads/aw/one"*)
 	echo 'the first thing git said' >&2
 	i=0; while [ \$i -lt 40 ]; do i=\$((i + 1)); echo "more noise \$i" >&2; done
 	exit 1 ;;
