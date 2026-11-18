@@ -291,7 +291,7 @@ func startConfigAgent(cmd *cobra.Command, a configAgent) error {
 	default:
 		if full = noFreeLane(ws, c, a.purpose); full != nil {
 			failed = full
-		} else if failed = startLaneSession(cmd, a.purpose, harness, "", "", false, a.dropOtherHooks, true, launch.PromptArgs(harness, prompt+laneNote)); failed == nil {
+		} else if failed = startLaneSession(cmd, a.purpose, harness, "", "", nil, false, a.dropOtherHooks, true, launch.PromptArgs(harness, prompt+laneNote)); failed == nil {
 			return nil
 		}
 		fmt.Fprintf(errOut, "%s: no lane could be created (%v). Starting the agent in the owner checkout to work on that.\n", a.name, failed)

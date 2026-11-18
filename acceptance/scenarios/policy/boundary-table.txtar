@@ -11,7 +11,7 @@
 # changed: reads outside the lane are allowed (plans/agent-feedback.md, items 1 and 2), where C1
 # refused them.
 
-workspace shop --init
+workspace shop --eager --init
 exec aw attach 'first thing'
 exec aw attach 'second thing'
 exec sh -c 'ln -s "$OWNER" .worktrees/01/escape'

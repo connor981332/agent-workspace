@@ -88,16 +88,19 @@ type Audit struct {
 }
 
 type Lanes struct {
-	Max              int              `json:"max"`
-	Pool             int              `json:"pool"`
-	Retention        Duration         `json:"retention"`
-	ArchiveRetention Duration         `json:"archive_retention"`
-	Setup            string           `json:"setup"` // lazy or eager
-	Hostname         string           `json:"hostname"`
-	ServerCapacity   int              `json:"server_capacity"`
-	PortStride       int              `json:"port_stride"`
-	BranchPrefix     string           `json:"branch_prefix"`
-	Data             map[string]*Data `json:"data"`
+	Max              int      `json:"max"`
+	Pool             int      `json:"pool"`
+	Retention        Duration `json:"retention"`
+	ArchiveRetention Duration `json:"archive_retention"`
+	Setup            string   `json:"setup"` // lazy or eager
+	// Eager are the projects every lane checks out and sets up when it is claimed; the rest are
+	// checked out on first use. setup = "eager" makes every project eager.
+	Eager          []string         `json:"eager"`
+	Hostname       string           `json:"hostname"`
+	ServerCapacity int              `json:"server_capacity"`
+	PortStride     int              `json:"port_stride"`
+	BranchPrefix   string           `json:"branch_prefix"`
+	Data           map[string]*Data `json:"data"`
 }
 
 type Data struct {
@@ -858,6 +861,7 @@ func (c *Config) check(team *doc) Errors {
 		fail(ws.child("schema"), "must be 1 or more", fmt.Sprintf("set schema = %d", SchemaVersion))
 	}
 
+	c.checkEager(fail)
 	for _, name := range sortedMap(c.Prerequisites) {
 		if c.Prerequisites[name].Check == "" {
 			fail(Path{"prerequisites", name}, "has no check", `add check = "<a command that exits 0 when it is met>"`)
@@ -1129,6 +1133,19 @@ func (c *Config) check(team *doc) Errors {
 		}
 	}
 	return errs
+}
+
+// checkEager checks that [lanes] eager names projects that have lanes.
+func (c *Config) checkEager(fail func(Path, string, string)) {
+	for i, name := range c.Lanes.Eager {
+		p, ok := c.Projects[name]
+		switch {
+		case !ok:
+			fail(Path{"lanes", "eager"}.index(i), fmt.Sprintf("there is no project named %q", name), "known projects: "+strings.Join(sortedMap(c.Projects), ", "))
+		case p.Lanes == "shared":
+			fail(Path{"lanes", "eager"}.index(i), fmt.Sprintf("project %s is shared, so lanes have no worktree of it", name), "remove it from eager")
+		}
+	}
 }
 
 func (c *Config) checkNeeds(needs []string, p Path, fail func(Path, string, string)) {

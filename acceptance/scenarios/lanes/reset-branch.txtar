@@ -5,7 +5,7 @@
 # source: plans/agent-feedback.md, item 10
 # milestone: M12
 
-workspace shop --init --repos web,api
+workspace shop --eager --init --repos web,api
 env CLAUDE_CODE_SESSION_ID=s-1
 exec aw attach 'first ticket'
 lane-commit 01 web/a.txt 'first ticket work'

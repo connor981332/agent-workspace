@@ -7,7 +7,7 @@
 # milestone: M12
 
 owner-may-change
-workspace shop --init
+workspace shop --eager --init
 exec sh $WORK/hook.sh
 exec aw setup
 exec aw rehearse

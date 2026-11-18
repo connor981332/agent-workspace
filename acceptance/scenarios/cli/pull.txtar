@@ -5,7 +5,7 @@
 # source: RideTracker dogfood, 2026-11-12 (lanes start from origin as last fetched)
 # milestone: M12
 
-workspace shop --init --repos web,api,mobile
+workspace shop --eager --init --repos web,api,mobile
 owner-may-change
 # A teammate pushes to each project's origin.
 exec sh -c 'for p in web api mobile; do git clone -q "$WORK/remotes/$p.git" "$WORK/mate-$p" && git -C "$WORK/mate-$p" commit -q --allow-empty -m teammate && git -C "$WORK/mate-$p" push -q origin HEAD; done'

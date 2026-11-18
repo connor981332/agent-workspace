@@ -101,12 +101,15 @@ func sessionIdentity(harness, session string) (lanes.Identity, error) {
 func newAttachCmd() *cobra.Command {
 	var asJSON, wait bool
 	var branch, harness, session, role string
+	var projects []string
 	cmd := &cobra.Command{
 		Use:   `attach "<purpose>"`,
 		Short: "Claim a lane for this session and say where to work",
 		Long: `Claim a lane for the work described by the purpose: a warm lane from the pool if there is one, or
 a new one. The lane is named from the purpose (aw attach "fix checkout tax rounding" gives
-checkout-tax), and has a worktree of every project on the lane's branch.
+checkout-tax). It has a worktree, on the lane's branch, of each project in [lanes] eager and each
+one --projects names; bin/aw use <project> checks out any other, and aw run and aw serve do it on
+first use.
 
 The same session attaching again gets the same lane. Work in the lane root aw prints. aw lanes
 lists the lanes that exist.
@@ -131,7 +134,7 @@ end of the step's log and the command that retries it.`,
 			if err := checkRole(w.cfg, role, who != lanes.Identity{}); err != nil {
 				return err
 			}
-			c, err := m.Claim(cmd.Context(), lanes.ClaimRequest{Purpose: args[0], Branch: branch, Who: who})
+			c, err := m.Claim(cmd.Context(), lanes.ClaimRequest{Purpose: args[0], Branch: branch, Who: who, Projects: projects})
 			if err == nil {
 				err = applyRole(cmd.Context(), w, c, role)
 			}
@@ -193,6 +196,7 @@ end of the step's log and the command that retries it.`,
 	cmd.Flags().BoolVar(&wait, "wait", false, "wait for the lane's setup to finish, and print the result")
 	cmd.Flags().StringVar(&role, "role", "", "the team role this lane works under")
 	cmd.Flags().StringVar(&branch, "branch", "", "start on this existing branch (tracking origin's when it is only there) instead of a new one")
+	cmd.Flags().StringSliceVar(&projects, "projects", nil, "check these projects out at once, besides [lanes] eager; the rest are checked out on first use (bin/aw use)")
 	cmd.Flags().StringVar(&harness, "harness", "", "the harness of the attaching session (normally from AW_SESSION or the hook)")
 	cmd.Flags().StringVar(&session, "session", "", "the harness's session ID (normally from AW_SESSION or the hook)")
 	cmd.Flags().BoolVar(&asJSON, "json", false, "print the lane as JSON")

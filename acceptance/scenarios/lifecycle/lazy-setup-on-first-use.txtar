@@ -6,7 +6,7 @@
 # source: plans/dogfood-0.3.md 5.6 (docs/spec/sessions.md, "Lazy per-project setup")
 # milestone: M12
 
-workspace shop --init
+workspace shop --eager --init
 exec aw attach 'add feature flag'
 exec aw lanes --json
 ! stdout 'setting-up'

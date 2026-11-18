@@ -4,7 +4,7 @@
 # source: C1 test_no_guessing_plan_association_and_json_is_compact
 # milestone: M2
 
-workspace shop --init
+workspace shop --eager --init
 exec aw attach 'make the checkout page handle every currency that the payment provider supports today'
 lane-commit 01 web/x.txt 'work'
 exec aw finish --summary 'Handles every currency, including the zero-decimal ones. Verify JPY and KRW by hand in the sandbox, then check the receipts. Rounding follows the provider.' 01

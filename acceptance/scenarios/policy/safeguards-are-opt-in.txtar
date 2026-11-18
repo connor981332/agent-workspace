@@ -5,7 +5,7 @@
 # milestone: M12
 
 stubs claude
-workspace shop --init
+workspace shop --eager --init
 owner-may-change
 exec sh -c 'printf "SECRET=1\n" > web/.env'
 exec aw attach 'add feature flag'

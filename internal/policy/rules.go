@@ -116,6 +116,9 @@ func pathsRule(s Scope, c shell.Command) Decision {
 			}
 			return deny("boundary", "the path %s is relative to a directory aw cannot determine → use an absolute path inside the lane", quote(text))
 		}
+		if project := s.notCheckedOut(abs); project != "" {
+			return s.useRedirect(project)
+		}
 		if s.isSecret(abs) {
 			return allow() // the secrets rule decides, with its own message
 		}

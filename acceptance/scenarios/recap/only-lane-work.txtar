@@ -6,7 +6,7 @@
 # source: RideTracker dogfood, 2026-11-12 (untouched repositories shown as lane work)
 # milestone: M12
 
-workspace shop --init --repos web,api
+workspace shop --eager --init --repos web,api
 exec aw attach 'add feature flag'
 lane-commit 01 web/a.txt 'first'
 exec aw recap

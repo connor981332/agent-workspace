@@ -151,7 +151,10 @@ var schema = table("",
 		"setup", str("lazy: claiming a lane runs the workspace's own steps, and each project's steps (install, its hooks, its "+
 			"checkout hook) run the first time a command needs the project: aw run, aw serve or a team command there, or aw setup. "+
 			"eager: every step runs in the background as soon as the lane is claimed, for agents that run projects' commands "+
-			"directly rather than through aw run.").oneOf("lazy", "eager").withDefault("lazy"),
+			"directly rather than through aw run. It also makes every project eager (see eager).").oneOf("lazy", "eager").withDefault("lazy"),
+		"eager", strList("Projects every lane checks out, and sets up, as soon as it is claimed, such as the ones most tasks touch. "+
+			"A lane checks out any other project on first use: bin/aw use <project>, or aw run or aw serve in it, together with "+
+			"the projects it depends_on. aw new --projects names more for one lane."),
 		"hostname", str("Each lane's hostname. {lane} is the lane number, {namespace} the namespace.").
 			withDefault("lane-{lane}.localhost").checked(func(v any) (string, string) {
 			if !strings.Contains(v.(string), "{lane}") {
@@ -212,7 +215,8 @@ var schema = table("",
 			"prerequisites", strList("Names of [prerequisites] this project's setup needs met on the machine, such as a VPN or a signed-in CLI. "+
 				"aw checks them before the project's setup in a lane, and waits on you while one is not met."),
 			"smoke", str("A quick command that proves the project works in a lane. aw rehearse runs it."),
-			"depends_on", strList("Projects this one consumes. A change set merges those first (R69)."),
+			"depends_on", strList("Projects this one consumes. A change set merges those first (R69), and a lane that checks this "+
+				"project out checks those out too."),
 			"publication", strList("Actions pre-authorized in this project, as in [publication] allow.").checked(oneOfEach(publicationActions...)),
 			"generated_contracts", strList("Files generated from a contract, from the project root (** matches directories). Agents may not edit them (R70)."),
 			"secrets", strList("Files that are not in Git, such as .env, linked read-only into every lane from the owner "+

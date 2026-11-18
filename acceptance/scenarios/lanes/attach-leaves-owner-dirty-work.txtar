@@ -4,7 +4,7 @@
 # source: C1 test_lanes.py::test_attach_is_protected_and_idempotent
 # milestone: M2
 
-workspace shop --init
+workspace shop --eager --init
 exec sh -c 'echo edit >> README.md && echo staged > web/staged.txt && git -C web add staged.txt && echo new > api/untracked.txt'
 owner-snapshot
 exec aw attach 'add feature flag'

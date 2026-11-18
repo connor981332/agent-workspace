@@ -310,6 +310,20 @@ func resolveScope(p Payload, version string, t *timing.Recorder) (*policy.Scope,
 			scope.ProjectPublication[dir] = pr.Publication
 		}
 	}
+	// Projects the lane has not checked out yet (lazy worktrees), by where their link would be.
+	have := map[string]bool{}
+	for _, r := range repos {
+		have[r.Project] = true
+	}
+	for name, pr := range cfg.Projects {
+		if pr.Directory == "." || pr.Lanes == "shared" || have[name] {
+			continue
+		}
+		if scope.NotCheckedOut == nil {
+			scope.NotCheckedOut = map[string]string{}
+		}
+		scope.NotCheckedOut[filepath.Join(shell.Resolve(root), filepath.FromSlash(pr.Directory))] = name
+	}
 	// Projects whose setup waits for their first use, so that a command run there directly is told.
 	if cfg.Lanes.Setup != "eager" {
 		if steps, err := state.Steps(s.DB(), n, lane.Generation); err == nil {

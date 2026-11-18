@@ -4,7 +4,7 @@
 # source: spec (no candidate source)
 # milestone: M3
 
-workspace shop --init
+workspace shop --eager --init
 stubs claude
 env STUB_HARNESS_SLEEP=20
 exec sh -c 'aw new "add feature flag" > /dev/null 2>&1 & echo started'

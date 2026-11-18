@@ -51,6 +51,7 @@ namespace = "shop"
 schema = 1
 
 [lanes]
+eager = ["web"]
 pool = 0
 
 [projects.web]

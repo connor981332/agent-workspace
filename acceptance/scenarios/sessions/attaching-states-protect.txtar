@@ -4,7 +4,7 @@
 # source: C1 test_lanes.py::test_attachment_reservations_are_observational
 # milestone: M2
 
-workspace shop --init
+workspace shop --eager --init
 exec sh $WORK/slow.sh
 env PATH=$WORK/slow:$PATH
 exec sh -c 'aw attach "slow one" --json > "$WORK/attach.json" & i=0; while [ ! -e "$WORK/slow/started" ] && [ $i -lt 200 ]; do sleep 0.05; i=$((i + 1)); done; aw sweep --apply --json > "$WORK/sweep.json"; wait'

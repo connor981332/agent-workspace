@@ -3,7 +3,7 @@
 # source: C1 test_lanes.py::test_finish_errors_and_validation
 # milestone: M2
 
-workspace shop --init
+workspace shop --eager --init
 exec aw attach 'add feature flag'
 exec sh -c 'echo edit >> web/.worktrees/01/README.md'
 exec git -C api/.worktrees/01 switch -q --detach

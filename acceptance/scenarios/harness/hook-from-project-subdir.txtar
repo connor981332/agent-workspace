@@ -3,7 +3,7 @@
 # source: C1 test_real_hook_and_routing
 # milestone: M3
 
-workspace shop --init
+workspace shop --eager --init
 exec aw attach 'add feature flag'
 mkdir .worktrees/01/web/src/deep
 cd .worktrees/01/web/src/deep

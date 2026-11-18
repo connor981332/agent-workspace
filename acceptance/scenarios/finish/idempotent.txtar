@@ -3,7 +3,7 @@
 # source: C1 test_lanes.py::test_finish_no_plan_idempotence_and_session
 # milestone: M2
 
-workspace shop --init
+workspace shop --eager --init
 exec aw attach 'add feature flag'
 lane-commit 01 web/flag.txt 'flag'
 cd .worktrees/01

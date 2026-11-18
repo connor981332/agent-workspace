@@ -3,7 +3,7 @@
 # source: spec (no candidate source)
 # milestone: M2
 
-workspace shop --init
+workspace shop --eager --init
 exec aw attach 'one'
 exec aw attach 'two'
 exec aw sweep --apply

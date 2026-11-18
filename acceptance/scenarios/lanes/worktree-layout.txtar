@@ -5,7 +5,7 @@
 # source: C2 finding F11
 # milestone: M2
 
-workspace shop --init
+workspace shop --eager --init
 exec aw attach 'fix checkout tax rounding' --json
 json stdout .lane 01
 json stdout .name checkout-tax

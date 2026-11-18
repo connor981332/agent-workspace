@@ -6,7 +6,7 @@
 # source: plans/dogfood-0.3.md 7.1 to 7.4 (decision 8)
 # milestone: M12
 
-workspace shop --init
+workspace shop --eager --init
 exec aw doctor
 stdout 'prerequisite vpn: not checked yet'
 exec aw attach 'first thing'

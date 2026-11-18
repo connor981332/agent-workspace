@@ -84,16 +84,47 @@ func body(owner string) (string, error) {
 		return "", err
 	}
 	text := framework
-	if c, err := config.Load(owner); err == nil && len(c.Safeguards.Enable) > 0 {
+	c, cerr := config.Load(owner)
+	if cerr == nil && len(c.Safeguards.Enable) > 0 {
 		text += carefully
 		if slices.Contains(c.Safeguards.Enable, "publication") {
 			text += "\n" + publishing
 		}
 	}
+	if cerr == nil {
+		text += lazyProjects(c)
+	}
 	if t := strings.TrimSpace(string(team)); t != "" {
 		text += "\n\n" + t
 	}
 	return text, nil
+}
+
+// lazyProjects tells agents which projects a lane may lack and how to check one out, when lanes
+// check projects out on first use (docs/spec/sessions.md, "Lazy worktrees").
+func lazyProjects(c *config.Config) string {
+	if c.Lanes.Setup == "eager" {
+		return ""
+	}
+	var names []string
+	for name, p := range c.Projects {
+		if p.Directory != "." && p.Lanes != "shared" {
+			names = append(names, name)
+		}
+	}
+	if len(names) == 0 {
+		return ""
+	}
+	slices.Sort(names)
+	return "\n- A lane checks out a project on first use. This workspace's projects are " + strings.Join(names, ", ") +
+		"; a new lane starts with " + eagerList(c.Lanes.Eager) + ". `bin/aw use <project>` checks out another, on the lane's branch, with the projects it depends on, and `bin/aw run` and `bin/aw serve` do it for you."
+}
+
+func eagerList(eager []string) string {
+	if len(eager) == 0 {
+		return "none of them"
+	}
+	return strings.Join(eager, ", ")
 }
 
 // findBlock locates the block in text. found is false when it has none; a block with only one of

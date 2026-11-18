@@ -1,0 +1,94 @@
+# A lane checks out the projects in [lanes] eager when it is claimed, and any other on first use:
+# bin/aw use, aw run or aw serve, each with the projects it depends_on, on the lane's branch. Until
+# then the guard redirects a path under the missing project to bin/aw use, rather than letting a
+# write create a plain directory in the lane root.
+# req: R21 R59
+# source: dogfood of 0.4.0 (plans/dogfood-0.4.md decisions 3 to 6)
+# milestone: M12
+
+workspace shop --repos web,api,lib,mobile --init
+env CLAUDE_CODE_SESSION_ID=s-1
+exec aw attach 'checkout tax'
+exists .worktrees/01/web
+! exists .worktrees/01/api
+! exists api/.worktrees/01
+! exists mobile/.worktrees/01
+
+# The guard sends an agent to bin/aw use, for file tools and shell commands alike.
+cd .worktrees/01
+! exec awtest-hook write api/src/app.ts
+stderr 'project api isn''t checked out in lane checkout-tax yet.*→ run bin/aw use api'
+! exec awtest-hook read api/README.md
+stderr 'bin/aw use api'
+! exec awtest-hook bash 'cat api/README.md'
+stderr 'bin/aw use api'
+! exec awtest-hook bash 'cd api && npm test'
+stderr 'bin/aw use api'
+exec awtest-hook bash 'bin/aw use api'
+! stdout 'deny|"ask"'
+exec awtest-hook write web/src/app.ts
+! stdout 'deny'
+
+# bin/aw use checks it out, with what it depends on, on the lane's branch. It is idempotent.
+exec aw use api --json
+json stdout .added[0] api
+json stdout .added[1] lib
+exists api/README.md
+exists lib/README.md
+exec git -C api branch --show-current
+stdout '^aw/checkout-tax$'
+exec git -C lib branch --show-current
+stdout '^aw/checkout-tax$'
+exec aw use api
+stdout 'already has api'
+exec awtest-hook write api/src/app.ts
+! stdout 'deny'
+
+# aw run checks a project out on its first use, and sets it up.
+! exists mobile
+exec aw run mobile true
+stderr 'checking out mobile in lane checkout-tax, on its first use'
+exists mobile/README.md
+exists mobile/set-up
+
+# The lane's repositories are all recorded, so sweep sees each of them.
+cd ../..
+exec aw sweep --json
+stdout 'mobile/\.worktrees/01'
+stdout 'lib/\.worktrees/01'
+
+# A project the configuration names but nobody cloned is refused with the fix, and nothing is made.
+cd .worktrees/01
+! exec aw use ghost
+stderr 'these projects are not cloned: ghost \(ghost\)'
+! exists ghost
+
+# aw attach --projects checks more out at once; an unknown name is refused.
+cd ../..
+env CLAUDE_CODE_SESSION_ID=s-2
+exec aw attach 'second' --projects mobile
+exists .worktrees/02/mobile
+! exists .worktrees/02/api
+! exec aw attach 'third' --projects nope
+stderr 'there is no project named "nope"'
+exec aw attach 'second' --projects api
+exists .worktrees/02/api
+exists .worktrees/02/lib
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+eager = ["web"]
+
+[projects.web]
+[projects.api]
+depends_on = ["lib"]
+[projects.lib]
+[projects.mobile]
+[projects.mobile.lifecycle.setup]
+run = "touch set-up"
+[projects.ghost]

@@ -4,7 +4,7 @@
 # source: C2 tests::t_lane_guard_refuses_old_branch; C2 finding F9
 # milestone: M2
 
-workspace shop --init
+workspace shop --eager --init
 exec sh -c 'mkdir -p web/config && printf "database: shop_dev\n" > web/config/database.yml && git -C web add -A && git -C web commit -qm old && git -C web push -q'
 owner-snapshot
 ! exec aw attach 'add feature flag'

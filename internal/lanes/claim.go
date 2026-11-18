@@ -60,6 +60,9 @@ type ClaimRequest struct {
 	// StartsInLane says the session is launched in the lane (aw new), which is then its home: it
 	// keeps the lane's scope after releasing it (docs/spec/sessions.md).
 	StartsInLane bool
+	// Projects are checked out besides the eager ones (aw new --projects); the rest wait for first
+	// use (docs/spec/sessions.md, "Lazy worktrees").
+	Projects []string
 }
 
 // Claimed is the result of a claim.
@@ -124,8 +127,18 @@ func (m *Manager) Claim(ctx context.Context, req ClaimRequest) (*Claimed, error)
 	if purpose == "" {
 		return nil, errors.New(`a lane needs a purpose → say what the work is, e.g. aw attach "fix checkout tax rounding"`)
 	}
+	if err := m.checkProjects(req.Projects); err != nil {
+		return nil, fmt.Errorf("no lane was created: %w", err)
+	}
 	if req.Who.known() {
-		if c, err := m.existing(ctx, req.Who, purpose); err != nil || c != nil {
+		c, err := m.existing(ctx, req.Who, purpose)
+		if err == nil && c != nil && len(req.Projects) > 0 {
+			// Attaching again with --projects checks them out in the lane it already has.
+			if _, err := m.Use(ctx, c.Lane.Number, req.Projects); err != nil {
+				return nil, err
+			}
+		}
+		if err != nil || c != nil {
 			return c, err
 		}
 	}
@@ -212,7 +225,17 @@ func (m *Manager) Claim(ctx context.Context, req ClaimRequest) (*Claimed, error)
 	t.Mark("reserve")
 	found := make(chan map[string]string, 1)
 	go func() { found <- lifecycle.CheckoutHooks(ctx, m.WS.Owner, m.Cfg) }() // alongside the build, which is the wait
-	repos, buildErr := m.build(ctx, lane, plans, fromPool)
+	var repos []state.LaneRepo
+	var buildErr error
+	if fromPool {
+		var present []repoPlan
+		if present, buildErr = m.presentPlans(ctx, lane, plans, req.Branch); buildErr == nil {
+			plans = append(plans, present...)
+		}
+	}
+	if buildErr == nil {
+		repos, buildErr = m.build(ctx, lane, plans, fromPool)
+	}
 	hooks := <-found
 	t.Mark("build")
 	if buildErr != nil {
@@ -227,7 +250,13 @@ func (m *Manager) Claim(ctx context.Context, req ClaimRequest) (*Claimed, error)
 			return err
 		}
 		lane.State, lane.Updated = state.LaneClaimed, state.Now()
-		if steps := lifecycle.Plan(m.Cfg, fromPool, hooks); len(steps) > 0 {
+		have := []string{}
+		for _, r := range repos {
+			if r.Project != "" {
+				have = append(have, r.Project)
+			}
+		}
+		if steps := lifecycle.LanePlan(m.Cfg, fromPool, hooks, have, nil); len(steps) > 0 {
 			// Every step is recorded; with lazy setup a project's own wait for its first use.
 			if err := state.PlanSetup(tx, lane.Number, lane.Generation, fromPool, lifecycle.Names(steps)); err != nil {
 				return err
@@ -430,11 +459,12 @@ func (m *Manager) plan(ctx context.Context, req ClaimRequest) ([]repoPlan, error
 			plans = append(plans, p)
 		}
 	}
+	start := m.StartProjects(req.Projects)
 	var missing []string
 	for _, name := range sortedKeys(m.Cfg.Projects) {
 		pr := m.Cfg.Projects[name]
-		if pr.Lanes == "shared" {
-			continue
+		if pr.Lanes == "shared" || (pr.Directory != "." && !slices.Contains(start, name) && !hasBranch(ctx, filepath.Join(m.WS.Owner, pr.Directory), req.Branch)) {
+			continue // checked out on first use, unless it has the branch the lane starts on
 		}
 		dir := filepath.Join(m.WS.Owner, pr.Directory)
 		if _, err := workspace.GitCommonDir(dir); err != nil {
@@ -459,6 +489,16 @@ func (m *Manager) plan(ctx context.Context, req ClaimRequest) ([]repoPlan, error
 		return nil, fmt.Errorf("no lane was created: no repository has a branch %q, locally or on origin → fetch it first (git fetch origin %s), or check the name", req.Branch, req.Branch)
 	}
 	return plans, nil
+}
+
+// hasBranch reports whether the repository at dir has branch, locally or on origin. "" is none.
+func hasBranch(ctx context.Context, dir, branch string) bool {
+	if branch == "" {
+		return false
+	}
+	g := run.In(dir)
+	return ok(g.OK(ctx, "rev-parse", "--verify", "--quiet", "refs/heads/"+branch+"^{commit}")) ||
+		ok(g.OK(ctx, "rev-parse", "--verify", "--quiet", "refs/remotes/origin/"+branch+"^{commit}"))
 }
 
 func label(p repoPlan) string {
@@ -548,6 +588,47 @@ func checkGuards(ctx context.Context, project string, p repoPlan, guards map[str
 // build creates the lane's worktrees, links, owner pointer and secret links. It returns what it
 // created, so that a failure can be undone.
 func (m *Manager) build(ctx context.Context, lane state.Lane, plans []repoPlan, fromPool bool) ([]state.LaneRepo, error) {
+	root := m.Root(lane.Number)
+	made, err := m.buildRepos(ctx, lane, plans, fromPool)
+	if err != nil {
+		return made, err
+	}
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		return made, err
+	}
+	if err := linkProjects(root, plans); err != nil {
+		return made, err
+	}
+	if err := os.MkdirAll(filepath.Join(root, ".aw"), 0o755); err != nil {
+		return made, err
+	}
+	if err := os.WriteFile(filepath.Join(root, workspace.OwnerPointer), []byte(m.WS.Owner+"\n"), 0o644); err != nil {
+		return made, err
+	}
+	if err := m.materialize(ctx, root, plans); err != nil {
+		return made, err
+	}
+	if err := sandbox.Exclude(m.WS.Owner); err != nil {
+		return made, err
+	}
+	// A harness's sandbox is the user's choice; these only say what it may write if it is on.
+	if _, err := sandbox.Install(root, m.SandboxRoots(filepath.Base(root))); err != nil {
+		return made, err
+	}
+	// The owner checkout's settings are the ones Claude Code reads in a lane: a workspace set up by
+	// an older aw gets the worktree directories here, rather than a prompt for every file. The file
+	// is rewritten only when an entry is missing.
+	if err := sandbox.AddClaudeDirs(m.WS.Owner, m.WorktreeDirs()); err != nil {
+		return made, err
+	}
+	// Set or cleared every time: a warm lane may have been an onboarding lane before.
+	return made, sandbox.AllowRehearse(root, m.Onboarding)
+}
+
+// buildRepos creates or reuses each planned repository's worktree in the lane, on the lane's branch,
+// with its secret links and local files. made records each one as it starts, so that a failure
+// part way can be undone.
+func (m *Manager) buildRepos(ctx context.Context, lane state.Lane, plans []repoPlan, fromPool bool) ([]state.LaneRepo, error) {
 	dir := Dir(lane.Number, m.Cfg.Lanes.Max)
 	root := m.Root(lane.Number)
 	var made []state.LaneRepo
@@ -626,10 +707,11 @@ func (m *Manager) build(ctx context.Context, lane state.Lane, plans []repoPlan, 
 			}
 		}
 	}
-	if err := os.MkdirAll(root, 0o755); err != nil {
-		return made, err
-	}
-	// Links from the lane root to each project's worktree, and the owner pointer.
+	return made, nil
+}
+
+// linkProjects links the lane root to each project's worktree.
+func linkProjects(root string, plans []repoPlan) error {
 	for _, p := range plans {
 		if p.project == "" || p.rel == "." {
 			continue
@@ -637,42 +719,19 @@ func (m *Manager) build(ctx context.Context, lane state.Lane, plans []repoPlan, 
 		link := filepath.Join(root, p.rel)
 		target, err := filepath.Rel(filepath.Dir(link), p.path)
 		if err != nil {
-			return made, err
+			return err
 		}
 		if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
-			return made, err
+			return err
 		}
 		if existing, err := os.Readlink(link); err == nil && existing == target {
 			continue
 		}
 		if err := os.Symlink(target, link); err != nil {
-			return made, fmt.Errorf("linking %s to the project's worktree: %w", link, err)
+			return fmt.Errorf("linking %s to the project's worktree: %w", link, err)
 		}
 	}
-	if err := os.MkdirAll(filepath.Join(root, ".aw"), 0o755); err != nil {
-		return made, err
-	}
-	if err := os.WriteFile(filepath.Join(root, workspace.OwnerPointer), []byte(m.WS.Owner+"\n"), 0o644); err != nil {
-		return made, err
-	}
-	if err := m.materialize(ctx, root, plans); err != nil {
-		return made, err
-	}
-	if err := sandbox.Exclude(m.WS.Owner); err != nil {
-		return made, err
-	}
-	// A harness's sandbox is the user's choice; these only say what it may write if it is on.
-	if _, err := sandbox.Install(root, m.SandboxRoots(filepath.Base(root))); err != nil {
-		return made, err
-	}
-	// The owner checkout's settings are the ones Claude Code reads in a lane: a workspace set up by
-	// an older aw gets the worktree directories here, rather than a prompt for every file. The file
-	// is rewritten only when an entry is missing.
-	if err := sandbox.AddClaudeDirs(m.WS.Owner, m.WorktreeDirs()); err != nil {
-		return made, err
-	}
-	// Set or cleared every time: a warm lane may have been an onboarding lane before.
-	return made, sandbox.AllowRehearse(root, m.Onboarding)
+	return nil
 }
 
 // WorktreeDirs are the directories that hold the projects' lane worktrees, one per project with

@@ -1,4 +1,4 @@
-# A project that is not cloned stops the claim before anything is allocated, and the error names
+# An eager project that is not cloned stops the claim before anything is allocated, and the error names
 # the fix.
 # req: R14 R21
 # source: C1 test_tooling.py::test_attach_without_project_repos_allocates_nothing
@@ -21,6 +21,9 @@ exec git -C web branch --list 'aw/*'
 name = "Shop"
 namespace = "shop"
 schema = 1
+
+[lanes]
+eager = ["web", "api", "mobile"]
 
 [projects.web]
 [projects.api]

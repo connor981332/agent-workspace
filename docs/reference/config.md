@@ -43,7 +43,8 @@ Lanes: the numbered, stable directories agents work in.
 | `pool` | integer, at least 0 | `3` | Clean lanes kept warm for reuse. |
 | `retention` | duration | `"14d"` | Pooled lanes older than this are destroyed. |
 | `archive_retention` | duration | `"30d"` | Archived tips (refs/aw/archive, from aw discard, aw reset-branch and recycling a lane not proven by ancestry) older than this are removed by aw sweep --apply. 0 keeps them for good. |
-| `setup` | one of `"lazy"`, `"eager"` | `"lazy"` | lazy: claiming a lane runs the workspace's own steps, and each project's steps (install, its hooks, its checkout hook) run the first time a command needs the project: aw run, aw serve or a team command there, or aw setup. eager: every step runs in the background as soon as the lane is claimed, for agents that run projects' commands directly rather than through aw run. |
+| `setup` | one of `"lazy"`, `"eager"` | `"lazy"` | lazy: claiming a lane runs the workspace's own steps, and each project's steps (install, its hooks, its checkout hook) run the first time a command needs the project: aw run, aw serve or a team command there, or aw setup. eager: every step runs in the background as soon as the lane is claimed, for agents that run projects' commands directly rather than through aw run. It also makes every project eager (see eager). |
+| `eager` | array of strings | — | Projects every lane checks out, and sets up, as soon as it is claimed, such as the ones most tasks touch. A lane checks out any other project on first use: bin/aw use <project>, or aw run or aw serve in it, together with the projects it depends_on. aw new --projects names more for one lane. |
 | `hostname` | string | `"lane-{lane}.localhost"` | Each lane's hostname. {lane} is the lane number, {namespace} the namespace. |
 | `server_capacity` | integer, at least 1 | `2` | Capacity of the implicit resource "servers", which holds every server not listed in a resource. |
 | `port_stride` | integer, at least 1 | `100` | A server in seat k listens on port + port_stride × k. |
@@ -95,7 +96,7 @@ The project repositories. The key is the project's name.
 | `needs` | array of strings | — | Resources the project's commands need. |
 | `prerequisites` | array of strings | — | Names of [prerequisites] this project's setup needs met on the machine, such as a VPN or a signed-in CLI. aw checks them before the project's setup in a lane, and waits on you while one is not met. |
 | `smoke` | string | — | A quick command that proves the project works in a lane. aw rehearse runs it. |
-| `depends_on` | array of strings | — | Projects this one consumes. A change set merges those first (R69). |
+| `depends_on` | array of strings | — | Projects this one consumes. A change set merges those first (R69), and a lane that checks this project out checks those out too. |
 | `publication` | array of strings | — | Actions pre-authorized in this project, as in [publication] allow. |
 | `generated_contracts` | array of strings | — | Files generated from a contract, from the project root (** matches directories). Agents may not edit them (R70). |
 | `secrets` | array of strings | — | Files that are not in Git, such as .env, linked read-only into every lane from the owner checkout, relative to the project. |

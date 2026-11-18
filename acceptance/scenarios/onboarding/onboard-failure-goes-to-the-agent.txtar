@@ -6,7 +6,7 @@
 
 owner-may-change
 stubs claude
-workspace shop --init
+workspace shop --eager --init
 exec git -C web checkout -q --detach
 ! exec aw doctor --json
 stdout 'detached HEAD'

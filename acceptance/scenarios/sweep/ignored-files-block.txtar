@@ -4,7 +4,7 @@
 # source: C1 test_lanes.py::test_plain_removal_and_ignored_artifacts
 # milestone: M2
 
-workspace shop --init
+workspace shop --eager --init
 exec sh -c 'printf "*.log\n" > web/.gitignore && git -C web add .gitignore && git -C web commit -qm ignore && git -C web push -q'
 owner-snapshot
 exec aw attach 'add feature flag'

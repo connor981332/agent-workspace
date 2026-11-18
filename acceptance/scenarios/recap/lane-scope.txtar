@@ -4,7 +4,7 @@
 # source: C1 test_scope_missing_plan_stale_handoff_and_untracked_work
 # milestone: M2
 
-workspace shop --init
+workspace shop --eager --init
 exec aw attach 'first thing'
 lane-commit 01 web/y.txt 'work'
 exec aw attach 'second thing'

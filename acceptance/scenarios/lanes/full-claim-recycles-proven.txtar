@@ -5,7 +5,7 @@
 # source: plans/dogfood-0.3.md 5.7 (docs/spec/sessions.md, "Capacity")
 # milestone: M12
 
-workspace shop --init
+workspace shop --eager --init
 exec aw attach 'first thing'
 session s-1 claude
 exec aw attach 'second thing'

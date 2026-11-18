@@ -85,6 +85,19 @@ func PlanSetup(tx *sql.Tx, lane, generation int, fromPool bool, names []string) 
 	return err
 }
 
+// AddSetupSteps adds the steps of names a lane's plan does not have yet, as pending, keeping every
+// recorded step as it is: a project checked out later (lazy worktrees) brings its own steps, and
+// the others' results stand.
+func AddSetupSteps(tx *sql.Tx, lane, generation int, names []string) error {
+	for i, n := range names {
+		if _, err := tx.Exec(`INSERT INTO lane_steps (lane, generation, step, seq, status) VALUES (?, ?, ?, ?, ?)
+			ON CONFLICT (lane, generation, step) DO NOTHING`, lane, generation, n, i, StepPending); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // Steps returns a lane's steps for one generation, in order.
 func Steps(q Querier, lane, generation int) ([]Step, error) {
 	rows, err := q.Query(`SELECT lane, generation, step, seq, status, detail, log, exit_status, started, ended

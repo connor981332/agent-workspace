@@ -4,7 +4,7 @@
 # source: onboarding RideTracker: rehearsing needed aw try and recreating the human's containers
 # milestone: M12
 
-workspace shop --init
+workspace shop --eager --init
 
 exec aw attach 'onboard this workspace'
 exec aw attach 'other work'
