@@ -15,6 +15,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -483,6 +484,11 @@ type rehearsal struct {
 	collisions []string
 	projects   map[string]*config.Project // the workspace's projects
 	repos      []string                   // the owner checkout's repositories
+	// progress is where a step that waits on the human says so while the rehearsal runs, and
+	// lanes names each lane's root, for those lines.
+	progress io.Writer
+	lanes    map[string]string
+	mu       sync.Mutex
 }
 
 func (r *rehearsal) aw(ctx context.Context, dir string, args ...string) (string, error) {
@@ -493,10 +499,49 @@ func (r *rehearsal) aw(ctx context.Context, dir string, args ...string) (string,
 	c.Env = rehearsalEnv(r.exe, dir)
 	var buf, errBuf bytes.Buffer
 	c.Stdout, c.Stderr = &buf, &errBuf
+	if r.progress != nil {
+		// A setup waiting on the human, such as for a prerequisite, says so at once (#110): the
+		// rest of what the step prints is only shown if it fails.
+		w := &waitingLines{r: r, lane: r.lanes[dir]}
+		if w.lane == "" {
+			w.lane = filepath.Base(dir)
+		}
+		c.Stderr = io.MultiWriter(&errBuf, w)
+	}
 	if err := c.Run(); err != nil {
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return buf.String(), fmt.Errorf("%s: stopped by the rehearsal's time limit (%s), so its own output may be cut short", strings.Join(args, " "), rehearsalLimit)
+		}
 		return buf.String(), fmt.Errorf("%s: %s", strings.Join(args, " "), strings.TrimSpace(errBuf.String()))
 	}
 	return buf.String(), nil
+}
+
+// rehearsalLimit bounds a rehearsal, waits on the human included.
+const rehearsalLimit = 20 * time.Minute
+
+// waitingLines passes on, as they come, the lines of a step's output that say it waits on the human.
+type waitingLines struct {
+	r    *rehearsal
+	lane string
+	part []byte
+}
+
+func (w *waitingLines) Write(p []byte) (int, error) {
+	w.part = append(w.part, p...)
+	for {
+		i := bytes.IndexByte(w.part, '\n')
+		if i < 0 {
+			return len(p), nil
+		}
+		line := strings.TrimPrefix(string(w.part[:i]), "aw: ")
+		w.part = w.part[i+1:]
+		if strings.Contains(line, "waiting on you") {
+			w.r.mu.Lock()
+			fmt.Fprintf(w.r.progress, "aw: lane %s: %s\n", ui.Clean(w.lane), ui.Clean(line))
+			w.r.mu.Unlock()
+		}
+	}
 }
 
 // serveOne starts a resource in one lane and stops it again.
@@ -538,7 +583,7 @@ containers and configuration are not touched, and the copy is removed afterwards
 a workspace may do this for its own lane.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: run(func(cmd *cobra.Command, args []string) error {
-			ctx, stop := context.WithTimeout(cmd.Context(), 20*time.Minute)
+			ctx, stop := context.WithTimeout(cmd.Context(), rehearsalLimit)
 			defer stop()
 			ws, c, err := loadConfig()
 			if err != nil {
@@ -554,7 +599,7 @@ a workspace may do this for its own lane.`,
 			if err != nil {
 				return err
 			}
-			r := &rehearsal{exe: exe, owner: ws.Owner, projects: c.Projects, repos: ownerRepos(ws, c)}
+			r := &rehearsal{exe: exe, owner: ws.Owner, projects: c.Projects, repos: ownerRepos(ws, c), progress: cmd.ErrOrStderr(), lanes: map[string]string{}}
 			out := cmd.OutOrStdout()
 			repos := r.repos
 			snapshot := func() []string { return ownerStatus(ctx, repos) }
@@ -614,7 +659,16 @@ a workspace may do this for its own lane.`,
 				}
 			}
 			fmt.Fprintln(out, "Tearing down the two lanes.")
-			if terr := r.teardown(ctx, ws, c, lanesMade); terr != nil {
+			tctx := ctx
+			if ctx.Err() != nil {
+				// The time limit was reached: the lanes are still removed, within a limit of their own,
+				// rather than left behind with steps cut short.
+				fmt.Fprintf(cmd.ErrOrStderr(), "aw: the rehearsal reached its time limit (%s); removing its lanes\n", rehearsalLimit)
+				var cancel context.CancelFunc
+				tctx, cancel = context.WithTimeout(context.WithoutCancel(ctx), 5*time.Minute)
+				defer cancel()
+			}
+			if terr := r.teardown(tctx, ws, c, lanesMade); terr != nil {
 				r.collide("left behind: %v", terr)
 			}
 			if changed := statusChanges(before, snapshot()); len(changed) > 0 {
@@ -780,6 +834,9 @@ type laneRun struct {
 func (r *rehearsal) exercise(ctx context.Context, ws *workspace.Workspace, c *config.Config, lanesMade []laneRun, out io.Writer) error {
 	fmt.Fprintf(out, "Claimed lanes %s and %s.\n", lanesMade[0].name, lanesMade[1].name)
 	root := func(l laneRun) string { return filepath.Join(ws.Owner, ".worktrees", l.dir) }
+	for _, l := range lanesMade {
+		r.lanes[root(l)] = l.name
+	}
 	envs := map[string][2]map[string]string{}
 	for _, name := range slices.Sorted(mapsKeys(c.Projects)) {
 		var pair [2]map[string]string

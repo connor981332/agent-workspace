@@ -1,0 +1,40 @@
+# aw rehearse says at once when a lane's setup waits on the human for a prerequisite, naming the lane,
+# the prerequisite and its fix, and goes on once it is met (#110).
+# req: R87
+# source: issue #110 (0.5.0 dogfood report)
+# milestone: M12
+
+owner-may-change
+workspace shop --init
+exec sh -c 'aw rehearse > $WORK/rehearse.out 2>&1 &'
+exec sh $WORK/wait-for.sh 'waiting on you: prerequisite vpn is not met'
+exec grep -E 'aw: lane rehearse-(first|second): web.setup: waiting on you: prerequisite vpn is not met \(the web install needs the private registry\) → connect the VPN' $WORK/rehearse.out
+exec touch .git/vpn-up
+exec sh $WORK/wait-for.sh 'The rehearsal passed'
+
+-- wait-for.sh --
+i=0
+until grep -q "$1" "$WORK/rehearse.out"; do i=$((i + 1)); [ $i -lt 600 ] || { cat "$WORK/rehearse.out"; exit 1; }; sleep 0.05; done
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[prerequisites.vpn]
+check = 'test -e .git/vpn-up'
+fix = "connect the VPN"
+message = "the web install needs the private registry"
+
+[projects.web]
+directory = "web"
+prerequisites = ["vpn"]
+
+[projects.web.lifecycle]
+setup = 'true'
+
+[projects.api]
+directory = "api"
