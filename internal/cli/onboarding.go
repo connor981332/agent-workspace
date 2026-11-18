@@ -22,6 +22,7 @@ import (
 
 	"github.com/connor981332/agent-workspace/internal/app"
 	"github.com/connor981332/agent-workspace/internal/audit"
+	"github.com/connor981332/agent-workspace/internal/broker"
 	"github.com/connor981332/agent-workspace/internal/compose"
 	"github.com/connor981332/agent-workspace/internal/config"
 	gitrun "github.com/connor981332/agent-workspace/internal/gitx/run"
@@ -42,7 +43,8 @@ func scanProjects(ws *workspace.Workspace, c *config.Config) ([]*inspect.Project
 		if _, err := os.Stat(dir); err != nil {
 			continue
 		}
-		p, err := inspect.Scan(name, dir, c.Projects[name].Directory)
+		pr := c.Projects[name]
+		p, err := inspect.Scan(context.Background(), name, dir, pr.Directory, slices.Concat(pr.Secrets, pr.LocalFiles))
 		if err != nil {
 			return nil, err
 		}
@@ -497,6 +499,14 @@ func (r *rehearsal) aw(ctx context.Context, dir string, args ...string) (string,
 	return buf.String(), nil
 }
 
+// serveOne starts a resource in one lane and stops it again.
+func (r *rehearsal) serveOne(ctx context.Context, name string, l laneRun, root func(laneRun) string) {
+	if _, err := r.aw(ctx, root(l), "serve", name); err != nil {
+		r.collide("resource %s did not start in lane %s: %v", name, l.name, err)
+	}
+	r.aw(ctx, root(l), "stop", name)
+}
+
 func (r *rehearsal) collide(format string, args ...any) {
 	r.collisions = append(r.collisions, fmt.Sprintf(format, args...))
 }
@@ -798,11 +808,27 @@ func (r *rehearsal) exercise(ctx context.Context, ws *workspace.Workspace, c *co
 	if c.Lanes.ServerCapacity > 0 && implicitServers(c) {
 		rs["servers"] = c.Lanes.ServerCapacity
 	}
+	b := &broker.Broker{Cfg: c}
 	for _, name := range slices.Sorted(mapsKeys(rs)) {
-		if rs[name] >= 2 {
+		free := rs[name]
+		if res, err := b.Lookup(name); err == nil {
+			if port, busy := b.OwnerServer(res); busy {
+				free-- // the owner's own server holds a seat, as owner_counts says it should
+				if free < 2 {
+					fmt.Fprintf(out, "Skipped resource %s: your own server on port %d holds 1 of its %d seats, so the two lanes cannot both be served → stop it and rerun aw rehearse to test them side by side.\n", name, port, rs[name])
+					r.serveOne(ctx, name, lanesMade[0], root)
+					continue
+				}
+			}
+		}
+		if free >= 2 {
 			for _, l := range lanesMade {
 				if _, err := r.aw(ctx, root(l), "serve", name); err != nil {
-					r.collide("resource %s did not start in lane %s (a fixed port?): %v", name, l.name, err)
+					hint := " (a fixed port?)"
+					if strings.Contains(err.Error(), "in line for") {
+						hint = " (it was queued: something else holds the seats)"
+					}
+					r.collide("resource %s did not start in lane %s%s: %v", name, l.name, hint, err)
 				}
 			}
 			for _, l := range lanesMade {
@@ -810,10 +836,7 @@ func (r *rehearsal) exercise(ctx context.Context, ws *workspace.Workspace, c *co
 			}
 		} else {
 			for _, l := range lanesMade {
-				if _, err := r.aw(ctx, root(l), "serve", name); err != nil {
-					r.collide("resource %s did not start in lane %s: %v", name, l.name, err)
-				}
-				r.aw(ctx, root(l), "stop", name)
+				r.serveOne(ctx, name, l, root)
 			}
 		}
 	}

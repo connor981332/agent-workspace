@@ -1,7 +1,9 @@
 package inspect
 
 import (
+	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"testing"
@@ -28,7 +30,7 @@ func TestHardcodedPortSkipsAWAndHarnessFiles(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	p, err := Scan("next", dir, "next")
+	p, err := Scan(context.Background(), "next", dir, "next", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,6 +43,45 @@ func TestHardcodedPortSkipsAWAndHarnessFiles(t *testing.T) {
 	want := map[string]bool{"src/server.ts": true, "config/app.yml": true}
 	if len(got) != len(want) || !got["src/server.ts"] || !got["config/app.yml"] {
 		t.Errorf("hardcoded-port findings in %v, want exactly %v", got, want)
+	}
+}
+
+// A project's declared secrets and local files, their backups and its gitignored files are never
+// read: aw keeps agents from reading secrets, and its findings land in an agent's transcript.
+func TestScanSkipsPrivateAndIgnoredFiles(t *testing.T) {
+	dir := t.TempDir()
+	files := map[string]string{
+		".gitignore":                 ".env.development.local\n*.bak\nlocal/\n",
+		".env":                       "DATABASE_URL=mysql://user:pass@localhost:3306/app\n",
+		".env.bak":                   "DATABASE_URL=mysql://user:pass@localhost:3306/app\n",
+		".env.development.local":     "URL=http://localhost:3000\n",
+		".env.development.local.bak": "URL=http://localhost:3000\n",
+		"local/notes.yml":            "url: http://localhost:3001\n",
+		"config/settings.yml":        "url: http://localhost:3002\n",
+		"src/server.ts":              "const url = \"http://localhost:4000/api\"\n",
+	}
+	for name, body := range files {
+		path := filepath.Join(dir, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if out, err := exec.Command("git", "-C", dir, "init", "-q").CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v %s", err, out)
+	}
+	p, err := Scan(context.Background(), "web", dir, "web", []string{".env", "config/settings.yml"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, f := range p.Findings {
+		got = append(got, f.File)
+	}
+	if !slices.Equal(got, []string{"src/server.ts"}) {
+		t.Errorf("findings in %v, want only src/server.ts", got)
 	}
 }
 

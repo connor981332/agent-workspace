@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
-	"path"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -13,7 +13,9 @@ import (
 	"strings"
 
 	"github.com/connor981332/agent-workspace/internal/config"
+	"github.com/connor981332/agent-workspace/internal/evidence"
 	"github.com/connor981332/agent-workspace/internal/gitx/run"
+	"github.com/connor981332/agent-workspace/internal/inspect"
 	"github.com/connor981332/agent-workspace/internal/state"
 	"github.com/connor981332/agent-workspace/internal/workspace"
 )
@@ -375,15 +377,13 @@ func providerProblems(owner, name string, d *config.Data, names map[string]bool)
 }
 
 // acceptedFinding reports whether a file, in a project at dir, is listed in its accepted_findings,
-// and why. A pattern ending in /** matches a directory.
+// and why. The keys are matched as generated is (evidence.Declared): ** spans directories anywhere,
+// and a directory covers what it holds.
 func acceptedFinding(dir, file string, accepted map[string]string) (string, bool) {
 	rel := relTo(dir, file)
-	for pattern, why := range accepted {
-		if d, ok := strings.CutSuffix(pattern, "/**"); ok && strings.HasPrefix(rel, d+"/") {
-			return why, true
-		}
-		if ok, _ := path.Match(pattern, rel); ok {
-			return why, true
+	for _, pattern := range slices.Sorted(maps.Keys(accepted)) {
+		if evidence.Declared(rel, []string{pattern}) {
+			return accepted[pattern], true
 		}
 	}
 	return "", false
@@ -508,8 +508,22 @@ func checkIsolated(owner, realNamespace string, c *config.Config) (problems, ski
 		}
 	}
 	for _, root := range roots {
+		// What aw keeps agents from reading, and gitignored files, are not read here either.
+		var private []string
+		for _, pr := range c.Projects {
+			if filepath.Join(owner, pr.Directory) == root {
+				private = slices.Concat(pr.Secrets, pr.LocalFiles)
+			}
+		}
+		notRead := inspect.NotReadable(context.Background(), root, private)
 		filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
 			if err != nil {
+				return nil
+			}
+			if r, err := filepath.Rel(root, p); err == nil && r != "." && evidence.Declared(filepath.ToSlash(r), notRead) {
+				if d.IsDir() {
+					return filepath.SkipDir
+				}
 				return nil
 			}
 			if d.IsDir() {

@@ -118,8 +118,16 @@ func (b *Broker) server(full string) *config.Server {
 // ownerPortBusy reports whether the owner's own copy of any of a resource's servers is listening: a
 // cheap local connection, made before any transaction starts.
 func (b *Broker) ownerPortBusy(r Resource) bool {
+	_, busy := b.OwnerServer(r)
+	return busy
+}
+
+// OwnerServer reports whether the owner's own copy of one of a resource's servers is listening, and
+// on which port, when the owner counts toward the resource's capacity. aw rehearse uses it to tell a
+// seat the owner holds from a collision.
+func (b *Broker) OwnerServer(r Resource) (port int, busy bool) {
 	if !r.OwnerCounts {
-		return false
+		return 0, false
 	}
 	for _, full := range r.Servers {
 		s := b.server(full)
@@ -131,17 +139,17 @@ func (b *Broker) ownerPortBusy(r Resource) bool {
 			// aw publishes the container's seat-zero ports with the workspace offset;
 			// a host server started outside aw listens on the explicit owner_port itself.
 			if b.ListeningIn(project, port+b.Cfg.Ports.Offset) {
-				return true
+				return port, true
 			}
 			continue
 		}
 		c, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)), 20*time.Millisecond)
 		if err == nil {
 			c.Close()
-			return true
+			return port, true
 		}
 	}
-	return false
+	return 0, false
 }
 
 // Outcome is the result of a request.

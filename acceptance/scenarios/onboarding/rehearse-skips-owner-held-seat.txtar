@@ -1,0 +1,49 @@
+# When the owner's own server holds a seat of a resource the owner counts toward, so that the two
+# rehearsal lanes cannot both be served, the rehearsal says so and names the port, rather than
+# calling it a collision, and still passes.
+# req: R38 R87
+# source: dogfood of 0.4.0 (plans/dogfood-0.4.md 1.8)
+# milestone: M12
+
+owner-may-change
+workspace shop --init
+exec sh $WORK/start.sh
+exec aw rehearse
+stdout 'Skipped resource stack: your own server on port 41733 holds 1 of its 2 seats'
+stdout 'The rehearsal passed'
+! stderr 'collision'
+exec sh $WORK/stop.sh
+
+-- start.sh --
+awtest-server -port 41733 -started "$WORK/up" >/dev/null 2>&1 &
+echo $! > "$WORK/server.pid"
+i=0
+while [ ! -f "$WORK/up" ] && [ $i -lt 100 ]; do sleep 0.05; i=$((i + 1)); done
+-- stop.sh --
+kill "$(cat "$WORK/server.pid")"
+sleep 0.1
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[projects.web]
+directory = "web"
+
+[projects.web.servers.app]
+command = "exec awtest-server -port {port}"
+port = 41330
+owner_port = 41733
+
+[projects.api]
+directory = "api"
+
+[resources.stack]
+kind = "process"
+capacity = 2
+servers = ["web.app"]
+owner_counts = true
