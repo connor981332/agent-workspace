@@ -97,6 +97,11 @@ container mounts and published ports valid across reuse.
 Project worktrees live inside each project repository (`<project>/.worktrees/<lane>`) so that a
 project's devcontainer, which bind-mounts the project directory, sees every lane without extra mounts. The lane root links to them so a harness launched in the lane root sees
 the whole lane. The policy engine resolves these links before any path decision.
+A harness reaches the worktrees through those links without asking: the owner checkout's untracked
+`.claude/settings.local.json`, which Claude Code reads in every worktree of the workspace repository,
+lists each project's `.worktrees` directory under `permissions.additionalDirectories`. aw never
+passes `--add-dir`, which would also load each project's skills and commands and so make Claude Code
+ask to trust each project's repository.
 
 A single-repository workspace (project `directory = "."`) has no links: the lane root is the
 project's worktree.

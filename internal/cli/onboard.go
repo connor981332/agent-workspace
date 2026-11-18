@@ -117,7 +117,7 @@ func setupSandboxes(ws *workspace.Workspace, c *config.Config) ([]sandbox.Result
 		return nil, err
 	}
 	m := &lanes.Manager{WS: ws, Cfg: c}
-	return sandbox.Install(ws.Owner, m.SandboxRoots(""))
+	return m.InstallOwnerSandbox()
 }
 
 // installOwner installs dependencies in the owner checkout, skipping those whose stamp has not
