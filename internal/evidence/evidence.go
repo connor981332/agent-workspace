@@ -218,35 +218,55 @@ func declaresInside(dir string, lists ...[]string) bool {
 // generated path, one of aw's own links, or under one of them. A directory Git collapsed above a
 // declared path is not allowed here: Check lists what it holds instead.
 // Declared reports whether an ignored entry (a path, or a directory ending in /) is covered by one
-// of the lists: the path itself or a directory above it, or a glob. A glob without a slash, or one
-// that starts with **/, matches a name at any depth, as in .gitignore. aw sweep and aw inspect both
-// use it, so a file inspect counts as declared never keeps a lane.
+// of the lists: the path itself or a directory above it, or a glob. As in .gitignore, ** spans any
+// number of directories wherever it is, a pattern without a slash matches a name at any depth unless
+// it starts with one, and
+// a pattern that matches a directory covers everything in it. aw sweep, aw inspect, aw rehearse and
+// aw doctor --projects (accepted_findings) all use it, so a path one counts as declared, all do.
 func Declared(entry string, lists ...[]string) bool {
-	e := strings.TrimSuffix(entry, "/")
+	e := strings.Trim(entry, "/")
+	segs := strings.Split(e, "/")
 	for _, list := range lists {
 		for _, p := range list {
-			p = strings.TrimSuffix(strings.TrimPrefix(p, "/"), "/")
-			if rest, ok := strings.CutPrefix(p, "**/"); ok && !strings.Contains(rest, "/") {
-				if ok, _ := path.Match(rest, path.Base(e)); ok {
-					return true
-				}
+			anchored := strings.HasPrefix(p, "/")
+			p = strings.Trim(p, "/")
+			if p == "" {
 				continue
 			}
-			if e == p || strings.HasPrefix(e, p+"/") {
-				return true
+			if !anchored && !strings.Contains(p, "/") {
+				p = "**/" + p // as in .gitignore: a pattern without a slash matches at any depth
 			}
-			if strings.ContainsAny(p, "*?[") {
-				name := e
-				if !strings.Contains(p, "/") {
-					name = path.Base(e) // as in .gitignore: a pattern without a slash matches at any depth
-				}
-				if ok, _ := path.Match(p, name); ok {
+			ps := strings.Split(p, "/")
+			// A pattern that matches a directory above the entry covers it too.
+			for i := len(segs); i >= 1; i-- {
+				if segmentsMatch(ps, segs[:i]) {
 					return true
 				}
 			}
 		}
 	}
 	return false
+}
+
+// segmentsMatch matches path segments against pattern segments, where ** spans any number of
+// directories, none included.
+func segmentsMatch(pattern, p []string) bool {
+	if len(pattern) == 0 {
+		return len(p) == 0
+	}
+	if pattern[0] == "**" {
+		for i := 0; i <= len(p); i++ {
+			if segmentsMatch(pattern[1:], p[i:]) {
+				return true
+			}
+		}
+		return false
+	}
+	if len(p) == 0 {
+		return false
+	}
+	ok, err := path.Match(pattern[0], p[0])
+	return ok && err == nil && segmentsMatch(pattern[1:], p[1:])
 }
 
 func summarize(what, out string) string {
