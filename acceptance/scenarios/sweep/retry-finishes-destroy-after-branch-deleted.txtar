@@ -1,0 +1,43 @@
+# A retry finishes a removal that stopped part way even when the person has since deleted the
+# leftover branch by hand: a repository whose worktree and branch are both gone counts as done,
+# not as unknown, and is never called a detached HEAD (#122).
+# req: R31 R34
+# source: issue #122 (0.5.0 dogfood report)
+# milestone: M5
+
+workspace shop --eager --init
+exec aw attach 'one'
+env AW_SESSION=
+env AW_SESSION_PID=
+git-fail 'update-ref -d refs/heads/aw/one '
+! exec aw sweep --apply --json
+json stdout .lanes[0].result failed
+exec rm $WORK/.git-fail/git
+! exists web/.worktrees/01
+exec git -C web branch -D aw/one
+
+exec aw sweep --json
+! stdout 'detached HEAD'
+! stdout '"unknown": true'
+exec aw sweep --apply --retry 1 --json
+json stdout .lanes[0].result done
+! exists .worktrees/01
+! exists api/.worktrees/01
+! exec git -C api rev-parse --verify --quiet refs/heads/aw/one
+exec aw doctor
+! stdout 'interrupted'
+
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[projects.web]
+directory = "web"
+
+[projects.api]
+directory = "api"
