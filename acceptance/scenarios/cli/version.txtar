@@ -1,7 +1,12 @@
-# aw version names the framework version and both schema versions.
+# aw version names the framework version and both schema versions; aw --version prints the same
+# (#124).
 # req: R93
 # milestone: M0
 
 exec aw version
+stdout '^aw \S+ \(config schema [0-9]+, state schema [0-9]+\)$'
+! stderr .
+
+exec aw --version
 stdout '^aw \S+ \(config schema [0-9]+, state schema [0-9]+\)$'
 ! stderr .

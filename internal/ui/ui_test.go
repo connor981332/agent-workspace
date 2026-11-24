@@ -19,6 +19,17 @@ func TestClean(t *testing.T) {
 	}
 }
 
+func TestCleanLines(t *testing.T) {
+	in := "error: the branch 'aw/x' is not fully merged\r\nhint: If you are sure, run 'git branch -D aw/x'\nhint: Disable\x1b[31m this\n"
+	want := "error: the branch 'aw/x' is not fully merged\n    hint: If you are sure, run 'git branch -D aw/x'\n    hint: Disable[31m this"
+	if got := CleanLines(in, "    "); got != want {
+		t.Errorf("CleanLines = %q, want %q", got, want)
+	}
+	if got := CleanLines("one line", "  "); got != "one line" {
+		t.Errorf("CleanLines(one line) = %q", got)
+	}
+}
+
 func TestBrief(t *testing.T) {
 	cases := []struct {
 		in   string

@@ -44,6 +44,17 @@ func Clean(s string) string {
 	}, s)
 }
 
+// CleanLines is Clean for text of several lines, such as Git's error output relayed under aw's own
+// line: it keeps the line breaks and indents every line after the first by indent, so that
+// "…not fully merged" and Git's "hint:" lines that follow do not run together.
+func CleanLines(s, indent string) string {
+	lines := strings.Split(strings.TrimRight(s, "\n"), "\n")
+	for i, l := range lines {
+		lines[i] = strings.TrimRight(Clean(l), " ")
+	}
+	return strings.Join(lines, "\n"+indent)
+}
+
 // Width is the width output should fit: $COLUMNS, else the terminal's, else 0 (no limit).
 func Width(f *os.File) int {
 	if c, err := strconv.Atoi(os.Getenv("COLUMNS")); err == nil && c > 0 {

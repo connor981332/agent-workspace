@@ -116,7 +116,7 @@ branches under refs/aw/archive/<name>/<time>, as aw discard does, then removes i
 				o.Table(table, 3)
 				for _, d := range rep.Lanes {
 					if d.Error != "" {
-						o.Error("%s: %s", d.Dir, ui.Clean(d.Error))
+						o.Error("%s: %s", d.Dir, ui.CleanLines(d.Error, "    "))
 					}
 				}
 				for _, list := range []struct{ action, title string }{
@@ -314,7 +314,7 @@ func discardOrphans(cmd *cobra.Command, m *lanes.Manager, yes, asJSON bool) erro
 			what = o.Worktree
 		}
 		if o.Skipped != "" {
-			fmt.Fprintf(cmd.ErrOrStderr(), "aw: left %s in %s: %s\n", ui.Clean(what), o.Label, ui.Clean(o.Skipped))
+			fmt.Fprintf(cmd.ErrOrStderr(), "aw: left %s in %s: %s\n", ui.Clean(what), o.Label, ui.CleanLines(o.Skipped, "    "))
 			continue
 		}
 		fmt.Fprintf(out, "Removed %s from %s. %s\n", ui.Clean(what), o.Label, o.Archive)

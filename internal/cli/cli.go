@@ -97,10 +97,14 @@ configuration. On a fresh clone of a workspace already set up, aw setup is all y
 		Args: cobra.NoArgs,
 		RunE: run(func(cmd *cobra.Command, _ []string) error {
 			asJSON, _ := cmd.Flags().GetBool("json")
+			if v, _ := cmd.Flags().GetBool("version"); v {
+				return printVersion(cmd.OutOrStdout(), asJSON)
+			}
 			return dashboard(cmd, asJSON)
 		}),
 	}
 	root.Flags().Bool("json", false, "print the dashboard as JSON")
+	root.Flags().Bool("version", false, "print the versions, as aw version does")
 	root.SetOut(stdout)
 	root.SetErr(stderr)
 	root.CompletionOptions.HiddenDefaultCmd = true
