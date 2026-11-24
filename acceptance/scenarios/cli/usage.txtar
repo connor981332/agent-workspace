@@ -1,4 +1,5 @@
-# Each command has usage text, aw alone shows it, and a usage error exits 2 naming the problem.
+# Each command has usage text, aw alone shows it, and a usage error exits 2 naming the problem and
+# the command's usage line (#136).
 # req: R93
 # source: C2 tests::t_lane_usage, t_kit_usage
 # milestone: M1
@@ -23,7 +24,12 @@ stdout '--timings'
 exec sh -c 'aw config get; echo "status=$?"'
 stdout '^status=2$'
 stderr 'accepts 1 arg\(s\), received 0'
+stderr '^Usage: aw config get <key> \[flags\]$'
 stderr 'aw config get --help'
+exec sh -c 'aw new; echo "status=$?"'
+stdout '^status=2$'
+stderr '^aw: aw new needs the purpose of the work, in quotes: aw new "fix checkout tax"$'
+stderr '^Usage: aw new "<purpose>" '
 exec sh -c 'aw whoami extra; echo "status=$?"'
 stdout '^status=2$'
 exec sh -c 'aw doctor --bogus; echo "status=$?"'

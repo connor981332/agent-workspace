@@ -318,7 +318,12 @@ the session is recorded against the lane, and this terminal is the lane's until 
 
 With --shell, it starts your own shell ($SHELL) in the lane root instead, with the lane's
 environment, for working in the lane yourself.`,
-		Args: cobra.MinimumNArgs(1),
+		Args: func(_ *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return errors.New(`aw new needs the purpose of the work, in quotes: aw new "fix checkout tax"`)
+			}
+			return nil
+		},
 		RunE: run(func(cmd *cobra.Command, args []string) error {
 			purpose, extra := args[0], []string{}
 			if dash := cmd.ArgsLenAtDash(); dash >= 0 {
