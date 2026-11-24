@@ -1,0 +1,35 @@
+# With no herdr command but Herdr Core's hc, --mux with herdr opens a new tab in this terminal's
+# Herdr space with hc run, and the tab outlives this terminal. Outside a Herdr terminal, and with no
+# Herdr tool at all, aw says which, before anything is claimed.
+# req: R77
+# source: issue #134 (0.5.0 dogfood report)
+# milestone: M3
+
+workspace shop --init
+exec sh $WORK/use.sh
+
+# No Herdr tool on PATH.
+! exec aw new 'fix checkout tax' --mux
+stderr 'no Herdr command-line tool is on PATH \(aw looks for herdr, hc and herdr-core\)'
+exec aw sweep --json
+! stdout '"lane"'
+
+stubs hc claude
+
+# hc, but not inside a Herdr terminal.
+env HC_TERMINAL_ID=
+! exec aw new 'fix checkout tax' --mux
+stderr 'HC_TERMINAL_ID is not set'
+
+env HC_TERMINAL_ID=term-9
+exec aw new 'fix checkout tax' --mux
+stderr 'opened claude in a new herdr tab, checkout-tax'
+exec cat $STUB_LOG
+stdout '^hc \[get\] \[term-9\] \[--json\]$'
+stdout '^hc \[run\] \[--bg\] \[--no-parent\] \[--no-notify\] \[--label\] \[herdr.space=s3\] \[--label\] \[aw.lane=checkout-tax\] \[--\] \[/bin/sh\] \[-c\] '
+stdout '^claude cwd .*/\.worktrees/01$'
+stdout '^claude AW_SESSION=claude:new-'
+
+-- use.sh --
+mkdir -p "$XDG_CONFIG_HOME/agent-workspace"
+printf '[user]\nmultiplexer = "herdr"\n' > "$XDG_CONFIG_HOME/agent-workspace/shop.toml"

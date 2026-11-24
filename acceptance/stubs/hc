@@ -1,0 +1,16 @@
+#!/bin/sh
+# Test double for Herdr Core's hc. It records its arguments in $STUB_LOG, answers get with the
+# terminal's labels, and runs what run is given after --.
+{
+	printf 'hc'
+	for a in "$@"; do printf ' [%s]' "$a"; done
+	printf '\n'
+} >> "$STUB_LOG"
+case "$1" in
+get) printf '{"id":"%s","labels":{"herdr.space":"s3","herdr.tab":"t2"}}\n' "$2" ;;
+run)
+	while [ "$#" -gt 0 ] && [ "$1" != "--" ]; do shift; done
+	shift
+	"$@"
+	;;
+esac

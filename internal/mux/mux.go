@@ -8,8 +8,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -52,6 +54,9 @@ func Check(m config.Multiplexer) error {
 	if m.Name != "tmux" && m.Name != "herdr" {
 		return ErrNone
 	}
+	if m.Name == "herdr" {
+		return checkHerdr()
+	}
 	if _, err := exec.LookPath(m.Name); err != nil {
 		return fmt.Errorf("the multiplexer %s is not installed (not on PATH) → install it, or change multiplexer in your individual layer", m.Name)
 	}
@@ -67,6 +72,9 @@ func Open(ctx context.Context, m config.Multiplexer, l Launch, background bool) 
 	case m.Name == "tmux":
 		return openTmux(ctx, l, background)
 	case m.Name == "herdr":
+		if herdrTool() != "herdr" {
+			return openHerdrCore(ctx, l)
+		}
 		return openHerdr(ctx, l, background)
 	}
 	return "", ErrNone
@@ -120,6 +128,93 @@ func openHerdr(ctx context.Context, l Launch, background bool) (string, error) {
 		return "", err
 	}
 	return "a new herdr tab, " + l.Name, nil
+}
+
+// herdrCLIs are the command-line tools a Herdr install may have, in the order aw prefers them: the
+// herdr CLI, with tab create and pane run, and Herdr Core's hc (also installed as herdr-core), with
+// run (#134).
+var herdrCLIs = []string{"herdr", "hc", "herdr-core"}
+
+// herdrTool is the first of herdrCLIs on PATH, or "".
+func herdrTool() string {
+	for _, name := range herdrCLIs {
+		if _, err := exec.LookPath(name); err == nil {
+			return name
+		}
+	}
+	return ""
+}
+
+// checkHerdr reports why aw could not open a Herdr tab: no Herdr tool on PATH, or, with Herdr
+// Core's hc, a terminal that is not one of Herdr's, since a new tab goes in the same space as this
+// terminal.
+func checkHerdr() error {
+	switch herdrTool() {
+	case "":
+		return errors.New(`no Herdr command-line tool is on PATH (aw looks for herdr, hc and herdr-core) → install Herdr, or set multiplexer to { command = "… {name} -- {cmd}" } in your individual layer`)
+	case "herdr":
+		return nil
+	}
+	if os.Getenv("HC_TERMINAL_ID") == "" {
+		return errors.New("this terminal is not one of Herdr's (HC_TERMINAL_ID is not set), and Herdr Core opens a tab only from inside one → run aw from a Herdr tab, or use --here")
+	}
+	return nil
+}
+
+// openHerdrCore opens a new tab in this terminal's Herdr space with Herdr Core's hc: hc run in that
+// space, with no herdr.tab label, opens a new tab there. --no-parent keeps the tab when this
+// terminal's program ends, and PATH is passed on, since Herdr's server does not have the user's.
+func openHerdrCore(ctx context.Context, l Launch) (string, error) {
+	tool := herdrTool()
+	id := os.Getenv("HC_TERMINAL_ID")
+	if id == "" {
+		return "", checkHerdr()
+	}
+	out, err := run(ctx, tool, "get", id, "--json")
+	if err != nil {
+		return "", err
+	}
+	space := findLabel(out, "herdr.space")
+	if space == "" {
+		return "", fmt.Errorf("%s get %s did not name this terminal's Herdr space (%q) → check that this version of Herdr is supported, or set multiplexer to { command = … }", tool, id, strings.TrimSpace(string(out)))
+	}
+	l.Env = append(slices.Clone(l.Env), "PATH="+os.Getenv("PATH"))
+	if _, err := run(ctx, tool, "run", "--bg", "--no-parent", "--no-notify",
+		"--label", "herdr.space="+space, "--label", "aw.lane="+l.Name, "--", "/bin/sh", "-c", l.shell()); err != nil {
+		return "", err
+	}
+	return "a new herdr tab, " + l.Name, nil
+}
+
+// findLabel finds key's string value anywhere in a JSON reply, for reading a label from hc get
+// whatever object holds it.
+func findLabel(reply []byte, key string) string {
+	var v any
+	if json.Unmarshal(reply, &v) != nil {
+		return ""
+	}
+	var walk func(any) string
+	walk = func(v any) string {
+		switch t := v.(type) {
+		case map[string]any:
+			if s, ok := t[key].(string); ok && s != "" {
+				return s
+			}
+			for _, k := range slices.Sorted(maps.Keys(t)) {
+				if s := walk(t[k]); s != "" {
+					return s
+				}
+			}
+		case []any:
+			for _, e := range t {
+				if s := walk(e); s != "" {
+					return s
+				}
+			}
+		}
+		return ""
+	}
+	return walk(v)
 }
 
 // rootPane reads the new tab's pane from herdr's reply.
