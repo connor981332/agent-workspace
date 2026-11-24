@@ -9,10 +9,10 @@ import (
 
 // Every session that holds a lane is named, not only the first (#126).
 func TestAttachedLineNamesEverySession(t *testing.T) {
-	holders := []state.Session{
+	holders := describeHolders([]state.Session{
 		{HarnessSession: "4e7e27aa", Harness: "claude"},
 		{HarnessSession: "new-6d4a5b26", Harness: "shell"},
-	}
+	}, nil)
 	if got, want := attachedLine(holders), "2 sessions are attached: 4e7e27aa (claude), new-6d4a5b26 (shell)"; got != want {
 		t.Errorf("attachedLine = %q, want %q", got, want)
 	}
