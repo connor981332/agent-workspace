@@ -1,0 +1,26 @@
+# aw new run from inside another lane's session, such as the shell aw new --shell started, warns
+# that the new session starts inside it and that the enclosing one still holds its lane, and names
+# the way out. A cd back to the owner checkout does not leave the lane, so this is the only sign
+# (#123). A terminal outside any session gets no warning.
+# req: R77
+# source: issue #123 (0.5.0 dogfood report)
+# milestone: M12
+
+workspace shop --init
+chmod 755 $WORK/myshell
+env SHELL=$WORK/myshell
+exec aw new 'try the new parser' --shell
+! stderr 'is inside lane'
+exec cat $WORK/nested.log
+stdout 'warning: this terminal is inside lane 01 parser''s shell session \(new-[0-9a-f]{8}…\), which still holds that lane'
+stdout 'exit that one first, or use aw new --mux'
+stdout 'lane 02 '
+
+-- myshell --
+#!/bin/sh
+# The first shell, in lane 01, goes back to the owner checkout and starts another lane from there.
+# The nested one only exits.
+if [ -z "$NESTED" ]; then
+	export NESTED=1
+	cd "$AW_OWNER" && aw new 'second piece of work' --shell >"$WORK/nested.log" 2>&1
+fi

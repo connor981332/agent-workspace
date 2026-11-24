@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"syscall"
 
 	"github.com/spf13/cobra"
@@ -18,6 +19,7 @@ import (
 	"github.com/connor981332/agent-workspace/internal/harness/launch"
 	"github.com/connor981332/agent-workspace/internal/lanes"
 	"github.com/connor981332/agent-workspace/internal/mux"
+	"github.com/connor981332/agent-workspace/internal/platform"
 	"github.com/connor981332/agent-workspace/internal/runners"
 	"github.com/connor981332/agent-workspace/internal/state"
 	"github.com/connor981332/agent-workspace/internal/timing"
@@ -127,6 +129,8 @@ func startLaneSession(cmd *cobra.Command, purpose, harness, branch, role string,
 		if err := mux.Check(w.cfg.User.Multiplexer); err != nil {
 			return err
 		}
+	} else if line := enclosingSessionWarning(w); line != "" {
+		fmt.Fprintln(cmd.ErrOrStderr(), line)
 	}
 	id := "new-" + randomHex(8)
 	m := manager(w)
@@ -185,6 +189,73 @@ func startLaneSession(cmd *cobra.Command, purpose, harness, branch, role string,
 	// The harness replaces this process: it keeps this PID, so the session's process identity
 	// recorded at the claim stays true.
 	return syscall.Exec(path, append([]string{argv0}, extra...), env)
+}
+
+// enclosingSessionWarning says when this terminal is already inside a lane session that aw started
+// (aw new, aw resume): its harness or shell inherited AW_SESSION, and one of its processes is an
+// ancestor of this one. Exiting a harness leaves the person in that session's shell, and a cd does
+// not leave the lane, so without a word each aw new nests one session deeper and every enclosing
+// one keeps holding its lane (#123). It returns "" when there is nothing to say.
+func enclosingSessionWarning(w *writeContext) string {
+	if os.Getenv("AW_SESSION") == "" {
+		return ""
+	}
+	ids, err := issuedIdentities()
+	if err != nil || len(ids) == 0 {
+		return ""
+	}
+	rec, err := state.SessionByHarnessID(w.store.DB(), ids[0].harness, ids[0].id)
+	if err != nil || rec.Pair || rec.Lane == 0 || rec.State != state.SessionActive || !rec.Alive() || !encloses(rec) {
+		return ""
+	}
+	lane := fmt.Sprintf("lane %02d", rec.Lane)
+	held := false
+	if l, err := state.LaneByNumber(w.store.DB(), rec.Lane); err == nil {
+		lane = fmt.Sprintf("lane %02d %s", l.Number, ui.Clean(l.Name))
+		held = rec.Holds(l)
+	}
+	what := harnessLabel(rec.Harness) + " session"
+	if rec.Harness == shellHarness {
+		what = "shell session"
+	}
+	id := rec.HarnessSession
+	if len(id) > 12 {
+		id = id[:12] + "…"
+	}
+	still := "which no longer holds that lane"
+	if held {
+		still = "which still holds that lane, so sweep keeps it"
+	}
+	return fmt.Sprintf("aw: warning: this terminal is inside %s's %s (%s), %s; the new lane's session starts inside it → exit that one first, or use aw new --mux to open the lane in its own tab", lane, what, ui.Clean(id), still)
+}
+
+// encloses reports whether one of the session's processes is an ancestor of this process. When the
+// ancestry cannot be read, a live session that AW_SESSION names counts as enclosing.
+func encloses(rec state.Session) bool {
+	procs := rec.Processes()
+	if pid, err := strconv.Atoi(os.Getenv("AW_SESSION_PID")); err == nil && pid > 0 {
+		procs = append(procs, state.Process{PID: pid})
+	}
+	if len(procs) == 0 {
+		return true
+	}
+	pid := os.Getpid()
+	for range 64 {
+		parent, err := platform.Parent(pid)
+		if err != nil {
+			return true
+		}
+		if parent <= 1 {
+			return false
+		}
+		for _, p := range procs {
+			if p.PID == parent {
+				return true
+			}
+		}
+		pid = parent
+	}
+	return true
 }
 
 // shellHarness stands for the user's own shell: aw new --shell and aw resume --shell set up the lane
