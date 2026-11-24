@@ -18,7 +18,7 @@ exec sh -c 'printf %s "$AW_SESSION" > "$WORK/id"'
 end-session s-1
 exec aw sweep --json
 json stdout .lanes[0].action keep
-json stdout .lanes[0].reason 'session s-1 (claude) is attached'
+json stdout .lanes[0].reason 'session s-1 (claude) is attached; every repository is clean and proven merged, so it will be recycled once that session ends'
 exec sh -c 'kill "$(cat "$WORK/resumed.pid")"; sleep 0.2'
 exec aw sweep --json
 json stdout .lanes[0].action recycle

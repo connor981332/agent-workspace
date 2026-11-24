@@ -13,7 +13,7 @@ exec sh -c 'claude start "$WORK/started" >/dev/null 2>&1 & i=0; while [ ! -e "$W
 cd $OWNER
 exec aw sweep --json
 json stdout .lanes[0].action keep
-json stdout .lanes[0].reason 'session s-1 (claude) is attached'
+json stdout .lanes[0].reason 'session s-1 (claude) is attached; every repository is clean and proven merged, so it will be recycled once that session ends'
 exec aw lanes --json
 json stdout .lanes[0].state working
 exec touch $WORK/stop

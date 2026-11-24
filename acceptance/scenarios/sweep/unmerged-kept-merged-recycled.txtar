@@ -14,7 +14,7 @@ json stdout .lanes[0].action keep
 [git-content] json stdout .lanes[0].reason 'solo: not proven merged: 1 commit not in refs/remotes/origin/main: its head is not there, no commit there has the same patch, and merging it would change 1 file; no forge was asked, since origin is not on one'
 [!git-content] json stdout .lanes[0].reason 'solo: not proven merged: 1 commit not in refs/remotes/origin/main: its head is not there, no commit there has the same patch, and this Git cannot compare content (Git 2.38 or later can); no forge was asked, since origin is not on one'
 exec aw sweep
-stdout '^01  feature-flag  keep  solo: not proven merged'
+stdout '^01  feature-flag  unmerged  solo: not proven merged'
 stdout '^To recycle a kept lane:'
 stdout '^   solo: merge its work \(aw changeset opens the merge requests\), or aw resume feature-flag to keep working on it$'
 

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -34,20 +35,41 @@ const (
 	ActionReclaim = "reclaim"
 )
 
+// What keeps a lane (Decision.Kept), so that a list of kept lanes can be read at a glance (#126).
+const (
+	KeptHeld      = "held"      // a session holds it, it is parked or being set up, or it has open notes
+	KeptUnmerged  = "unmerged"  // a repository has uncommitted work or work not proven merged
+	KeptStuck     = "stuck"     // an earlier cleanup of it failed part way
+	KeptProtected = "protected" // something about it cannot be read, so it is kept to be safe
+)
+
+// Holder is a session that holds a lane: what sweep names so that a person can find and end it.
+type Holder struct {
+	Session string `json:"session"`
+	Harness string `json:"harness"`
+	PID     int    `json:"pid,omitempty"`
+	TTY     string `json:"tty,omitempty"`
+}
+
 // Decision is what sweep does with one lane, and why.
 type Decision struct {
-	Number int              `json:"number"`
-	Dir    string           `json:"lane"`
-	Name   string           `json:"name"`
-	State  string           `json:"state"`
-	Action string           `json:"action"`
-	Reason string           `json:"reason"`
-	Repos  []evidence.Repo  `json:"repos,omitempty"`
-	Next   []string         `json:"next,omitempty"`   // for a kept lane, what would let it be recycled
-	Result string           `json:"result,omitempty"` // after --apply: done, skipped, failed
-	Error  string           `json:"error,omitempty"`
-	lane   state.Lane       `json:"-"`
-	stored []state.LaneRepo `json:"-"`
+	Number int             `json:"number"`
+	Dir    string          `json:"lane"`
+	Name   string          `json:"name"`
+	State  string          `json:"state"`
+	Action string          `json:"action"`
+	Reason string          `json:"reason"`
+	Repos  []evidence.Repo `json:"repos,omitempty"`
+	// Kept, for a kept lane, is what kind of thing keeps it: KeptHeld, KeptUnmerged, KeptStuck or
+	// KeptProtected. Action stays "keep", so scripts that read it are unchanged.
+	Kept string `json:"kept,omitempty"`
+	// Holders are the sessions that hold the lane, when sessions are what keeps it.
+	Holders []Holder         `json:"holders,omitempty"`
+	Next    []string         `json:"next,omitempty"`   // for a kept lane, what would let it be recycled
+	Result  string           `json:"result,omitempty"` // after --apply: done, skipped, failed
+	Error   string           `json:"error,omitempty"`
+	lane    state.Lane       `json:"-"`
+	stored  []state.LaneRepo `json:"-"`
 	// partial: an earlier removal that did not finish already took some of its worktrees, so it can
 	// only be removed, not recycled.
 	partial bool
@@ -165,7 +187,7 @@ func (m *Manager) Sweep(ctx context.Context, o SweepOptions) (*SweepReport, erro
 		// is safe to recycle.
 		if e, ok := failedLanes[l.Number]; ok && o.Retry != e.ID {
 			d.Action, d.Reason = ActionKeep, fmt.Sprintf("an earlier %s failed (%s) → fix the cause, then aw sweep --apply%s --retry %d", e.Kind, e.Detail, pushedFlag(e.Kind), e.ID)
-			d.Next = nil
+			d.Kept, d.Holders, d.Next = KeptStuck, nil, nil
 		}
 	}
 
@@ -179,14 +201,14 @@ func (m *Manager) Sweep(ctx context.Context, o SweepOptions) (*SweepReport, erro
 		pooledAt, err := time.Parse(time.RFC3339Nano, d.lane.Pooled)
 		switch {
 		case err != nil:
-			d.Action, d.Reason = ActionKeep, "its age in the pool is unknown, so it is kept"
+			d.Action, d.Reason, d.Kept = ActionKeep, "its age in the pool is unknown, so it is kept", KeptProtected
 		case retention > 0 && o.Now.Sub(pooledAt) > retention:
 			d.Action, d.Reason = ActionDestroy, fmt.Sprintf("in the pool for more than %s ([lanes] retention)", retention)
 		case pooled >= m.Cfg.Lanes.Pool:
 			d.Action, d.Reason = ActionDestroy, fmt.Sprintf("the pool already has %d lanes ([lanes] pool)", m.Cfg.Lanes.Pool)
 		default:
-			d.Action, d.Reason = ActionPooled, "warm, ready to be claimed"
 			pooled++
+			d.Action, d.Reason = ActionPooled, fmt.Sprintf("recycled: its branches and work are removed; kept on disk as a warm lane, ready to be claimed (pool %d of %d)", pooled, m.Cfg.Lanes.Pool)
 		}
 	}
 	for _, d := range rep.Lanes {
@@ -258,16 +280,20 @@ func (m *Manager) decide(ctx context.Context, d *Decision, sessions []state.Sess
 	// A reason to keep the lane that is not about its repositories still leaves their proof to be
 	// worked out and reported, without asking the forge: it would not change the decision.
 	var held string
-	keep := func(format string, args ...any) {
-		d.Action, d.Reason = ActionKeep, fmt.Sprintf(format, args...)
+	var holders []state.Session
+	keep := func(kind, format string, args ...any) {
+		d.Action, d.Reason, d.Kept = ActionKeep, fmt.Sprintf(format, args...), kind
 		if held != "" {
-			d.Reason, d.Next = held, nil
+			d.Reason, d.Next, d.Kept = held, nil, KeptHeld
+			if len(holders) > 0 {
+				d.Holders, d.Next = describeHolders(holders), endSteps(holders)
+			}
 		}
 	}
 	l := d.lane
 	switch l.State {
 	case state.LaneClaiming, state.LaneSettingUp:
-		keep("it is being set up")
+		keep(KeptHeld, "it is being set up")
 		return // its worktrees may not exist yet
 	case state.LaneIncomplete:
 		held = "its setup is incomplete"
@@ -277,9 +303,14 @@ func (m *Manager) decide(ctx context.Context, d *Decision, sessions []state.Sess
 	if held == "" && l.Number == caller {
 		held = "this command runs in it"
 	}
-	for _, s := range sessions {
-		if held == "" && s.Holds(l) {
-			held = fmt.Sprintf("session %s (%s) is attached", s.HarnessSession, s.Harness)
+	if held == "" {
+		for _, s := range sessions {
+			if s.Holds(l) {
+				holders = append(holders, s)
+			}
+		}
+		if len(holders) > 0 {
+			held = attachedLine(holders)
 		}
 	}
 	// An open note is work the lane's agent left outside it, which no merge proves done.
@@ -288,19 +319,19 @@ func (m *Manager) decide(ctx context.Context, d *Decision, sessions []state.Sess
 	}
 	root := m.Root(l.Number)
 	if info, err := os.Lstat(root); err != nil {
-		keep("its directory %s cannot be read: %v", root, err)
+		keep(KeptProtected, "its directory %s cannot be read: %v", root, err)
 		return
 	} else if info.Mode()&os.ModeSymlink != 0 {
-		keep("its directory %s is a symlink, not the lane aw made", root)
+		keep(KeptProtected, "its directory %s is a symlink, not the lane aw made", root)
 		return
 	}
 	if data, err := os.ReadFile(filepath.Join(root, ".aw", "owner")); err != nil || strings.TrimSpace(string(data)) != m.WS.Owner {
-		keep("its lane marker (.aw/owner) does not name this owner checkout")
+		keep(KeptProtected, "its lane marker (.aw/owner) does not name this owner checkout")
 		return
 	}
 	stored, err := state.LaneRepos(m.Store.DB(), l.Number)
 	if err != nil || len(stored) == 0 {
-		keep("its repositories cannot be read from the state")
+		keep(KeptProtected, "its repositories cannot be read from the state")
 		return
 	}
 	d.stored = stored
@@ -309,7 +340,7 @@ func (m *Manager) decide(ctx context.Context, d *Decision, sessions []state.Sess
 	for _, r := range stored {
 		owner := filepath.Join(m.WS.Owner, m.relOf(r))
 		if locked, err := worktreeLocked(ctx, owner, r.Path); err != nil || locked {
-			keep("%s's worktree is locked (git worktree lock), or its lock cannot be read", repoLabel(r))
+			keep(KeptProtected, "%s's worktree is locked (git worktree lock), or its lock cannot be read", repoLabel(r))
 			return
 		}
 		var ev evidence.Repo
@@ -328,7 +359,7 @@ func (m *Manager) decide(ctx context.Context, d *Decision, sessions []state.Sess
 		case ev.Unknown && held != "":
 			continue // kept anyway; the other repositories' proof is still worth showing
 		case ev.Unknown:
-			keep("%s: %s, so it is protected", repoLabel(r), ev.Reason)
+			keep(KeptProtected, "%s: %s, so it is protected", repoLabel(r), ev.Reason)
 			return
 		case !ev.Clean:
 			reasons = append(reasons, repoLabel(r)+": "+ev.Dirty)
@@ -348,7 +379,15 @@ func (m *Manager) decide(ctx context.Context, d *Decision, sessions []state.Sess
 		d.Next = append([]string{"aw pull fetches origin first: work merged since the last fetch is then proven merged"}, d.Next...)
 	}
 	if held != "" {
-		keep("%s", held)
+		keep(KeptHeld, "%s", held)
+		if len(holders) > 0 && allProven(d.Repos, stored) {
+			// Only the sessions stand in the way: say so, and when it will go (#126).
+			them := "that session ends"
+			if len(holders) > 1 {
+				them = "they end"
+			}
+			d.Reason = held + "; every repository is clean and proven merged, so it will be recycled once " + them
+		}
 		return
 	}
 	if pushed, ok := inReview(d.Repos, d.stored); ok && len(reasons) > 0 {
@@ -361,7 +400,7 @@ func (m *Manager) decide(ctx context.Context, d *Decision, sessions []state.Sess
 		if state.HandedOff(m.Store.DB(), l.Number, l.Generation) {
 			prefix = "ready for review, but "
 		}
-		keep("%s%s", prefix, strings.Join(reasons, "; "))
+		keep(KeptUnmerged, "%s%s", prefix, strings.Join(reasons, "; "))
 		return
 	}
 	d.Action, d.Reason = ActionRecycle, "every repository is clean and proven merged"
@@ -388,6 +427,77 @@ func (m *Manager) fetchNote(owner, baseRef string, ev *evidence.Repo) string {
 		return ""
 	}
 	return fmt.Sprintf("; %s was last fetched %s ago, so a merge since then is not seen → aw pull", strings.TrimPrefix(baseRef, "refs/remotes/"), age(since))
+}
+
+// allProven reports whether every repository of a lane is clean and proven merged.
+func allProven(repos []evidence.Repo, stored []state.LaneRepo) bool {
+	if len(repos) != len(stored) {
+		return false
+	}
+	for _, ev := range repos {
+		if ev.Unknown || !ev.Clean || ev.Proof == "" {
+			return false
+		}
+	}
+	return true
+}
+
+// attachedLine names every session that holds a lane.
+func attachedLine(holders []state.Session) string {
+	if len(holders) == 1 {
+		return fmt.Sprintf("session %s (%s) is attached", holders[0].HarnessSession, holders[0].Harness)
+	}
+	names := make([]string, len(holders))
+	for i, h := range holders {
+		names[i] = fmt.Sprintf("%s (%s)", h.HarnessSession, h.Harness)
+	}
+	return fmt.Sprintf("%d sessions are attached: %s", len(holders), strings.Join(names, ", "))
+}
+
+// describeHolders gives each holding session's process and terminal, for finding it.
+func describeHolders(holders []state.Session) []Holder {
+	out := make([]Holder, len(holders))
+	for i, h := range holders {
+		out[i] = Holder{Session: h.HarnessSession, Harness: h.Harness, PID: h.PID}
+		if h.PID > 0 {
+			out[i].TTY = ttyOf(h.PID)
+		}
+	}
+	return out
+}
+
+// endSteps say, for each holding session, how to end it or let the lane go.
+func endSteps(holders []state.Session) []string {
+	var steps []string
+	for _, h := range describeHolders(holders) {
+		where := ""
+		switch {
+		case h.PID > 0 && h.TTY != "":
+			where = fmt.Sprintf(", pid %d on %s", h.PID, h.TTY)
+		case h.PID > 0:
+			where = fmt.Sprintf(", pid %d", h.PID)
+		}
+		how := "end it, or run aw detach in it"
+		if h.Harness == "shell" {
+			how = "exit that shell, or run aw detach in it"
+		}
+		steps = append(steps, fmt.Sprintf("session %s (%s%s): %s", h.Session, h.Harness, where, how))
+	}
+	return steps
+}
+
+// ttyOf is the terminal a process runs on, such as ttys003 or pts/2, or "" when it has none or it
+// cannot be read. ps reports it the same way on Linux and macOS.
+func ttyOf(pid int) string {
+	out, err := exec.Command("ps", "-o", "tty=", "-p", strconv.Itoa(pid)).Output()
+	if err != nil {
+		return ""
+	}
+	tty := strings.TrimSpace(string(out))
+	if tty == "" || tty == "?" || tty == "??" || strings.ContainsFunc(tty, func(r rune) bool { return r < ' ' }) {
+		return ""
+	}
+	return tty
 }
 
 // inReview reports whether a lane whose repositories are all clean can be reclaimed: each one is

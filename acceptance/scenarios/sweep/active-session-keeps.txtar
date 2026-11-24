@@ -9,5 +9,5 @@ exec aw attach 'add feature flag'
 env CLAUDE_CODE_SESSION_ID=
 exec aw sweep --apply --json
 json stdout .lanes[0].action keep
-json stdout .lanes[0].reason 'session s-1 (claude) is attached'
+json stdout .lanes[0].reason 'session s-1 (claude) is attached; every repository is clean and proven merged, so it will be recycled once that session ends'
 exists .worktrees/01
