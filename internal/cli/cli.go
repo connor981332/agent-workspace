@@ -54,7 +54,13 @@ func Main(args []string, stdout, stderr io.Writer) int {
 		if cmd != nil {
 			where = cmd
 		}
-		fmt.Fprintf(stderr, "Run '%s --help' for usage.\n", where.CommandPath())
+		if where != root {
+			// The command's own usage line, so a missing argument is named here (#136).
+			fmt.Fprintf(stderr, "Usage: %s\n", where.UseLine())
+			fmt.Fprintf(stderr, "Run '%s --help' for the rest.\n", where.CommandPath())
+		} else {
+			fmt.Fprintf(stderr, "Run '%s --help' for usage.\n", where.CommandPath())
+		}
 	}
 	return code
 }
