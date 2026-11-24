@@ -10,4 +10,4 @@ env AW_SESSION_PID=2147483646
 ! exec aw attach 'add feature flag'
 stderr 'AW_SESSION_PID is 2147483646, which is not a running process'
 exec aw sweep --json
-json stdout .lanes[0].reason 'session s-1 (claude) is attached'
+json stdout .lanes[0].reason 'session s-1 (claude) is attached; every repository is clean and proven merged, so it will be recycled once that session ends'

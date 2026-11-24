@@ -20,5 +20,5 @@ json stdout .lanes[0].action keep
 stdout '"last_fetch": "20(19-12-31|20-01-01)T'
 stdout 'origin/main was last fetched [0-9]+ days ago, so a merge since then is not seen → aw pull'
 exec aw sweep
-stdout '^01  feature-flag  keep  solo: not proven merged.*origin/main was last fetched [0-9]+ days ago'
+stdout '^01  feature-flag  unmerged  solo: not proven merged.*origin/main was last fetched [0-9]+ days ago'
 stdout '^   aw pull fetches origin first: work merged since the last fetch is then proven merged$'

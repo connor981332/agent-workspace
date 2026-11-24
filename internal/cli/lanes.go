@@ -56,6 +56,11 @@ nothing. Recycled lanes return to the warm pool; lanes beyond [lanes] pool, or o
 [lanes] retention in it, are removed. Without --apply nothing is changed. Naming lanes limits the
 report, and --apply, to them.
 
+A kept lane says what keeps it: held (a session holds it, every one of which is named, or it is
+parked or has open notes), unmerged (uncommitted work, or work not proven merged), stuck (an
+earlier cleanup failed part way) or protected (something about it cannot be read). --json keeps
+the action "keep" and gives this as "kept".
+
 A lane whose work is not merged yet but is safe on the forge is reported as reclaim: every
 repository is clean, and each one is proven merged or the forge reports an open change whose head
 is exactly the repository's head. Plain --apply leaves it alone; --pushed --apply archives its
@@ -108,7 +113,11 @@ branches under refs/aw/archive/<name>/<time>, as aw discard does, then removes i
 					if d.Result != "" {
 						reason += " [" + d.Result + "]"
 					}
-					table = append(table, []string{d.Dir, name, d.Action, reason})
+					action := d.Action
+					if d.Action == lanes.ActionKeep && d.Kept != "" {
+						action = d.Kept // held, unmerged, stuck or protected: what keeps it, at a glance
+					}
+					table = append(table, []string{d.Dir, name, action, reason})
 				}
 				if len(rep.Lanes) == 1 {
 					o = ui.Plain(out) // one lane asked for by name: its reason, whole

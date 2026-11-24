@@ -1,0 +1,44 @@
+# aw sweep says what keeps each lane: held, unmerged, stuck or protected in its table (--json keeps
+# the action "keep" and adds "kept"). A lane whose only obstacle is a session says that it is
+# otherwise ready and will be recycled once the session ends, and names the session's process and
+# the way to end it. A recycled lane in the pool says its work is gone and why it is still on disk
+# (#126).
+# req: R25 R26
+# source: issue #126 (0.5.0 dogfood report)
+# milestone: M3
+
+workspace solo --single --init
+
+# Held: a session holds a lane whose work is merged.
+session s-1 claude
+exec aw attach 'add feature flag'
+env AW_SESSION=
+env AW_SESSION_PID=
+exec aw sweep --json
+json stdout .lanes[0].action keep
+json stdout .lanes[0].kept held
+json stdout .lanes[0].holders[0].session s-1
+json stdout .lanes[0].holders[0].harness claude
+json stdout .lanes[0].holders[0].pid
+json stdout .lanes[0].reason 'session s-1 (claude) is attached; every repository is clean and proven merged, so it will be recycled once that session ends'
+exec aw sweep
+stdout '^01  feature-flag  held  session s-1 \(claude\) is attached; every repository is clean and proven merged'
+stdout '^   session s-1 \(claude, pid [0-9]+[^)]*\): end it, or run aw detach in it$'
+
+# Unmerged: once the session ends, work not proven merged keeps it.
+end-session s-1
+lane-commit 01 file.txt 'work'
+exec aw sweep --json
+json stdout .lanes[0].kept unmerged
+! json stdout .lanes[0].holders
+exec aw sweep
+stdout '^01  feature-flag  unmerged  solo: not proven merged'
+
+# Merged and recycled: in the pool, it says its work is gone and why it stays on disk.
+git-merge . aw/feature-flag
+exec aw sweep --apply --json
+json stdout .lanes[0].result done
+exec aw sweep --json
+json stdout .lanes[0].action pooled
+stdout 'recycled: its branches and work are removed; kept on disk as a warm lane, ready to be claimed \(pool 1 of [0-9]+\)'
+! json stdout .lanes[0].kept

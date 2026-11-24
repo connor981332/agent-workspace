@@ -14,4 +14,4 @@ exec aw attach 'second thing' --json
 json stdout .lane 01
 json stdout .name second-thing
 exec aw sweep --json
-json stdout .lanes[0].reason 'session new (codex) is attached'
+json stdout .lanes[0].reason 'session new (codex) is attached; every repository is clean and proven merged, so it will be recycled once that session ends'
