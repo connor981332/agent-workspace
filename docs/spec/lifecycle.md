@@ -265,6 +265,9 @@ Proven any way but the first, the lane's commits are not in the base though thei
 the tip is archived under `refs/aw/archive/<name>/<time>` before the lane is recycled or removed,
 as `aw discard` archives. `aw sweep --apply` removes archives older than `[lanes]
 archive_retention` (30 days by default). A lane kept as unproven says every check that was tried.
+The proof is against the base as last fetched, and `aw sweep` never fetches: when origin was last
+fetched in a repository more than an hour ago, its reason says when, and the lane's next steps start
+with `aw pull`, after which work merged since is proven.
 
 A deleted remote branch, a handoff and a quiet session prove nothing. Ignored files that a project
 (or, for the workspace repository, `[workspace]`) does not list as `generated` block recycling,

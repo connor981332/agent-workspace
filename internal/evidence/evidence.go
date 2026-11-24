@@ -45,6 +45,9 @@ type Repo struct {
 	Unknown bool     `json:"unknown"` // something could not be read: protect
 	// Forge is what the forge said, when it was asked.
 	Forge any `json:"forge,omitempty"`
+	// LastFetch is when a remote-tracking base was last updated (RFC 3339), when the repository is
+	// not proven merged and that can be read: the proof is only as fresh as it.
+	LastFetch string `json:"last_fetch,omitempty"`
 }
 
 // Options are what the caller knows about the lane.

@@ -1,0 +1,24 @@
+# A lane kept as not proven merged says when origin was last fetched in that repository, once that
+# is more than an hour ago, and names aw pull: the proof is only as fresh as the last fetch, and
+# sweep never fetches. A recent fetch adds nothing (#127).
+# req: R25
+# source: issue #127 (0.5.0 dogfood report)
+# milestone: M2
+
+workspace solo --single --init
+exec aw attach 'add feature flag' --json
+lane-commit 01 file.txt 'work'
+
+exec aw sweep --json
+json stdout .lanes[0].action keep
+! stdout 'was last fetched'
+stdout '"last_fetch": "20'
+
+exec touch -t 202001010000 .git/logs/refs/remotes/origin/main .git/FETCH_HEAD
+exec aw sweep --json
+json stdout .lanes[0].action keep
+stdout '"last_fetch": "20(19-12-31|20-01-01)T'
+stdout 'origin/main was last fetched [0-9]+ days ago, so a merge since then is not seen → aw pull'
+exec aw sweep
+stdout '^01  feature-flag  keep  solo: not proven merged.*origin/main was last fetched [0-9]+ days ago'
+stdout '^   aw pull fetches origin first: work merged since the last fetch is then proven merged$'
