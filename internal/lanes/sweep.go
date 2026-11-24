@@ -305,6 +305,7 @@ func (m *Manager) decide(ctx context.Context, d *Decision, sessions []state.Sess
 	}
 	d.stored = stored
 	var reasons []string
+	stale := false // a repository's proof is from a fetch older than freshFetch
 	for _, r := range stored {
 		owner := filepath.Join(m.WS.Owner, m.relOf(r))
 		if locked, err := worktreeLocked(ctx, owner, r.Path); err != nil || locked {
@@ -333,9 +334,18 @@ func (m *Manager) decide(ctx context.Context, d *Decision, sessions []state.Sess
 			reasons = append(reasons, repoLabel(r)+": "+ev.Dirty)
 			d.Next = append(d.Next, cleanStep(r, ev))
 		case ev.Proof == "":
+			if note := m.fetchNote(owner, r.BaseRef, &ev); note != "" {
+				ev.Reason += note
+				stale = true
+			}
+			d.Repos[len(d.Repos)-1] = ev
 			reasons = append(reasons, repoLabel(r)+": "+ev.Reason)
 			d.Next = append(d.Next, fmt.Sprintf("%s: merge its work (aw changeset opens the merge requests), or aw resume %s to keep working on it", repoLabel(r), l.Name))
 		}
+	}
+	if stale {
+		// The proof is only as fresh as the last fetch: work merged since is not seen until then.
+		d.Next = append([]string{"aw pull fetches origin first: work merged since the last fetch is then proven merged"}, d.Next...)
 	}
 	if held != "" {
 		keep("%s", held)
@@ -355,6 +365,29 @@ func (m *Manager) decide(ctx context.Context, d *Decision, sessions []state.Sess
 		return
 	}
 	d.Action, d.Reason = ActionRecycle, "every repository is clean and proven merged"
+}
+
+// freshFetch is how old origin's refs in a repository may be before sweep says that a lane it
+// keeps as not proven merged may be merged already (#127). aw never fetches on a read.
+const freshFetch = time.Hour
+
+// fetchNote says, for a repository not proven merged against a remote-tracking base, when that base
+// was last fetched, when that is longer ago than freshFetch, and records it in ev. It is "" when the
+// base is local, the fetch is recent, or the time cannot be read.
+func (m *Manager) fetchNote(owner, baseRef string, ev *evidence.Repo) string {
+	if !strings.HasPrefix(baseRef, "refs/remotes/") {
+		return ""
+	}
+	at := fetchedAt(owner, baseRef)
+	if at.IsZero() {
+		return ""
+	}
+	ev.LastFetch = at.UTC().Format(time.RFC3339)
+	since := time.Since(at)
+	if since <= freshFetch {
+		return ""
+	}
+	return fmt.Sprintf("; %s was last fetched %s ago, so a merge since then is not seen → aw pull", strings.TrimPrefix(baseRef, "refs/remotes/"), age(since))
 }
 
 // inReview reports whether a lane whose repositories are all clean can be reclaimed: each one is
