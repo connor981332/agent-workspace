@@ -134,8 +134,13 @@ aw new "fix checkout tax rounding"
 ```
 
 This claims a lane (a pre-warmed one from the pool when there is one) and launches your harness in it.
-Arguments after `--` go to the harness unchanged. Use `--mux` to open it in a new tmux or herdr
-window, `--branch` to start on an existing branch, and `--harness` to use a different agent this time.
+Arguments after `--` go to the harness unchanged. Use `--branch` to start on an existing branch, and
+`--harness` to use a different agent this time.
+
+To run several lanes at once, set `multiplexer = "herdr"` or `"tmux"` under `[user]` in your
+individual layer and keep one shell at the workspace root: `aw new` then opens each lane in its own
+tab or window and leaves that shell free. `--here` runs a lane in the current terminal instead, and
+`--mux` opens one in the multiplexer without setting it.
 
 Every repository in a new lane starts from origin's default branch as last fetched, not from
 whatever your own checkout has, so your unpushed commits stay yours. aw never fetches on its own:

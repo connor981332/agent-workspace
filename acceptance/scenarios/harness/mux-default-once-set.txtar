@@ -1,0 +1,48 @@
+# Once a multiplexer is set, aw new opens the lane there without --mux, so the terminal that starts
+# lanes stays free; --here runs it in this terminal instead. Inside tmux with none set, aw new says
+# how to make that the default.
+# req: R77
+# source: issue #129 (0.5.0 dogfood report)
+# milestone: M3
+
+workspace shop --init
+stubs tmux claude
+
+# No multiplexer set, inside tmux: the lane takes this terminal, and aw new says how to change that.
+env TMUX=/tmp/tmux-1000/default,1,0
+exec aw new 'fix checkout tax'
+stderr 'this terminal is inside tmux, but no multiplexer is set'
+stderr 'set multiplexer = "tmux" under \[user\] in .*/agent-workspace/shop\.toml'
+! stderr 'opened claude'
+
+# Inside a Herdr terminal, the same.
+env TMUX=
+env HC_TERMINAL_ID=term-9
+exec aw new 'rename the config key'
+stderr 'set multiplexer = "herdr" under \[user\]'
+env HC_TERMINAL_ID=
+
+# Outside any multiplexer, nothing to suggest.
+env TMUX=
+exec aw new 'add feature flag'
+! stderr 'note:'
+
+# Set: aw new opens a new tmux window by default.
+exec sh $WORK/use.sh tmux
+env TMUX=/tmp/tmux-1000/default,1,0
+exec aw new 'add webhook retries'
+stderr 'opened claude in a new tmux window, webhook-retries'
+exec cat $STUB_LOG
+stdout '^tmux \[new-window\] \[-n\] \[webhook-retries\] '
+
+# --here keeps it in this terminal.
+exec aw new 'tidy the readme' --here
+! stderr 'opened claude'
+! stderr 'note:'
+
+! exec aw new 'one more' --here --mux
+stderr 'takes no --mux'
+
+-- use.sh --
+mkdir -p "$XDG_CONFIG_HOME/agent-workspace"
+printf '[user]\nmultiplexer = "%s"\n' "$1" > "$XDG_CONFIG_HOME/agent-workspace/shop.toml"
