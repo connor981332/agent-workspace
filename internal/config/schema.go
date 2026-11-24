@@ -317,7 +317,8 @@ var schema = table("",
 				return "", ""
 			}),
 		"multiplexer", muxNode("Where aw new, resume and pair open sessions with --mux: none, herdr, tmux, or a command "+
-			"template, { command = \"zellij run --name {name} -- {cmd}\" }."),
+			"template, { command = \"zellij run --name {name} -- {cmd}\" }. Once it is set, aw new opens "+
+			"lanes there by default, and aw new --here runs one in the current terminal."),
 		"auto_sweep", boolean("Recycle proven-merged lanes in the background.").withDefault(false),
 		"owner_sessions", str("normal: sessions in the owner checkout must attach to a lane before writing. pair: "+
 			"every session started in the owner checkout is a pair session.").oneOf("normal", "pair").withDefault("normal"),

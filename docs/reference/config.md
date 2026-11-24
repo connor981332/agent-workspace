@@ -225,7 +225,7 @@ Personal preferences, usually set in the individual layer.
 | Key | Type | Default | Meaning |
 |---|---|---|---|
 | `harness` | string | `"claude"` | The harness aw new launches: claude, codex, grok, opencode, or another on PATH. |
-| `multiplexer` | `none`, `herdr`, `tmux`, or `{ command }` | `"none"` | Where aw new, resume and pair open sessions with --mux: none, herdr, tmux, or a command template, { command = "zellij run --name {name} -- {cmd}" }. |
+| `multiplexer` | `none`, `herdr`, `tmux`, or `{ command }` | `"none"` | Where aw new, resume and pair open sessions with --mux: none, herdr, tmux, or a command template, { command = "zellij run --name {name} -- {cmd}" }. Once it is set, aw new opens lanes there by default, and aw new --here runs one in the current terminal. |
 | `auto_sweep` | boolean | `false` | Recycle proven-merged lanes in the background. |
 | `owner_sessions` | one of `"normal"`, `"pair"` | `"normal"` | normal: sessions in the owner checkout must attach to a lane before writing. pair: every session started in the owner checkout is a pair session. |
 

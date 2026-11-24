@@ -107,7 +107,7 @@ func warnBorrowedDeps(out io.Writer, ownerDir, laneDir string) {
 
 // startLaneSession claims a lane and replaces this process with the harness in it. It returns only
 // when something stopped that.
-func startLaneSession(cmd *cobra.Command, purpose, harness, branch, role string, projects []string, useMux, awHooksOnly, onboarding bool, extra []string) error {
+func startLaneSession(cmd *cobra.Command, purpose, harness, branch, role string, projects []string, where muxChoice, awHooksOnly, onboarding bool, extra []string) error {
 	t := timing.Start()
 	w, err := openForWrite()
 	if err != nil {
@@ -125,6 +125,7 @@ func startLaneSession(cmd *cobra.Command, purpose, harness, branch, role string,
 	if err != nil {
 		return err
 	}
+	useMux := where.resolve(cmd.ErrOrStderr(), w.cfg.User.Multiplexer, w.cfg.Workspace.Namespace)
 	if useMux {
 		if err := mux.Check(w.cfg.User.Multiplexer); err != nil {
 			return err
@@ -298,15 +299,22 @@ func laneShellEnv(m *lanes.Manager, lane int) []string {
 func newNewCmd() *cobra.Command {
 	var harness, branch, role string
 	var projects []string
-	var useMux bool
+	var useMux, here bool
 	var shell bool
 	cmd := &cobra.Command{
-		Use:   `new "<purpose>" [--harness h | --shell] [--mux] [--branch b] [--projects p,…] [-- harness arguments…]`,
+		Use:   `new "<purpose>" [--harness h | --shell] [--mux | --here] [--branch b] [--projects p,…] [-- harness arguments…]`,
 		Short: "Claim a lane and launch a harness in it",
 		Long: `Claim a lane for the purpose (from the warm pool when there is one), then launch the harness in the
 lane root: the individual layer's [user] harness, or --harness. Arguments after -- go to the harness
-unchanged. The harness runs as this process, with AW_SESSION set, so the session is recorded
-against the lane.
+unchanged.
+
+With a multiplexer set in your individual layer ([user] multiplexer: herdr, tmux, or a command), the
+lane opens in a new tab or window, and this terminal stays free to start the next one. That is the
+way to run several lanes at once: keep one shell at the workspace root and run aw new from it.
+--here runs it in this terminal instead, and --mux opens it in the multiplexer for this one call.
+
+Without a multiplexer, or with --here, the harness runs as this process, with AW_SESSION set, so
+the session is recorded against the lane, and this terminal is the lane's until it exits.
 
 With --shell, it starts your own shell ($SHELL) in the lane root instead, with the lane's
 environment, for working in the lane yourself.`,
@@ -327,7 +335,17 @@ environment, for working in the lane yourself.`,
 				}
 				harness = shellHarness
 			}
-			return startLaneSession(cmd, purpose, harness, branch, role, projects, useMux, false, false, extra)
+			if here && useMux {
+				return &usageError{errors.New("--here runs it in this terminal, so it takes no --mux")}
+			}
+			where := muxDefault
+			switch {
+			case useMux:
+				where = muxAlways
+			case here:
+				where = muxNever
+			}
+			return startLaneSession(cmd, purpose, harness, branch, role, projects, where, false, false, extra)
 		}),
 	}
 	cmd.Flags().BoolVar(&shell, "shell", false, "start your own shell in the lane, instead of a harness")
@@ -335,8 +353,49 @@ environment, for working in the lane yourself.`,
 	cmd.Flags().StringVar(&harness, "harness", "", "the harness to launch (default: [user] harness)")
 	cmd.Flags().StringVar(&branch, "branch", "", "start the lane on this existing branch")
 	cmd.Flags().StringSliceVar(&projects, "projects", nil, "check these projects out at once, besides [lanes] eager; the rest are checked out on first use (bin/aw use)")
-	cmd.Flags().BoolVar(&useMux, "mux", false, "open it in your terminal multiplexer")
+	cmd.Flags().BoolVar(&useMux, "mux", false, "open it in your terminal multiplexer (the default once [user] multiplexer is set)")
+	cmd.Flags().BoolVar(&here, "here", false, "run it in this terminal, even with a multiplexer set")
 	return cmd
+}
+
+// muxChoice is where aw new opens the lane: in this terminal, in the multiplexer, or in the
+// multiplexer once [user] multiplexer is set.
+type muxChoice int
+
+const (
+	muxNever muxChoice = iota
+	muxAlways
+	muxDefault
+)
+
+// resolve reports whether to open the lane in the multiplexer m. For the default, when no
+// multiplexer is set but this terminal is inside tmux or herdr, it says how to make that the default.
+func (c muxChoice) resolve(out io.Writer, m config.Multiplexer, namespace string) bool {
+	switch c {
+	case muxAlways:
+		return true
+	case muxNever:
+		return false
+	}
+	if m.Command != "" || m.Name == "tmux" || m.Name == "herdr" {
+		return true
+	}
+	if in := insideMux(); in != "" {
+		fmt.Fprintf(out, "aw: note: this terminal is inside %s, but no multiplexer is set, so the lane takes over this terminal → set multiplexer = %q under [user] in %s, and aw new opens each lane in its own tab (aw new --mux does it once)\n",
+			in, in, config.IndividualFile(namespace))
+	}
+	return false
+}
+
+// insideMux names the built-in multiplexer this terminal runs inside, if any.
+func insideMux() string {
+	if os.Getenv("TMUX") != "" {
+		return "tmux"
+	}
+	if os.Getenv("HC_TERMINAL_ID") != "" || platform.HarnessAncestor(os.Getpid(), "herdr") != 0 {
+		return "herdr"
+	}
+	return ""
 }
 
 // openInMux starts a session in the multiplexer and says where it went.
