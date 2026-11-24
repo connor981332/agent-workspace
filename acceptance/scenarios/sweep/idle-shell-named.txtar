@@ -1,0 +1,30 @@
+# A shell that aw new --shell started holds its lane for as long as it lives, even after it has
+# cd'd out of the lane. aw sweep names such a shell as idle, with its process, and says that exiting
+# it releases the lane (#128).
+# req: R25 R77
+# source: issue #128 (0.5.0 dogfood report)
+# milestone: M12
+
+workspace shop --init
+chmod 755 $WORK/myshell
+env SHELL=$WORK/myshell
+exec aw new 'try the new parser' --shell
+exec cat $WORK/sweep.json
+stdout '"kept": "held"'
+stdout '"harness": "shell"'
+stdout '"idle": "its directory is no longer in the lane \(it is in '
+exec cat $WORK/sweep.txt
+stdout '^01  parser  held  session new-[0-9a-f]+ \(shell, idle\) is attached'
+stdout '^   session new-[0-9a-f]+ \(shell, pid [0-9]+[^)]*\): an idle shell that has held the lane since [A-Z][a-z]+ [0-9]+, but its directory is no longer in the lane \(it is in .*\) → exit that shell to release it$'
+
+# Once it has exited, nothing holds the lane.
+exec aw sweep --json
+! stdout '"holders"'
+
+-- myshell --
+#!/bin/sh
+# Leaves the lane for the owner checkout, then looks at the lane from there, as another terminal
+# would.
+cd "$AW_OWNER" || exit 1
+AW_SESSION= AW_SESSION_PID= aw sweep --json >"$WORK/sweep.json" 2>&1
+AW_SESSION= AW_SESSION_PID= aw sweep >"$WORK/sweep.txt" 2>&1

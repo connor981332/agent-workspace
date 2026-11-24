@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -49,6 +50,11 @@ type Holder struct {
 	Harness string `json:"harness"`
 	PID     int    `json:"pid,omitempty"`
 	TTY     string `json:"tty,omitempty"`
+	// Since is when the session started.
+	Since string `json:"since,omitempty"`
+	// Idle, for a shell that aw started in the lane, says why it holds the lane for nothing: its
+	// working directory is no longer in the lane (#128).
+	Idle string `json:"idle,omitempty"`
 }
 
 // Decision is what sweep does with one lane, and why.
@@ -286,7 +292,9 @@ func (m *Manager) decide(ctx context.Context, d *Decision, sessions []state.Sess
 		if held != "" {
 			d.Reason, d.Next, d.Kept = held, nil, KeptHeld
 			if len(holders) > 0 {
-				d.Holders, d.Next = describeHolders(holders), endSteps(holders)
+				d.Holders = describeHolders(holders, d.lanePaths(m))
+				d.Next = endSteps(d.Holders)
+				d.Reason = attachedLine(d.Holders)
 			}
 		}
 	}
@@ -310,7 +318,7 @@ func (m *Manager) decide(ctx context.Context, d *Decision, sessions []state.Sess
 			}
 		}
 		if len(holders) > 0 {
-			held = attachedLine(holders)
+			held = "held" // worded by keep, once the holders are described
 		}
 	}
 	// An open note is work the lane's agent left outside it, which no merge proves done.
@@ -386,7 +394,7 @@ func (m *Manager) decide(ctx context.Context, d *Decision, sessions []state.Sess
 			if len(holders) > 1 {
 				them = "they end"
 			}
-			d.Reason = held + "; every repository is clean and proven merged, so it will be recycled once " + them
+			d.Reason += "; every repository is clean and proven merged, so it will be recycled once " + them
 		}
 		return
 	}
@@ -442,34 +450,74 @@ func allProven(repos []evidence.Repo, stored []state.LaneRepo) bool {
 	return true
 }
 
-// attachedLine names every session that holds a lane.
-func attachedLine(holders []state.Session) string {
-	if len(holders) == 1 {
-		return fmt.Sprintf("session %s (%s) is attached", holders[0].HarnessSession, holders[0].Harness)
-	}
+// attachedLine names every session that holds a lane, and which of them are idle shells.
+func attachedLine(holders []Holder) string {
 	names := make([]string, len(holders))
 	for i, h := range holders {
-		names[i] = fmt.Sprintf("%s (%s)", h.HarnessSession, h.Harness)
+		idle := ""
+		if h.Idle != "" {
+			idle = ", idle"
+		}
+		names[i] = fmt.Sprintf("%s (%s%s)", h.Session, h.Harness, idle)
+	}
+	if len(holders) == 1 {
+		return "session " + names[0] + " is attached"
 	}
 	return fmt.Sprintf("%d sessions are attached: %s", len(holders), strings.Join(names, ", "))
 }
 
-// describeHolders gives each holding session's process and terminal, for finding it.
-func describeHolders(holders []state.Session) []Holder {
+// lanePaths are the directories that are inside the lane: its root and each repository's worktree.
+func (d *Decision) lanePaths(m *Manager) []string {
+	paths := []string{m.Root(d.lane.Number)}
+	for _, r := range d.stored {
+		paths = append(paths, r.Path)
+	}
+	return paths
+}
+
+// describeHolders gives each holding session's process and terminal, for finding it, and says when
+// a shell holds the lane though its directory has left it.
+func describeHolders(holders []state.Session, lanePaths []string) []Holder {
 	out := make([]Holder, len(holders))
 	for i, h := range holders {
 		out[i] = Holder{Session: h.HarnessSession, Harness: h.Harness, PID: h.PID}
-		if h.PID > 0 {
-			out[i].TTY = ttyOf(h.PID)
+		if t, err := time.Parse(time.RFC3339Nano, h.Started); err == nil {
+			out[i].Since = t.UTC().Format(time.RFC3339)
+		}
+		if h.PID <= 0 {
+			continue
+		}
+		out[i].TTY = ttyOf(h.PID)
+		if h.Harness == "shell" {
+			if cwd := cwdOf(h.PID); cwd != "" && !inside(cwd, lanePaths) {
+				out[i].Idle = "its directory is no longer in the lane (it is in " + cwd + ")"
+			}
 		}
 	}
 	return out
 }
 
+// inside reports whether dir is one of paths or below one of them.
+func inside(dir string, paths []string) bool {
+	for _, p := range paths {
+		if rel, err := filepath.Rel(realPath(p), realPath(dir)); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return true
+		}
+	}
+	return false
+}
+
+func realPath(p string) string {
+	if r, err := filepath.EvalSymlinks(p); err == nil {
+		return r
+	}
+	return filepath.Clean(p)
+}
+
 // endSteps say, for each holding session, how to end it or let the lane go.
-func endSteps(holders []state.Session) []string {
+func endSteps(holders []Holder) []string {
 	var steps []string
-	for _, h := range describeHolders(holders) {
+	for _, h := range holders {
 		where := ""
 		switch {
 		case h.PID > 0 && h.TTY != "":
@@ -478,12 +526,40 @@ func endSteps(holders []state.Session) []string {
 			where = fmt.Sprintf(", pid %d", h.PID)
 		}
 		how := "end it, or run aw detach in it"
-		if h.Harness == "shell" {
+		switch {
+		case h.Idle != "":
+			since := ""
+			if t, err := time.Parse(time.RFC3339, h.Since); err == nil {
+				since = " since " + t.Local().Format("Jan 2")
+			}
+			how = fmt.Sprintf("an idle shell that has held the lane%s, but %s → exit that shell to release it", since, h.Idle)
+		case h.Harness == "shell":
 			how = "exit that shell, or run aw detach in it"
 		}
 		steps = append(steps, fmt.Sprintf("session %s (%s%s): %s", h.Session, h.Harness, where, how))
 	}
 	return steps
+}
+
+// cwdOf is a process's working directory, or "" when it cannot be read.
+func cwdOf(pid int) string {
+	if runtime.GOOS == "linux" {
+		dir, err := os.Readlink(fmt.Sprintf("/proc/%d/cwd", pid))
+		if err != nil {
+			return ""
+		}
+		return dir
+	}
+	out, err := exec.Command("lsof", "-a", "-p", strconv.Itoa(pid), "-d", "cwd", "-Fn").Output()
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		if dir, ok := strings.CutPrefix(line, "n"); ok && filepath.IsAbs(dir) {
+			return dir
+		}
+	}
+	return ""
 }
 
 // ttyOf is the terminal a process runs on, such as ttys003 or pts/2, or "" when it has none or it
