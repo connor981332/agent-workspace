@@ -2,6 +2,19 @@
 
 Newest first. A line starting with **Breaking:** is called out by `aw upgrade`.
 
+## 0.7.0
+
+- **Breaking:** with `[user] multiplexer` set in your individual layer, `aw new` opens the lane in a new tab or window by default and leaves this terminal free, so one shell at the workspace root can start several lanes. `aw new --here` runs it in this terminal, as before. Inside tmux or herdr with no multiplexer set, `aw new` says how to set one. `aw resume` and `aw pair` still need `--mux` to open in the multiplexer.
+- `multiplexer = "herdr"` works with Herdr 0.1.16 and later, which install Herdr Core's `hc` and no `herdr` command: aw opens the lane with `hc run` in a new tab in this terminal's Herdr space, and says when no Herdr tool is found or the terminal is not a Herdr one. A lane agent may use `hc` only to look, as with `herdr`.
+- `aw sweep` says what keeps a lane: held, unmerged, stuck or protected. It names every session holding a lane, with its pid and terminal, and how to end each one; `--json` keeps the action `keep` and adds `kept` and `holders`. A lane held only by sessions, with every repository clean and proven merged, says it will be recycled once they end, and a recycled lane says it was recycled and its place in the pool.
+- A shell started by `aw new --shell` that has left its lane's directories is marked idle in `aw sweep` (`holders[].idle` in `--json`), and the next step names its pid and terminal, how long it has held the lane, and that exiting it releases the lane.
+- When a repository is not proven merged against a base last fetched more than an hour ago, `aw sweep` says when it was fetched and starts the lane's next steps with `aw pull`. `--json` gives the time as `last_fetch`.
+- `aw sweep` prints its progress on stderr: each lane it acts on and each step, and, for a step that takes a while, that it is still at it with the elapsed time. stdout keeps the report, and a quick preview prints nothing.
+- `aw new` started from inside another lane's session warns which lane's session it is, whether that session still holds its lane, and how to leave it first or use `--mux`.
+- A multi-line Git error relayed by `aw sweep`, `aw discard --orphans` or onboarding keeps its line breaks, with Git's lines indented under aw's own.
+- A usage error prints the command's usage line, and `aw new` without a purpose says it needs one, with an example.
+- `aw --version` prints what `aw version` prints.
+
 ## 0.6.0
 
 - `aw sweep` reports a lane whose work is pushed and waiting in review as `reclaim`, not `keep`: no session holds it, it has no open notes, and every repository is clean and either proven merged or in an open merge request that the forge reports at exactly the repository's head. `aw sweep --pushed --apply` archives its branches under `refs/aw/archive`, as `aw discard` does, and removes it; plain `--apply` leaves it alone. A maintenance delegation does not cover `--pushed`.
