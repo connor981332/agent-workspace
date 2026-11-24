@@ -6,6 +6,7 @@
 # milestone: M3
 
 workspace shop --init
+stubs claude
 exec sh $WORK/use.sh
 
 # No Herdr tool on PATH.
@@ -14,7 +15,7 @@ stderr 'no Herdr command-line tool is on PATH \(aw looks for herdr, hc and herdr
 exec aw sweep --json
 ! stdout '"lane"'
 
-stubs hc claude
+stubs hc
 
 # hc, but not inside a Herdr terminal.
 env HC_TERMINAL_ID=
