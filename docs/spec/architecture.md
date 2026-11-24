@@ -230,9 +230,12 @@ the documentation says it is not confined.
 `aw new`, `aw resume` and `aw pair` can open a session in a terminal multiplexer instead of the
 current terminal. The individual layer chooses one with `multiplexer`: `herdr` and `tmux` are built
 in, `none` is the default, and any other is a command template such as
-`{ command = "zellij run --name {name} -- {cmd}" }`. Session liveness never depends on the
+`{ command = "zellij run --name {name} -- {cmd}" }`. For herdr, aw uses the `herdr` command's
+`tab create` and `pane run` when it is installed, and otherwise Herdr Core's `hc` (or `herdr-core`),
+as Herdr 0.1.16 installs it: `hc run` opens the session in a new tab in the current terminal's Herdr
+space, so it needs aw to run inside a Herdr terminal. Session liveness never depends on the
 multiplexer: it follows the harness process, whatever its parent is. Agents that can start panes
-through a multiplexer's API (herdr has a socket API and CLI) are guarded like any other command, and
+through a multiplexer's API (herdr has a socket API and CLIs) are guarded like any other command, and
 a lane agent cannot use one to run commands outside its lane.
 
 The harness parity suite runs the same scenario table through every adapter and requires identical

@@ -1008,6 +1008,9 @@ var herdrReads = map[string]bool{
 	"report-metadata": true, "status": true, "snapshot": true, "schema": true,
 }
 
+// hcReads are Herdr Core's hc verbs that only look.
+var hcReads = map[string]bool{"get": true, "list": true, "ls": true, "status": true, "help": true, "version": true}
+
 // muxRule stops a lane agent from using a multiplexer to run something elsewhere (R58): a pane it
 // opens or types into runs outside the lane and outside these guards. Looking is allowed.
 func muxRule(s Scope, c shell.Command) Decision {
@@ -1062,6 +1065,24 @@ func muxRule(s Scope, c shell.Command) Decision {
 		}
 		if len(words) > 1 && herdrReads[words[1]] || len(words) == 1 && words[0] == "status" {
 			return allow()
+		}
+		return refuse()
+	case "hc", "herdr-core":
+		// Herdr Core's tool: hc run starts a terminal, so only looking is allowed (#134).
+		for _, a := range args {
+			if !a.Known {
+				return refuse()
+			}
+			if strings.HasPrefix(a.Text, "-") {
+				if a.Text == "--help" || a.Text == "-h" || a.Text == "--version" || a.Text == "-V" {
+					return allow()
+				}
+				continue
+			}
+			if hcReads[a.Text] {
+				return allow()
+			}
+			return refuse()
 		}
 		return refuse()
 	case "zellij":
