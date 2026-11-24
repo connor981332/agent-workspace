@@ -84,6 +84,9 @@ branches under refs/aw/archive/<name>/<time>, as aw discard does, then removes i
 				}
 				only = append(only, l.Number)
 			}
+			// What --apply does, lane by lane, and a check or step that is slow, go to stderr as
+			// they happen, as aw discard's do: a long sweep never looks like a hang (#125).
+			m.Progress = func(line string) { fmt.Fprintln(cmd.ErrOrStderr(), "aw: "+ui.Clean(line)) }
 			rep, err := m.Sweep(cmd.Context(), lanes.SweepOptions{Apply: apply, Caller: m.CallerLane(), Retry: retry, Only: only, Pushed: pushed})
 			if err != nil {
 				return err

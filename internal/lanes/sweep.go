@@ -182,7 +182,10 @@ func (m *Manager) Sweep(ctx context.Context, o SweepOptions) (*SweepReport, erro
 		if l.State == state.LanePool {
 			continue // decided below, once the recyclable lanes are known
 		}
+		// Checking a lane is usually quick; one with large repositories says it is still at it (#125).
+		stop := Beat(m.Progress, fmt.Sprintf("%s %s: still checking its repositories", d.Dir, laneName(l)))
 		m.decide(ctx, d, sessions, o.Caller)
+		stop()
 		if l.State == state.LaneClaimed {
 			d.State = QuickState(m.Store.DB(), l, sessions)
 			if d.Action == ActionRecycle {
@@ -243,7 +246,7 @@ func (m *Manager) Sweep(ctx context.Context, o SweepOptions) (*SweepReport, erro
 			d.Result = "skipped" // --retry acts on its own lane only
 			continue
 		}
-		if err := m.apply(ctx, d, o); err != nil {
+		if err := m.applyTelling(ctx, d, o); err != nil {
 			d.Result, d.Error = "failed", err.Error()
 		}
 	}
@@ -741,6 +744,31 @@ func sameFile(a, b string) bool {
 	return err1 == nil && err2 == nil && os.SameFile(ia, ib)
 }
 
+// applyTelling is apply, telling Progress which lane it works on and each step it takes, so that a
+// long --apply never looks like a hang (#125).
+func (m *Manager) applyTelling(ctx context.Context, d *Decision, o SweepOptions) error {
+	prev := m.Progress
+	if prev == nil {
+		return m.apply(ctx, d, o)
+	}
+	label := fmt.Sprintf("%s %s", d.Dir, laneName(d.lane))
+	m.Progress = func(line string) { prev(label + ": " + line) }
+	defer func() { m.Progress = prev }()
+	verb := map[string]string{ActionRecycle: "recycling it", ActionDestroy: "removing it", ActionReclaim: "archiving its branches and removing it"}[d.Action]
+	if verb != "" {
+		m.say("%s", verb)
+	}
+	return m.apply(ctx, d, o)
+}
+
+// laneName is a lane's name for progress lines, or "(pool)" for a warm lane.
+func laneName(l state.Lane) string {
+	if l.Name == "" {
+		return "(pool)"
+	}
+	return l.Name
+}
+
 // apply carries out one decision, re-checking first, and journals it.
 func (m *Manager) apply(ctx context.Context, d *Decision, o SweepOptions) error {
 	if d.lane.State != state.LanePool {
@@ -819,24 +847,31 @@ func (m *Manager) recycle(ctx context.Context, d *Decision) error {
 		ev := d.Repos[i]
 		// The post-checkout hook is a setup step of the next lane, which honours post_checkout.
 		g := run.In(r.Path, noHooks...)
-		removeMaterialized(r.Path) // a copy that replaced a tracked file must not travel to the base
 		failed := func(err error) error {
 			if len(done) == 0 {
 				return fmt.Errorf("%s: %w", repoLabel(r), err)
 			}
 			return fmt.Errorf("%s: %w (already reset: %s; a retry continues from here)", repoLabel(r), err, strings.Join(done, ", "))
 		}
-		if _, err := g.Run(ctx, "switch", "--quiet", "--detach", ev.Base); err != nil {
-			return failed(err)
-		}
-		// Proven by anything but ancestry, the commits themselves are not in the base, though
-		// their changes are: the tip is archived first, so that its history is not lost either.
-		if r.Branch != "" && ev.Proof != evidence.Ancestor {
-			if err := archiveTip(ctx, g, d.lane.Name, ev.Head, time.Now()); err != nil {
-				return failed(err)
+		// Each repository says it is being reset, and a slow one that it still is (#125).
+		m.say("%s: resetting it to its base", repoLabel(r))
+		stop := Beat(m.Progress, repoLabel(r)+": still resetting it to its base")
+		err := func() error {
+			removeMaterialized(r.Path) // a copy that replaced a tracked file must not travel to the base
+			if _, err := g.Run(ctx, "switch", "--quiet", "--detach", ev.Base); err != nil {
+				return err
 			}
-		}
-		if err := deleteBranch(ctx, g, r.Branch, ev); err != nil {
+			// Proven by anything but ancestry, the commits themselves are not in the base, though
+			// their changes are: the tip is archived first, so that its history is not lost either.
+			if r.Branch != "" && ev.Proof != evidence.Ancestor {
+				if err := archiveTip(ctx, g, d.lane.Name, ev.Head, time.Now()); err != nil {
+					return err
+				}
+			}
+			return deleteBranch(ctx, g, r.Branch, ev)
+		}()
+		stop()
+		if err != nil {
 			return failed(err)
 		}
 		repos[i].Branch, repos[i].BaseSHA = "", ev.Base
