@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"runtime/debug"
 	"strings"
 
@@ -49,18 +50,22 @@ func newVersionCmd() *cobra.Command {
 		Short: "Print the framework, configuration schema and state schema versions",
 		Args:  cobra.NoArgs,
 		RunE: run(func(cmd *cobra.Command, _ []string) error {
-			v := currentVersion()
-			out := cmd.OutOrStdout()
-			if asJSON {
-				enc := json.NewEncoder(out)
-				enc.SetIndent("", "  ")
-				return enc.Encode(v)
-			}
-			_, err := fmt.Fprintf(out, "aw %s (config schema %d, state schema %d)\n",
-				v.Version, v.ConfigSchema, v.StateSchema)
-			return err
+			return printVersion(cmd.OutOrStdout(), asJSON)
 		}),
 	}
 	cmd.Flags().BoolVar(&asJSON, "json", false, "print the versions as JSON")
 	return cmd
+}
+
+// printVersion is the output of aw version, and of aw --version.
+func printVersion(out io.Writer, asJSON bool) error {
+	v := currentVersion()
+	if asJSON {
+		enc := json.NewEncoder(out)
+		enc.SetIndent("", "  ")
+		return enc.Encode(v)
+	}
+	_, err := fmt.Fprintf(out, "aw %s (config schema %d, state schema %d)\n",
+		v.Version, v.ConfigSchema, v.StateSchema)
+	return err
 }

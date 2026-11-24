@@ -313,7 +313,7 @@ const maxFailureOutput = 4 << 10
 
 // failureContext hands the agent a failure, so nobody has to copy it across by hand.
 func failureContext(err error, output string) string {
-	text := "\n\nSomething failed before you started, in aw's deterministic setup:\n" + ui.Clean(err.Error())
+	text := "\n\nSomething failed before you started, in aw's deterministic setup:\n" + ui.CleanLines(err.Error(), "  ")
 	if output = strings.TrimSpace(output); output != "" {
 		if len(output) > maxFailureOutput {
 			output = "…" + output[len(output)-maxFailureOutput:]

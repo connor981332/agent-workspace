@@ -32,6 +32,17 @@ func TestVersionHuman(t *testing.T) {
 	}
 }
 
+func TestVersionFlag(t *testing.T) {
+	_, want, _ := runCLI(t, "version")
+	code, out, errOut := runCLI(t, "--version")
+	if code != ExitOK || errOut != "" {
+		t.Fatalf("aw --version: exit %d, stderr %q", code, errOut)
+	}
+	if out != want {
+		t.Fatalf("aw --version printed %q, want what aw version prints, %q", out, want)
+	}
+}
+
 func TestVersionJSON(t *testing.T) {
 	code, out, errOut := runCLI(t, "version", "--json")
 	if code != ExitOK {
