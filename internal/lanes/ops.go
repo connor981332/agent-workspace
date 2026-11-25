@@ -56,9 +56,10 @@ func (m *Manager) setState(ctx context.Context, l state.Lane, s string) (state.L
 }
 
 // Discard abandons a lane's unmerged work (R27): every branch is archived under
-// refs/aw/archive/<name>/<time> first, then the lane is destroyed. Uncommitted work is never lost:
-// a lane with any is refused.
-func (m *Manager) Discard(ctx context.Context, l state.Lane, now time.Time) ([]string, error) {
+// refs/aw/archive/<name>/<time> first, then the lane is destroyed. A lane with uncommitted work is
+// refused, unless force says the human chose to lose it: committed work is still archived, and only
+// the uncommitted changes go.
+func (m *Manager) Discard(ctx context.Context, l state.Lane, now time.Time, force bool) ([]string, error) {
 	if err := m.authorizeRefs(ctx); err != nil {
 		return nil, err
 	}
@@ -84,8 +85,11 @@ func (m *Manager) Discard(ctx context.Context, l state.Lane, now time.Time) ([]s
 		}
 	}
 	if len(dirty) > 0 {
-		return nil, fmt.Errorf("lane %s has uncommitted work in %s, which aw discard would lose; nothing was changed → commit it in the lane (the commits are archived), or remove it yourself, then discard again",
-			l.Name, strings.Join(dirty, ", "))
+		if !force {
+			return nil, fmt.Errorf("lane %s has uncommitted work in %s, which aw discard would lose; nothing was changed → commit it in the lane (the commits are archived), or remove it yourself, then discard again; aw discard --force loses it",
+				l.Name, strings.Join(dirty, ", "))
+		}
+		m.say("losing its uncommitted work in %s", strings.Join(dirty, ", "))
 	}
 	stamp := now.UTC().Format("20060102-150405")
 	var archived []string
@@ -108,7 +112,7 @@ func (m *Manager) Discard(ctx context.Context, l state.Lane, now time.Time) ([]s
 		}
 		archived = append(archived, fmt.Sprintf("%s %s", repoLabel(r), ref))
 	}
-	return archived, m.destroy(ctx, l, repos, true)
+	return archived, m.destroy(ctx, l, repos, true, force)
 }
 
 // FinishOptions are aw finish's arguments.

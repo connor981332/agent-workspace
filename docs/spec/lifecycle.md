@@ -306,4 +306,5 @@ a maintenance delegation does not cover `--pushed`.
   `aw unpark` returns it to `working`.
 - `aw discard <lane>` abandons unmerged work. It asks for confirmation (or `--yes` from the owner),
   archives each repository's branch under `refs/aw/archive/<lane-name>/<date>`, then destroys the
-  lane. Agents cannot run it.
+  lane. It refuses a lane with uncommitted work unless `--force` says the human chose to lose it:
+  the branches are still archived, and only the uncommitted changes go. Agents cannot run it.

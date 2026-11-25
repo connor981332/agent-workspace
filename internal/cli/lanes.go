@@ -202,13 +202,15 @@ branches under refs/aw/archive/<name>/<time>, as aw discard does, then removes i
 }
 
 func newDiscardCmd() *cobra.Command {
-	var yes, asJSON, orphans bool
+	var yes, asJSON, orphans, force bool
 	cmd := &cobra.Command{
 		Use:   "discard <lane> | --orphans",
 		Short: "Abandon a lane's unmerged work: archive its branches, then remove it",
 		Long: `Abandon a lane's unmerged work. Every branch of the lane is archived under
 refs/aw/archive/<name>/<time> first, so nothing committed is lost; then the lane is removed. A lane
-with uncommitted work is refused. It asks for confirmation on a terminal; elsewhere it needs --yes.
+with uncommitted work is refused, unless --force says to lose that work: the branches are still
+archived, and only the uncommitted changes are gone. It asks for confirmation on a terminal;
+elsewhere it needs --yes.
 
 With --orphans, clean up what no lane records: branches with the lane prefix and worktrees under
 .worktrees that an interrupted lane left, in any project. aw doctor lists them. Each branch is
@@ -216,6 +218,9 @@ archived the same way, and a worktree with uncommitted files is left alone.`,
 		RunE: run(func(cmd *cobra.Command, args []string) error {
 			if orphans != (len(args) == 0) {
 				return &usageError{errors.New("name one lane, or pass --orphans")}
+			}
+			if orphans && force {
+				return &usageError{errors.New("--force is for one lane; aw discard --orphans always leaves a worktree with uncommitted files alone")}
 			}
 			w, err := openForWrite()
 			if err != nil {
@@ -233,11 +238,15 @@ archived the same way, and a worktree with uncommitted files is left alone.`,
 			if !yes {
 				// Say what would go, so the next call can decide: the lane's own commits are archived,
 				// and those no remote has exist nowhere else afterwards.
-				printDiscardPreview(cmd, m, l)
+				printDiscardPreview(cmd, m, l, force)
 				if !ui.IsTerminal(os.Stdin) {
 					return fmt.Errorf("aw discard removes lane %s; confirm with --yes", l.Name)
 				}
-				fmt.Fprintf(cmd.ErrOrStderr(), "Discard lane %s (%q)? Its branches are archived first. [y/N] ", l.Name, l.Purpose)
+				lose := ""
+				if force {
+					lose = " Its uncommitted changes are lost."
+				}
+				fmt.Fprintf(cmd.ErrOrStderr(), "Discard lane %s (%q)? Its branches are archived first.%s [y/N] ", l.Name, l.Purpose, lose)
 				answer, _ := bufio.NewReader(os.Stdin).ReadString('\n')
 				if a := strings.ToLower(strings.TrimSpace(answer)); a != "y" && a != "yes" {
 					return errors.New("not discarded")
@@ -247,7 +256,7 @@ archived the same way, and a worktree with uncommitted files is left alone.`,
 				return err
 			}
 			m.Progress = func(s string) { fmt.Fprintf(cmd.ErrOrStderr(), "aw: %s: %s\n", l.Name, s) }
-			archived, err := m.Discard(cmd.Context(), l, time.Now())
+			archived, err := m.Discard(cmd.Context(), l, time.Now(), force)
 			if err != nil {
 				return err
 			}
@@ -263,13 +272,15 @@ archived the same way, and a worktree with uncommitted files is left alone.`,
 	}
 	cmd.Flags().BoolVar(&yes, "yes", false, "do not ask for confirmation")
 	cmd.Flags().BoolVar(&orphans, "orphans", false, "clean up the branches and worktrees no lane records")
+	cmd.Flags().BoolVar(&force, "force", false, "remove the lane even with uncommitted work, which is lost; its branches are still archived")
 	cmd.Flags().BoolVar(&asJSON, "json", false, "print what was archived as JSON")
 	return cmd
 }
 
 // printDiscardPreview lists, on stderr, each repository of a lane with work of its own: how many
-// commits it has, whether they are pushed, and uncommitted changes, which would stop the discard.
-func printDiscardPreview(cmd *cobra.Command, m *lanes.Manager, l state.Lane) {
+// commits it has, whether they are pushed, and uncommitted changes, which stop the discard unless
+// force says to lose them.
+func printDiscardPreview(cmd *cobra.Command, m *lanes.Manager, l state.Lane, force bool) {
 	ss, err := m.Status(cmd.Context(), lanes.StatusOptions{Only: l.Number})
 	if err != nil || len(ss) == 0 {
 		return
@@ -286,7 +297,11 @@ func printDiscardPreview(cmd *cobra.Command, m *lanes.Manager, l state.Lane) {
 		}
 		line := fmt.Sprintf("  %s: %d commit%s, %s", ui.Clean(r.Project), r.Ahead, plural(r.Ahead), r.Push)
 		if r.Dirty > 0 {
-			line += fmt.Sprintf(", %d uncommitted (discard refuses until they are committed or removed)", r.Dirty)
+			if force {
+				line += fmt.Sprintf(", %d uncommitted (lost with --force)", r.Dirty)
+			} else {
+				line += fmt.Sprintf(", %d uncommitted (discard refuses until they are committed or removed, or --force loses them)", r.Dirty)
+			}
 		}
 		fmt.Fprintln(errOut, line)
 	}

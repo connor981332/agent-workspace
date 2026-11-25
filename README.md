@@ -187,7 +187,8 @@ All of these only read.
   deleted remote branch is not enough. A tip proven any way but the first is archived first.
 - `aw park <lane>` protects a lane from cleanup until `aw unpark`.
 - `aw discard <lane>` abandons a lane's work. Every branch is archived under `refs/aw/archive/` first,
-  so nothing committed is lost.
+  so nothing committed is lost. It refuses a lane with uncommitted work; `aw discard --force` removes
+  it anyway, and that uncommitted work is lost.
 - `aw archives` lists what was archived, and `aw archives --restore <name>` makes a branch from it
   that `aw new "<purpose>" --branch restored/<name>` starts a lane on.
 
