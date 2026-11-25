@@ -808,7 +808,7 @@ func (m *Manager) apply(ctx context.Context, d *Decision, o SweepOptions) error 
 	if d.Action == ActionRecycle {
 		err = m.recycle(ctx, d)
 	} else {
-		err = m.destroy(ctx, d.lane, d.stored, false)
+		err = m.destroy(ctx, d.lane, d.stored, false, false)
 	}
 	status, detail := state.JournalDone, ""
 	if err != nil {
@@ -923,8 +923,9 @@ func dropBranch(ctx context.Context, g run.Git, branch, head string) error {
 }
 
 // destroy removes a lane: its project worktrees, then the lane root, then its record. Nothing is
-// forced: a worktree Git will not remove keeps the lane, and the journal says so.
-func (m *Manager) destroy(ctx context.Context, l state.Lane, stored []state.LaneRepo, archived bool) error {
+// forced unless force says the human chose to lose uncommitted work (aw discard --force): otherwise
+// a worktree Git will not remove keeps the lane, and the journal says so.
+func (m *Manager) destroy(ctx context.Context, l state.Lane, stored []state.LaneRepo, archived, force bool) error {
 	if stored == nil {
 		var err error
 		if stored, err = state.LaneRepos(m.Store.DB(), l.Number); err != nil {
@@ -958,7 +959,11 @@ func (m *Manager) destroy(ctx context.Context, l state.Lane, stored []state.Lane
 			}
 			removeMaterialized(r.Path)
 			if err := step(repoLabel(r)+": removing its worktree", func() error {
-				_, err := worktreeGit(ctx, g, "", "worktree", "remove", r.Path)
+				args := []string{"worktree", "remove", r.Path}
+				if force {
+					args = []string{"worktree", "remove", "--force", r.Path} // aw discard --force: the human chose to lose uncommitted work
+				}
+				_, err := worktreeGit(ctx, g, "", args...)
 				return err
 			}); err != nil {
 				return err
