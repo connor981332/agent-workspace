@@ -6,14 +6,15 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/connor981332/agent-workspace/internal/lanes"
 	"github.com/connor981332/agent-workspace/internal/ui"
 )
 
 func newPushCmd() *cobra.Command {
-	var as, laneName string
+	var as, laneName, lease string
 	var asJSON bool
 	cmd := &cobra.Command{
-		Use:   "push [--as <name>] [project…]",
+		Use:   "push [--as <name>] [--force-with-lease[=<commit>]] [project…]",
 		Short: "Push the lane's branch to origin, under the team's branch name if it differs",
 		Long: `Push this lane's branch to origin and set its upstream. A lane keeps its own branch, aw/<lane>,
 which aw tracks its work by; --as pushes it under the name your team's conventions want instead
@@ -21,7 +22,13 @@ which aw tracks its work by; --as pushes it under the name your team's conventio
 the merge request, and the next aw push uses it again.
 
 Without projects, it pushes every repository with commits of the lane's own, and every one pushed
-before. Pushing follows the workspace's publication policy, like git push.`,
+before. Pushing follows the workspace's publication policy, like git push.
+
+After a rebase or a rebuild, the remote branch's history is no longer the lane's, and a plain push is
+refused. --force-with-lease replaces it, but only if it is still where this repository last fetched
+or pushed it, so commits someone else pushed since are never lost; --force-with-lease=<commit> says
+where it must be instead. With the git-safety safeguard on, the human approves it, as for git push
+--force-with-lease.`,
 		RunE: run(func(cmd *cobra.Command, args []string) error {
 			w, err := openForWrite()
 			if err != nil {
@@ -43,7 +50,7 @@ before. Pushing follows the workspace's publication policy, like git push.`,
 			if !asJSON {
 				m.Progress = func(s string) { fmt.Fprintln(cmd.ErrOrStderr(), "aw: "+s) }
 			}
-			results, err := m.Push(cmd.Context(), l, as, args)
+			results, err := m.Push(cmd.Context(), l, lanes.PushOptions{As: as, Lease: lease}, args)
 			if err != nil {
 				return err
 			}
@@ -81,6 +88,8 @@ before. Pushing follows the workspace's publication policy, like git push.`,
 		}),
 	}
 	cmd.Flags().StringVar(&as, "as", "", "the branch name on origin, when it differs from the lane's")
+	cmd.Flags().StringVar(&lease, "force-with-lease", "", "replace the remote branch's history, if it is still where it was last fetched or pushed (or at the commit given)")
+	cmd.Flags().Lookup("force-with-lease").NoOptDefVal = lanes.LeaseLast
 	cmd.Flags().StringVar(&laneName, "lane", "", "the lane (default: the one this runs in)")
 	cmd.Flags().BoolVar(&asJSON, "json", false, "print what happened in each repository as JSON")
 	return cmd

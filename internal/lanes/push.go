@@ -23,13 +23,27 @@ type PushResult struct {
 // Failed reports whether the push failed.
 func (r PushResult) Failed() bool { return r.Outcome == "failed" }
 
+// LeaseLast is the lease aw push --force-with-lease takes by default: the tip of the remote branch
+// that this repository last fetched or pushed, its remote-tracking branch.
+const LeaseLast = "last"
+
+// PushOptions are how aw push pushes.
+type PushOptions struct {
+	// As is the remote name; "" keeps the name a repository was pushed under before, or aw's own.
+	As string
+	// Lease, when set, lets the push replace the remote branch's history, only if the remote branch
+	// is still where this says: LeaseLast, or a commit. "" is a plain push, which only adds commits.
+	Lease string
+}
+
 // Push pushes a lane's branch to origin, under the team's name for it when that differs from aw's
 // (plans/agent-feedback.md, item 9). The lane keeps its own branch, and the upstream is set to the
 // remote name, which is recorded so that recap, finish and sweep find the change on the forge.
 //
 // Without names it pushes every repository with the lane's own commits, and every one pushed before.
-// as is the remote name; "" keeps the name a repository was pushed under before, or aw's own.
-func (m *Manager) Push(ctx context.Context, l state.Lane, as string, only []string) ([]PushResult, error) {
+// With a lease it may rewrite the remote branch, but never over commits aw has not seen there.
+func (m *Manager) Push(ctx context.Context, l state.Lane, opts PushOptions, only []string) ([]PushResult, error) {
+	as := opts.As
 	repos, err := state.LaneRepos(m.Store.DB(), l.Number)
 	if err != nil {
 		return nil, err
@@ -69,7 +83,18 @@ func (m *Manager) Push(ctx context.Context, l state.Lane, as string, only []stri
 		if m.Progress != nil {
 			m.Progress(fmt.Sprintf("%s: pushing %s to origin as %s", key, r.Branch, name))
 		}
-		if _, err := g.Run(ctx, "push", "--quiet", "--set-upstream", "origin", "refs/heads/"+r.Branch+":refs/heads/"+name); err != nil {
+		pushArgs := []string{"push", "--quiet", "--set-upstream"}
+		if opts.Lease != "" {
+			lease, err := leaseFor(ctx, g, name, opts.Lease)
+			if err != nil {
+				res.Outcome, res.Detail = "failed", err.Error()
+				out = append(out, res)
+				continue
+			}
+			pushArgs = append(pushArgs, "--force-with-lease=refs/heads/"+name+":"+lease)
+		}
+		pushArgs = append(pushArgs, "origin", "refs/heads/"+r.Branch+":refs/heads/"+name)
+		if _, err := g.Run(ctx, pushArgs...); err != nil {
 			res.Outcome, res.Detail = "failed", err.Error()
 			out = append(out, res)
 			continue
@@ -90,4 +115,26 @@ func (m *Manager) Push(ctx context.Context, l state.Lane, as string, only []stri
 		return []PushResult{{Repo: "", Outcome: "nothing to push", Detail: "no repository in this lane has commits of its own"}}, nil
 	}
 	return out, nil
+}
+
+// leaseFor is the commit the remote branch must still be at for a lease to replace it: the one given,
+// or the remote-tracking branch's. A branch new to origin has nothing to lose, so its lease is that
+// the branch is still missing there.
+func leaseFor(ctx context.Context, g run.Git, name, lease string) (string, error) {
+	if lease != LeaseLast {
+		sha, err := g.Run(ctx, "rev-parse", "--verify", "--quiet", lease+"^{commit}")
+		if err != nil || strings.TrimSpace(sha) == "" {
+			return "", fmt.Errorf("--force-with-lease=%s names no commit in this repository → fetch origin %s and give its tip, or use --force-with-lease alone", lease, name)
+		}
+		return strings.TrimSpace(sha), nil
+	}
+	tracking := "refs/remotes/origin/" + name
+	sha, err := g.Run(ctx, "rev-parse", "--verify", "--quiet", tracking)
+	if err != nil || strings.TrimSpace(sha) == "" {
+		if remote, lerr := g.Run(ctx, "ls-remote", "--heads", "origin", "refs/heads/"+name); lerr == nil && strings.TrimSpace(remote) == "" {
+			return "", nil // not on origin: the lease is that it still is not
+		}
+		return "", fmt.Errorf("aw has not seen origin/%s here, so it cannot tell what a forced push would replace → git fetch origin %s, look at what is there, and push again", name, name)
+	}
+	return strings.TrimSpace(sha), nil
 }

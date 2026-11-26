@@ -1,0 +1,49 @@
+# aw push --force-with-lease replaces a lane branch whose history was rewritten, only while origin's
+# branch is still where this repository last saw it, and keeps the --as name, as a plain push does.
+# With the git-safety safeguard on, the human approves it, as for git push --force-with-lease.
+# req: R58
+# source: issue #145
+# milestone: M12
+
+workspace shop --eager --init --repos web
+owner-may-change
+exec aw attach 'rebuild feature'
+cd web/.worktrees/01
+exec sh -c 'echo first > try.txt && git add try.txt && git commit -qm "first try"'
+exec aw push --as team/KEY-2
+stdout '^web: pushed aw/rebuild-feature to origin/team/KEY-2$'
+
+# Rebuild the branch: a plain push is refused, and the lease replaces it.
+exec git reset -q --hard HEAD~1
+exec sh -c 'echo second > try.txt && git add try.txt && git commit -qm "second try"'
+! exec aw push
+stdout '^web: failed'
+exec aw push --force-with-lease
+stdout '^web: pushed aw/rebuild-feature to origin/team/KEY-2$'
+exec git log -1 --format=%s origin/team/KEY-2
+stdout '^second try$'
+exec git rev-parse --abbrev-ref '@{upstream}'
+stdout '^origin/team/KEY-2$'
+exec aw recap
+stdout 'web [0-9a-f]+: pushed as team/KEY-2'
+
+# A lease on a commit origin's branch is no longer at fails, and replaces nothing.
+exec sh -c 'echo third > try.txt && git add try.txt && git commit -qm "third try"'
+! exec aw push --force-with-lease=HEAD~2
+stdout '^web: failed'
+exec git log -1 --format=%s origin/team/KEY-2
+stdout '^second try$'
+! exec aw push --force-with-lease=no-such-commit
+stdout 'names no commit'
+
+# A branch origin has never had needs nothing to lose.
+exec aw push --force-with-lease --as team/KEY-3
+stdout '^web: pushed aw/rebuild-feature to origin/team/KEY-3 '
+
+# The git-safety safeguard puts it to the human.
+cd $OWNER
+safeguards
+cd web/.worktrees/01
+exec awtest-hook bash 'bin/aw push --force-with-lease'
+stdout '"permissionDecision":"ask"'
+stdout 'replaces the remote branch'
