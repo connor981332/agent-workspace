@@ -109,6 +109,13 @@ func hook(args []string, version string, stdin io.Reader, stdout, stderr io.Writ
 		var text []string
 		if d.Note != "" {
 			text = append(text, d.Note)
+			if notes.hintSession != "" {
+				for _, project := range scope.Unprepared {
+					if strings.Contains(d.Note, policy.UnpreparedHint(project)) {
+						_ = state.RecordUnpreparedHint(notes.stateDir, notes.hintSession, project) // best effort: told again next time
+					}
+				}
+			}
 		}
 		ids := make([]int, 0, len(notes.pending))
 		for _, n := range notes.pending {
@@ -133,7 +140,10 @@ type pendingNotes struct {
 	touch    int          // the lane whose leases to mark active, or 0
 	open     []state.Note // the lane's open notes, read when a session starts
 	session  int          // the session's record, or 0
-	waiting  string       // what the session last asked the human
+	// hintSession names the session and lane generation that hints about unprepared projects are
+	// recorded for, or "" when the harness gives no session ID.
+	hintSession string
+	waiting     string // what the session last asked the human
 }
 
 // activityEvery is how often a tool call records activity on the lane's leases.
@@ -326,10 +336,15 @@ func resolveScope(p Payload, version string, t *timing.Recorder) (*policy.Scope,
 	}
 	// Projects whose setup waits for their first use, so that a command run there directly is told.
 	if cfg.Lanes.Setup != "eager" {
+		var told map[string]bool
+		if p.Session != "" {
+			own.hintSession = fmt.Sprintf("%s/%s/%d/%d", p.Harness, p.Session, n, lane.Generation)
+			told = state.UnpreparedHinted(s.DB(), own.hintSession)
+		}
 		if steps, err := state.Steps(s.DB(), n, lane.Generation); err == nil {
 			for _, st := range steps {
 				project, _, _ := strings.Cut(st.Name, ".")
-				if st.Status != state.StepPending || st.Name == "prepare" || project == "data" || strings.HasSuffix(st.Name, ".prepare") {
+				if st.Status != state.StepPending || st.Name == "prepare" || project == "data" || strings.HasSuffix(st.Name, ".prepare") || told[project] {
 					continue
 				}
 				for _, r := range repos {

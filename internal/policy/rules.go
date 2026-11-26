@@ -1495,6 +1495,12 @@ func publicationRule(s Scope, c shell.Command) Decision {
 	return ask("publication", "%s, which needs the human's approval → approve it, or stop being asked by adding it to [publication] allow in workspace.toml or your own aw settings (push, open-merge-request, merge)", what)
 }
 
+// UnpreparedHint is how the note on a project that is not set up yet begins, so that the hook can
+// tell that a session has been told, and tell it once.
+func UnpreparedHint(project string) string {
+	return "aw: project " + project + " is not set up in this lane yet"
+}
+
 // unpreparedRule warns a command that runs in a project this lane has not set up yet: with lazy
 // setup its install and hooks wait for aw run, aw serve or aw setup, which a command run directly
 // does not trigger (docs/spec/sessions.md, "Lazy per-project setup"). It never refuses.
@@ -1507,8 +1513,8 @@ func unpreparedRule(s Scope, c shell.Command) Decision {
 	}
 	for dir, project := range s.Unprepared {
 		if within(c.Dir.Physical, dir) {
-			return allowWith(fmt.Sprintf("aw: project %s is not set up in this lane yet (its install and setup hooks run on first use) → run its commands as bin/aw run %s <command>, which sets it up first, or run bin/aw setup %s --project %s now",
-				project, project, s.LaneName, project))
+			return allowWith(fmt.Sprintf("%s (its install and setup hooks run on first use) → run its commands as bin/aw run %s <command>, which sets it up first, or run bin/aw setup %s --project %s now",
+				UnpreparedHint(project), project, s.LaneName, project))
 		}
 	}
 	return allow()

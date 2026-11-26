@@ -112,7 +112,10 @@ today, and `--project <name>` one project. The guard's hook cannot start a setup
 stay fast and read-only, so a first *edit* in a project does not set it up; the first command that
 runs something there does. A command an agent runs directly in a project not set up yet is let
 through with a note naming `bin/aw run <project>` and `bin/aw setup <lane> --project <name>` (the
-warn tier).
+warn tier), once per session and project: the hook records that it told the session (a write that
+never waits for a lock), so later commands go through without it. When a repository's own Git hook
+fails in a project not set up yet, aw adds that the project is not set up and the command that sets
+it up, since such a hook often needs what setup installs.
 
 ## Lazy worktrees
 

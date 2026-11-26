@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/connor981332/agent-workspace/internal/platform"
@@ -513,5 +514,42 @@ func Now() string { return now() }
 // SetBaseSHA records where a lane's repository now starts, after aw reset-branch.
 func SetBaseSHA(tx *sql.Tx, lane int, project, sha string) error {
 	_, err := tx.Exec(`UPDATE lane_repos SET base_sha = ? WHERE lane = ? AND project = ?`, sha, lane, project)
+	return err
+}
+
+// unpreparedHintKey is the meta key saying a session was told that a project is not set up yet.
+// session names the harness's session and the lane's generation, so a recycled lane tells it again.
+func unpreparedHintKey(session, project string) string {
+	return "unprepared-hint:" + session + ":" + project
+}
+
+// UnpreparedHinted are the projects a session was already told are not set up yet, so that the hint
+// comes once, not with every command.
+func UnpreparedHinted(db *sql.DB, session string) map[string]bool {
+	prefix := unpreparedHintKey(session, "")
+	rows, err := db.Query(`SELECT key FROM meta WHERE substr(key, 1, ?) = ?`, len(prefix), prefix)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	out := map[string]bool{}
+	for rows.Next() {
+		var key string
+		if rows.Scan(&key) == nil {
+			out[strings.TrimPrefix(key, prefix)] = true
+		}
+	}
+	return out
+}
+
+// RecordUnpreparedHint is the hook's write after it told a session that a project is not set up yet.
+// Like RecordSessionWaiting it never waits for a lock: a hint not recorded comes once more.
+func RecordUnpreparedHint(dir, session, project string) error {
+	db, err := sql.Open("sqlite", "file:"+filepath.Join(dir, File)+"?_pragma=busy_timeout(0)")
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	_, err = db.Exec(`INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO NOTHING`, unpreparedHintKey(session, project), now())
 	return err
 }

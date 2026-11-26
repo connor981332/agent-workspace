@@ -1,0 +1,48 @@
+# With lazy setup, a repository's own Git hook that fails in a project not set up yet says that the
+# project is not set up and how to set it up, as well as that aw refused nothing. Once it is set up, a
+# failing hook is only that hook's failure.
+# req: R31 R59
+# source: issue #149
+# milestone: M12
+
+workspace shop --eager --init
+owner-may-change
+exec sh $WORK/hook.sh
+exec aw setup
+exec aw attach 'hooked work'
+cd web/.worktrees/01
+! exec git commit -q --allow-empty -m 'lane'
+stderr 'the linter is not installed'
+stderr 'project web is not set up in lane hooked-work yet, and its pre-commit hook may need what setup installs → run bin/aw setup hooked-work --project web, then try again'
+stderr 'aw refused nothing'
+! stderr 'so this call is refused'
+
+exec aw setup hooked-work --project web
+! exec git commit -q --allow-empty -m 'lane'
+stderr 'the linter is not installed'
+! stderr 'not set up'
+
+-- hook.sh --
+cat > web/.git/hooks/pre-commit <<'EOS'
+#!/bin/sh
+echo "the linter is not installed" >&2
+exit 1
+EOS
+chmod +x web/.git/hooks/pre-commit
+-- workspace.toml --
+[workspace]
+name = "Shop"
+namespace = "shop"
+schema = 1
+
+[lanes]
+pool = 0
+
+[projects.web]
+directory = "web"
+
+[projects.web.lifecycle]
+setup = 'true'
+
+[projects.api]
+directory = "api"
