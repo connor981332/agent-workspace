@@ -527,7 +527,8 @@ func unpreparedHintKey(session, project string) string {
 // comes once, not with every command.
 func UnpreparedHinted(db *sql.DB, session string) map[string]bool {
 	prefix := unpreparedHintKey(session, "")
-	rows, err := db.Query(`SELECT key FROM meta WHERE substr(key, 1, ?) = ?`, len(prefix), prefix)
+	// A range on the key, which the primary key index answers: prefix ends in ':', and ';' follows it.
+	rows, err := db.Query(`SELECT key FROM meta WHERE key >= ? AND key < ?`, prefix, prefix[:len(prefix)-1]+";")
 	if err != nil {
 		return nil
 	}
@@ -542,14 +543,22 @@ func UnpreparedHinted(db *sql.DB, session string) map[string]bool {
 	return out
 }
 
+// unpreparedHintsKept is how long a session's hint marks are kept: longer than any one session runs.
+const unpreparedHintsKept = 7 * 24 * time.Hour
+
 // RecordUnpreparedHint is the hook's write after it told a session that a project is not set up yet.
-// Like RecordSessionWaiting it never waits for a lock: a hint not recorded comes once more.
+// Like RecordSessionWaiting it never waits for a lock: a hint not recorded comes once more. It also
+// drops marks older than unpreparedHintsKept, so that ended sessions do not pile up.
 func RecordUnpreparedHint(dir, session, project string) error {
 	db, err := sql.Open("sqlite", "file:"+filepath.Join(dir, File)+"?_pragma=busy_timeout(0)")
 	if err != nil {
 		return err
 	}
 	defer db.Close()
-	_, err = db.Exec(`INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO NOTHING`, unpreparedHintKey(session, project), now())
+	if _, err := db.Exec(`INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO NOTHING`, unpreparedHintKey(session, project), now()); err != nil {
+		return err
+	}
+	cutoff := time.Now().Add(-unpreparedHintsKept).UTC().Format(time.RFC3339Nano)
+	_, err = db.Exec(`DELETE FROM meta WHERE key >= 'unprepared-hint:' AND key < 'unprepared-hint;' AND value < ?`, cutoff)
 	return err
 }
