@@ -201,6 +201,24 @@ func namesPathsAbsolutely(c shell.Command) bool {
 	return n > 0
 }
 
+// awForcePush puts aw push --force-with-lease to the human under the git-safety safeguard, as git
+// push --force-with-lease is: it replaces what the remote branch had.
+func awForcePush(s Scope, c shell.Command) Decision {
+	sub, rest := subcommand(c.Args[1:])
+	if sub != "push" || !s.safeguard("git-safety") {
+		return allow()
+	}
+	for i, a := range rest {
+		if !a.Known && i > 0 && (rest[i-1].Text == "--as" || rest[i-1].Text == "--lane") {
+			continue // a name, not an option
+		}
+		if !a.Known || a.Text == "--force-with-lease" || strings.HasPrefix(a.Text, "--force-with-lease=") {
+			return ask("git", "aw push --force-with-lease replaces the remote branch's history, which cannot be taken back, so the human decides → approve it if you asked for this")
+		}
+	}
+	return allow()
+}
+
 // revisionCommands are the git subcommands that take revision ranges as arguments.
 var revisionCommands = map[string]bool{
 	"log": true, "diff": true, "show": true, "rev-list": true, "merge-base": true, "cherry": true,
@@ -558,6 +576,9 @@ func gitGlobal(args []shell.Word) (config []string, sub string, rest []shell.Wor
 // gitRule refuses destructive Git and changes to what the owner shares with the lanes: shared
 // configuration, hooks and worktrees (owner-checkout.md).
 func gitRule(s Scope, c shell.Command) Decision {
+	if isAW(c) {
+		return awForcePush(s, c)
+	}
 	if c.Name() != "git" {
 		return allow()
 	}

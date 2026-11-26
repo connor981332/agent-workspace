@@ -32,7 +32,7 @@ The CLI is part of the design, not an afterthought. Most of the tool's value is 
 | `aw <team-command>` | both | Run a named team command, queueing for its resources |
 | `aw serve <resource>` / `aw stop <resource>` | both | Take or return a seat |
 | `aw queue` | both | Who holds and who waits for each resource |
-| `aw push [--as <name>] [project…]` | both | Push the lane's branch to origin, under the team's branch name if it differs, and remember that name for recap, finish and sweep |
+| `aw push [--as <name>] [--force-with-lease[=<commit>]] [project…]` | both | Push the lane's branch to origin, under the team's branch name if it differs, and remember that name for recap, finish and sweep; `--force-with-lease` replaces a rewritten branch only if origin's is still where the lane last saw it |
 | `aw options` | both | The team's options, their choices, and the one in effect for you (`[choose]` in your individual file) |
 | `aw reset-branch [project…]` | both | Start the lane's branches over from their base, archiving each tip under `refs/aw/archive` first |
 | `aw note ["<text>"] [--done <n>]` | both | Keep a note on the lane of something left to do outside it; recap and a starting session show open notes, finish warns, and sweep keeps the lane |

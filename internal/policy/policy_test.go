@@ -723,3 +723,22 @@ func TestSweepPushedIsNotDelegable(t *testing.T) {
 		}
 	}
 }
+
+// aw push --force-with-lease replaces the remote branch's history, so under git-safety the human
+// approves it, as for git push --force-with-lease (#145).
+func TestAWForcePushAsks(t *testing.T) {
+	f := newFixture(t)
+	s := f.scope(Lane)
+	s.Safeguards = []string{"git-safety"}
+	s.AskSupported = true
+	run(t, s, f.lane, []tcase{
+		{"bin/aw push --as team/KEY-1", Allow, ""},
+		{"bin/aw push --as \"$NAME\"", Allow, ""},
+		{"bin/aw push --force-with-lease", Ask, "git"},
+		{"bin/aw push --as team/KEY-1 --force-with-lease=abc123 web", Ask, "git"},
+		{"bin/aw push $FLAGS", Ask, "git"},
+		{"git push --force-with-lease origin HEAD", Ask, "git"},
+	})
+	s.Safeguards = nil
+	run(t, s, f.lane, []tcase{{"bin/aw push --force-with-lease", Allow, ""}})
+}
