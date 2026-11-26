@@ -257,3 +257,28 @@ func TestKeptLogStaysBoundedAndLosesNothing(t *testing.T) {
 		t.Errorf("the log has grown to %d bytes", info.Size())
 	}
 }
+
+// A session's hint marks are its own, and marks older than a week are dropped on the next write.
+func TestUnpreparedHints(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(dir, ReadWrite)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if _, err := s.DB().Exec(`INSERT INTO meta (key, value) VALUES (?, ?)`, unpreparedHintKey("claude/old/1/1", "web"), "2000-01-01T00:00:00Z"); err != nil {
+		t.Fatal(err)
+	}
+	for _, rec := range [][2]string{{"claude/a/1/1", "web"}, {"claude/a/1/1", "api"}, {"claude/a/1/10", "jobs"}, {"claude/b/1/1", "web"}} {
+		if err := RecordUnpreparedHint(dir, rec[0], rec[1]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got := UnpreparedHinted(s.DB(), "claude/a/1/1")
+	if len(got) != 2 || !got["web"] || !got["api"] {
+		t.Errorf("session a, generation 1: %v", got)
+	}
+	if got := UnpreparedHinted(s.DB(), "claude/old/1/1"); len(got) != 0 {
+		t.Errorf("an old mark was kept: %v", got)
+	}
+}
