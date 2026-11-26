@@ -188,6 +188,7 @@ func (m *Manager) Use(ctx context.Context, n int, projects []string) (*Used, err
 		err = linkProjects(m.Root(n), plans)
 	}
 	if err != nil {
+		err = notCheckedOut(err)
 		if rbErr := m.undoRepos(ctx, n, made); rbErr != nil {
 			return nil, fmt.Errorf("%w; undoing it also failed (%v) → fix the cause, then run bin/aw use again", err, rbErr)
 		}
