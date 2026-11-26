@@ -661,7 +661,24 @@ func TestFeedbackShapes(t *testing.T) {
 	})
 	// With the secrets safeguard on, a read aw cannot resolve might be of a secret, so it fails closed.
 	s.Safeguards = []string{"secrets"}
-	run(t, s, f.lane, []tcase{{"cat $UNKNOWN/x", Deny, "boundary"}})
+	run(t, s, f.lane, []tcase{
+		{"cat $UNKNOWN/x", Deny, "boundary"},
+		// A revision range is not a path, however much of it aw can determine (#148).
+		{"MB=$(git merge-base origin/main origin/feature); git log --oneline $MB..origin/main", Allow, ""},
+		{"git diff \"$BASE\"...origin/main --stat", Allow, ""},
+		{"git rev-list --count $A..$B", Allow, ""},
+		{"git log $A..$B/x", Deny, "boundary"}, // could be ../x
+		{"git log .. ...", Allow, ""},          // known, these are directories in the lane
+		{"git -C api log origin/feature..origin/main", Allow, ""},
+		{"git log $MB..origin/main -- $DIR/x", Deny, "boundary"}, // after --, a path
+		{"git log -- $MB..origin/main", Deny, "boundary"},
+		{"git log $DIR/../x", Deny, "boundary"},
+		{"git show $REV:src/../x", Deny, "boundary"},
+		{"cat $MB..origin/main", Deny, "boundary"}, // cat takes files
+	})
+	if d := Decide(s, Call{Tool: Shell, Cwd: f.lane, Command: "cat $X/y"}); !strings.Contains(d.Message, "reads /y as a path") {
+		t.Errorf("the refusal should say aw read the argument as a path: %s", d.Message)
+	}
 
 	// Item 13: a write aw cannot resolve names no single guard.
 	if d := teamGuardRule(s, shell.Command{Args: []shell.Word{{Text: "sed", Known: true}, {Text: "-i", Known: true}, {Known: false}}, Dir: shell.Dir{Logical: notes, Physical: notes, Known: true}}); d.Verdict != Deny || strings.Contains(d.Message, "generated") || !strings.Contains(d.Message, "cannot determine") {

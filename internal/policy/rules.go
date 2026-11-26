@@ -101,7 +101,7 @@ func pathsRule(s Scope, c shell.Command) Decision {
 			if !write && unknownReadOK {
 				return allow()
 			}
-			return deny("boundary", "the path %s depends on a value aw cannot determine, so it is refused → write the path literally; a variable set earlier in the same command, or a for loop over literal words, is fine", quote(w.Text))
+			return deny("boundary", "aw reads %s as a path, and its value depends on something aw cannot determine, so it is refused → write the path literally; a variable set earlier in the same command, or a for loop over literal words, is fine", quote(w.Text))
 		}
 		if harmless[text] {
 			return allow()
@@ -141,12 +141,16 @@ func pathsRule(s Scope, c shell.Command) Decision {
 	}
 	name := c.Name()
 	endpoint := apiEndpoint(c)
+	ranges := revisionRanges(c)
 	for i, a := range c.Args {
 		if i == 0 && isAW(c) {
 			continue // running the workspace's launcher touches none of the owner's files
 		}
 		if i == endpoint {
 			continue // gh api repos/o/r/pulls: a path on the forge, not a file
+		}
+		if ranges[i] {
+			continue // git log $MB..origin/main: a revision range, not a file
 		}
 		if i > 0 && isMessageText(name, c.Args[i-1], a) {
 			continue // a commit message or a title is prose, whatever slashes it has
@@ -195,6 +199,51 @@ func namesPathsAbsolutely(c shell.Command) bool {
 		n++
 	}
 	return n > 0
+}
+
+// revisionCommands are the git subcommands that take revision ranges as arguments.
+var revisionCommands = map[string]bool{
+	"log": true, "diff": true, "show": true, "rev-list": true, "merge-base": true, "cherry": true,
+	"range-diff": true, "shortlog": true, "whatchanged": true, "rev-parse": true, "diff-tree": true,
+	"format-patch": true, "cherry-pick": true, "revert": true,
+}
+
+// revisionRanges are the indexes of a git command's arguments that are revision ranges, A..B or
+// A...B, so not files: arguments before --, in a subcommand that takes revisions, with a range
+// operator that no path component could make. A value aw cannot determine is left out of a word's
+// text, so $MB..origin/main reads as ..origin/main, which is still a range; $DIR/../x keeps its
+// slash, so it is still a path.
+func revisionRanges(c shell.Command) map[int]bool {
+	if c.Name() != "git" {
+		return nil
+	}
+	_, sub, rest, unknown := gitGlobal(c.Args[1:])
+	if unknown || !revisionCommands[sub] {
+		return nil
+	}
+	first := len(c.Args) - len(rest)
+	out := map[int]bool{}
+	for i := first; i < len(c.Args); i++ {
+		t := c.Args[i].Text
+		if t == "--" && c.Args[i].Known {
+			break
+		}
+		if isRevisionRange(t, c.Args[i].Known) {
+			out[i] = true
+		}
+	}
+	return out
+}
+
+// isRevisionRange reports whether a word is written as A..B or A...B, with either end possibly
+// empty, as no path is: a path's .. is a whole component, next to a slash or the word's end. A
+// literal .. is the parent directory; one left by values aw cannot determine, as in $A..$B, is a
+// range.
+func isRevisionRange(t string, known bool) bool {
+	if strings.HasPrefix(t, "-") || !strings.Contains(t, "..") || strings.Contains(t, "../") || strings.Contains(t, "/..") {
+		return false
+	}
+	return strings.Trim(t, ".") != "" || !known
 }
 
 // apiValueOptions are the options of gh api and glab api that take a value.
