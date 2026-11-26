@@ -1,0 +1,56 @@
+# A lane saves its branch before rewriting history with aw backup, as it may not make branches of its
+# own, restores it without losing what it moves away from, and never pushes it. When the
+# lane goes, a backup its work already holds is dropped, and any other is archived.
+# req: R58 R59
+# source: issue #146
+# milestone: M12
+
+workspace shop --eager --init --repos web
+owner-may-change
+exec aw attach 'squash work'
+cd web/.worktrees/01
+exec sh -c 'echo one > a.txt && git add a.txt && git commit -qm "step one"'
+exec sh -c 'echo two > a.txt && git add a.txt && git commit -qm "step two"'
+
+# A backup goes through the guards, and a label is never reused.
+exec awtest-hook bash 'bin/aw backup before-squash'
+! stdout 'deny'
+exec aw backup before-squash
+stdout '^web: saved [0-9a-f]+ step two as backup before-squash$'
+stdout 'bin/aw backup --restore before-squash'
+! exec aw backup before-squash
+stderr 'already has a backup before-squash'
+! exec aw backup bad/label
+stderr 'is not a backup label'
+
+# The squash, then a change of mind: the restore saves the squashed tip first.
+exec git reset -q --soft HEAD~2
+exec git commit -qm 'one squashed step'
+exec aw backup --list
+stdout '^before-squash  web [0-9a-f]+ step two$'
+exec sh -c 'echo dirty > a.txt'
+! exec aw backup --restore before-squash
+stderr 'uncommitted work in web'
+exec git checkout -q -- a.txt
+exec aw backup --restore before-squash
+stdout '^Saved where the branch was as backup before-before-squash-'
+stdout '^web: restored to [0-9a-f]+ step two$'
+exec git log -1 --format=%s
+stdout '^step two$'
+exec aw backup --list --json
+stdout '"label": "before-before-squash-'
+stdout '"subject": "one squashed step"'
+
+# Backups are local: a push sends only the branch.
+exec aw push
+exec git ls-remote origin
+! stdout 'refs/aw/'
+
+# Discarding the lane drops the backup its tip holds and archives the squashed one.
+cd $OWNER
+exec aw discard squash-work --yes
+exec aw archives
+stdout 'squash-work-backup-before-before-squash-'
+! stdout 'squash-work-backup-before-squash/'
+exec git -C web for-each-ref refs/aw/backup/
+! stdout .

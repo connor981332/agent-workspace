@@ -160,6 +160,7 @@ If you already started an agent in the owner checkout, it can claim a lane for i
 | `aw stop <resource>` | Give the seat back. |
 | `aw snapshot <name>` / `aw restore <name>` | Save the lane's data, or replace it with a named snapshot. |
 | `aw push [--as <name>] [--force-with-lease]` | Push the lane's branch to origin and set its upstream. `--as` pushes it under the branch name your team's conventions want, and aw remembers that name for recap, finish and sweep. After a rebase, `--force-with-lease` replaces the remote branch, only if it is still where the lane last saw it. |
+| `aw backup [<label>]` | Save the lane's branch before a rebase or rebuild; `--list` lists backups and `--restore <label>` moves the branch back to one. Backups stay local. |
 | `aw note "<text>"` | Keep a note on the lane of something left to do, such as a temporary change to undo. Recap shows open notes, a session starting in the lane is told them, and `aw finish` warns while any is open. `--done <n>` closes one. |
 | `aw reset-branch [project…]` | Start the lane's branches over from their base, archiving what they had under `refs/aw/archive/` first. |
 | `aw finish --summary "…"` | Hand off for review. Records the exact head of every repository and a note on what to verify. Refuses, listing every problem, if anything is uncommitted or off-branch. |

@@ -972,6 +972,10 @@ func (m *Manager) destroy(ctx context.Context, l state.Lane, stored []state.Lane
 			return err
 		}
 		if r.Branch != "" {
+			tip, _ := g.Line(ctx, "rev-parse", "--verify", "--quiet", "refs/heads/"+r.Branch)
+			if err := releaseBackups(ctx, g, l.Name, r.BaseRef, tip, time.Now()); err != nil {
+				return err
+			}
 			if head, err := g.Line(ctx, "rev-parse", "--verify", "--quiet", "refs/heads/"+r.Branch); err == nil {
 				// Archived, its head is under refs/aw/archive. Otherwise it was proven merged into
 				// its base: by ancestry, or by patch, content or the forge, which archive it first, as
