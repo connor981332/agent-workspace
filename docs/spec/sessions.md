@@ -134,7 +134,11 @@ two or three, and a worktree costs time at claim and at recycle, disk, and noise
   branch, everything they need, their secret links, local files and link from the lane root, then
   each one's `prepare`. Its other setup steps wait for first use, unless the project is eager. It is
   idempotent, any agent may run it in its own lane without being asked, and it shows progress.
-  `aw run` and `aw serve` call it first for a project the lane does not have yet.
+  `aw run` and `aw serve` call it first for a project the lane does not have yet. That includes a
+  project added to the workspace after the lane was made: `aw setup <lane>` names each such project
+  with `bin/aw use <project>`, so a lane with work keeps it rather than being discarded for one new
+  project (#150). When something blocks a project, such as a repository with no commit yet or a
+  lane guard, `aw use` names it and leaves the lane as it was.
 - **What an agent sees first.** The lane root has links only to the projects it has. The generated
   instructions list the workspace's projects and `bin/aw use`. A file tool or a shell command that
   names a path under `<lane>/<project>` for a project the lane does not have is refused with "web
