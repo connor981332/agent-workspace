@@ -1,0 +1,50 @@
+# aw adopt continues an existing branch on origin in a lane: the lane's own branch moves to it, its
+# upstream is set, and aw push, recap and sweep know the name from the start. It refuses, changing
+# nothing, while the lane has work of its own that the branch does not hold.
+# req: R58
+# source: issue #147
+# milestone: M12
+
+workspace shop --eager --init --repos web
+owner-may-change
+
+# A teammate's branch on origin.
+cd web
+exec git switch -q -c team/KEY-7
+exec sh -c 'echo spike > spike.txt && git add spike.txt && git commit -qm "teammate spike"'
+exec git push -q origin team/KEY-7
+exec git switch -q -
+exec git branch -q -D team/KEY-7
+cd $OWNER
+
+exec aw attach 'continue spike'
+cd web/.worktrees/01
+! exec aw adopt no/such-branch
+stderr 'origin has no branch no/such-branch'
+exec aw adopt team/KEY-7
+stdout '^web: aw/continue-spike now continues origin/team/KEY-7 at [0-9a-f]+$'
+stdout 'pushes to team/KEY-7'
+exec git log -1 --format=%s
+stdout '^teammate spike$'
+exec git branch --show-current
+stdout '^aw/continue-spike$'
+exec git rev-parse --abbrev-ref '@{upstream}'
+stdout '^origin/team/KEY-7$'
+
+exec sh -c 'echo more > spike.txt && git commit -qam "continue the spike"'
+exec aw push
+stdout '^web: pushed aw/continue-spike to origin/team/KEY-7$'
+exec aw recap
+stdout 'web [0-9a-f]+: pushed as team/KEY-7'
+
+# Work of the lane's own that another branch does not hold is never moved away from.
+cd $OWNER/web
+exec git switch -q -c other main
+exec git push -q origin other
+exec git switch -q -
+cd $OWNER/web/.worktrees/01
+! exec aw adopt other
+stderr 'commit\(s\) of the lane''s own that other does not hold'
+stderr 'nothing was changed'
+exec git log -1 --format=%s
+stdout '^continue the spike$'
