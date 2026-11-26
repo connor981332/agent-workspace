@@ -55,7 +55,7 @@ func (m *Manager) Reconcile(ctx context.Context, l state.Lane) (added, notes []s
 	}
 	for _, name := range sortedKeys(m.Cfg.Projects) {
 		if pr := m.Cfg.Projects[name]; !have[name] && pr.Directory != "." && pr.Lanes != "shared" && !slices.Contains(notes, name) {
-			notes = append(notes, fmt.Sprintf("project %s was added after this lane was made, so the lane has no worktree of it → finish or discard the lane, and attach a new one to work on it", name))
+			notes = append(notes, fmt.Sprintf("project %s was added after this lane was made, so the lane has no worktree of it → run bin/aw use %s in the lane to check it out on its branch", name, name))
 		}
 	}
 	return added, notes, nil

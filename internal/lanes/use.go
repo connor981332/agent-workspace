@@ -166,11 +166,11 @@ func (m *Manager) Use(ctx context.Context, n int, projects []string) (*Used, err
 		}
 		p, err := m.planRepo(ctx, name, pr.Directory, branch, pr.Secrets)
 		if err != nil {
-			return nil, err
+			return nil, notCheckedOut(err)
 		}
 		p.localFiles = pr.LocalFiles
 		if err := checkGuards(ctx, name, p, pr.LaneGuards); err != nil {
-			return nil, err
+			return nil, notCheckedOut(err)
 		}
 		plans = append(plans, p)
 	}
@@ -239,6 +239,16 @@ func (m *Manager) Use(ctx context.Context, n int, projects []string) (*Used, err
 		u.Added = append(u.Added, p.project)
 	}
 	return u, nil
+}
+
+// notCheckedOut words a planning refusal, which a claim prefixes with "no lane was created", for a
+// lane that exists: what blocks the project is kept, and the lane is untouched.
+func notCheckedOut(err error) error {
+	const claimPrefix = "no lane was created: "
+	if msg := err.Error(); strings.HasPrefix(msg, claimPrefix) {
+		return fmt.Errorf("nothing was checked out: %s", strings.TrimPrefix(msg, claimPrefix))
+	}
+	return err
 }
 
 // undoRepos removes the worktrees Use created before it failed, their links and the branches it made

@@ -1,6 +1,7 @@
 # aw setup <lane> brings a lane made under an older configuration up to the current one where that
 # can be done at any time: secret files are linked and local files copied, as a new lane gets them.
-# What it cannot add, a project the lane has no worktree of, it says.
+# A project added since, which the lane has no worktree of, it names, with how to add it: aw use
+# checks it out on the lane's branch, as a new lane would (#150).
 # req: R31 R67
 # source: plans/agent-feedback.md, item 4
 # milestone: M12
@@ -13,16 +14,35 @@ exec aw attach 'old lane'
 # The team declares a secret and a local file after the lane was made.
 exec sh -c 'printf "KEY=1\n" > web/.env && printf "x\n" > web/local.properties'
 exec sh $WORK/declare.sh
-exec git init -q jobs
+exec git init -q -b main jobs
 exec sh -c 'printf "\n[projects.jobs]\n" >> workspace.toml'
 exec aw setup old-lane
 stderr 'aw: web: linked the secret file .env, which the configuration added since the lane was made'
 stderr 'aw: web: copied the local file local.properties'
 stderr 'aw: note: project jobs was added after this lane was made'
+stderr 'bin/aw use jobs'
+! stderr 'discard the lane'
 exists .worktrees/01/web/.env
 exists .worktrees/01/web/local.properties
 exec aw setup old-lane
 ! stderr 'linked the secret file'
+
+# The lane keeps its work: aw use adds the new project to it, on the lane's branch.
+# What blocks it is said, and the lane is left as it was.
+cd .worktrees/01
+! exec aw use jobs
+stderr 'nothing was checked out: project jobs .* has no commit on main'
+! stderr 'no lane was created'
+! exists jobs
+exec git -C ../../jobs -c user.name=t -c user.email=t@t commit -q --allow-empty -m first
+exec aw use jobs
+stdout 'Checked out jobs in lane old-lane, on its branch'
+exists jobs/.git
+exec git -C jobs symbolic-ref --short HEAD
+stdout 'aw/old-lane'
+cd ../..
+exec aw setup old-lane
+! stderr 'project jobs was added'
 
 -- declare.sh --
 # web already has a table: add the keys to it.
