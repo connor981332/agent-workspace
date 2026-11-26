@@ -1,6 +1,6 @@
 # With lazy setup, claiming a lane runs only the workspace's own steps. A project's own setup runs the
 # first time a command needs it, in the foreground, and the other projects wait for theirs. A command
-# an agent runs directly in a project not set up yet is told how to set it up; aw setup --project
+# an agent runs directly in a project not set up yet is told how to set it up, once per session; aw setup --project
 # sets up one project, and aw setup the rest.
 # req: R5 R31 R32
 # source: plans/dogfood-0.3.md 5.6 (docs/spec/sessions.md, "Lazy per-project setup")
@@ -18,6 +18,11 @@ cd api
 exec awtest-hook bash 'make test'
 stdout 'project api is not set up in this lane yet'
 stdout 'bin/aw run api'
+# Once a session is told, its next commands are not told again; another session is (#149).
+exec awtest-hook bash 'make lint'
+! stdout 'not set up'
+exec awtest-hook -session other bash 'make lint'
+stdout 'project api is not set up in this lane yet'
 cd ..
 
 exec aw run web cat $OWNER/.git/aw/web-ran

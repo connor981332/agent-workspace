@@ -42,6 +42,11 @@ func GitHook(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return Deny
 	}
 	if name != "reference-transaction" {
+		if teamHook(name) != "" {
+			if project, lane := unpreparedHere(); project != "" {
+				return runUnpreparedHook(name, rest, project, lane, stderr)
+			}
+		}
 		return execTeamHook(name, rest, stderr)
 	}
 	if len(rest) != 1 {
@@ -310,4 +315,99 @@ func runTeamHook(name string, args []string, input []byte, stdout, stderr io.Wri
 func worktreeHookEnv() []string {
 	cwd, _ := os.Getwd()
 	return gitenv.ForWorktreeHook(os.Environ(), cwd)
+}
+
+// unpreparedHere is the project this lane worktree belongs to, and the lane's name, when its setup
+// still waits for its first use (lazy setup): its install and setup hooks have not run, so a
+// repository's own hook that needs them is likely to fail. It reads the state only when the team has
+// a hook to run, and "" means set up, or not known.
+func unpreparedHere() (project, lane string) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", ""
+	}
+	ws, err := workspace.Find(cwd)
+	if err != nil || ws.LaneRoot == "" {
+		return "", ""
+	}
+	n, err := strconv.Atoi(filepath.Base(ws.LaneRoot))
+	if err != nil {
+		return "", ""
+	}
+	stateDir, err := ws.StateDir()
+	if err != nil {
+		return "", ""
+	}
+	s, err := state.Open(stateDir, state.ReadOnly)
+	if err != nil {
+		return "", ""
+	}
+	defer s.Close()
+	l, err := state.LaneByNumber(s.DB(), n)
+	if err != nil {
+		return "", ""
+	}
+	repos, err := state.LaneRepos(s.DB(), n)
+	if err != nil {
+		return "", ""
+	}
+	here := ""
+	for _, r := range repos {
+		if r.Project != "" && samePath(r.Path, cwd) {
+			here = r.Project
+		}
+	}
+	if here == "" {
+		return "", ""
+	}
+	steps, err := state.Steps(s.DB(), n, l.Generation)
+	if err != nil {
+		return "", ""
+	}
+	for _, st := range steps {
+		p, _, _ := strings.Cut(st.Name, ".")
+		if p == here && st.Status == state.StepPending && !strings.HasSuffix(st.Name, ".prepare") {
+			return here, l.Name
+		}
+	}
+	return "", ""
+}
+
+// samePath reports whether dir is a or inside it, through links.
+func samePath(a, dir string) bool {
+	ra, errA := filepath.EvalSymlinks(a)
+	rd, errD := filepath.EvalSymlinks(dir)
+	if errA != nil || errD != nil {
+		return false
+	}
+	return rd == ra || strings.HasPrefix(rd, ra+string(filepath.Separator))
+}
+
+// runUnpreparedHook runs the team's hook in a project whose setup has not run yet, as a child rather
+// than in aw's place, so that when it fails aw can say what is likely missing. Its status is passed
+// on, as with exec.
+func runUnpreparedHook(name string, args []string, project, lane string, stderr io.Writer) int {
+	abs, err := filepath.Abs(teamHook(name))
+	if err != nil {
+		fmt.Fprintf(stderr, "aw: the team's %s hook cannot be found (%v), so it is refused\n", name, err)
+		return Deny
+	}
+	proc, err := os.StartProcess(abs, append([]string{abs}, args...), &os.ProcAttr{Files: []*os.File{os.Stdin, os.Stdout, os.Stderr}, Env: worktreeHookEnv()})
+	if err != nil {
+		fmt.Fprintf(stderr, "aw: the team's %s hook cannot start (%v), so it is refused\n", name, err)
+		return Deny
+	}
+	st, err := proc.Wait()
+	if err != nil {
+		fmt.Fprintf(stderr, "aw: the team's %s hook: %v\n", name, err)
+		return Deny
+	}
+	if st.Success() {
+		return Allow
+	}
+	fmt.Fprintf(stderr, "aw: project %s is not set up in lane %s yet, and its %s hook may need what setup installs → run bin/aw setup %s --project %s, then try again\n", project, lane, name, lane, project)
+	if code := st.ExitCode(); code > 0 {
+		return code
+	}
+	return Deny
 }
