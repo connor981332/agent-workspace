@@ -34,6 +34,7 @@ The CLI is part of the design, not an afterthought. Most of the tool's value is 
 | `aw queue` | both | Who holds and who waits for each resource |
 | `aw push [--as <name>] [--force-with-lease[=<commit>]] [project…]` | both | Push the lane's branch to origin, under the team's branch name if it differs, and remember that name for recap, finish and sweep; `--force-with-lease` replaces a rewritten branch only if origin's is still where the lane last saw it |
 | `aw backup [<label>]`, `--list`, `--restore <label>` | both | Save the lane's branch tips under `refs/aw/backup/<lane>/<label>` before rewriting history, list them, or move the branch back to one (saving where it was first); never pushed, and archived when the lane goes unless already merged or in its tip |
+| `aw adopt <remote-branch> [project…]` | both | Continue an existing branch on origin in the lane: point the lane's branch at it, set its upstream, and record it as the push name; refuses while the lane has work of its own the branch does not hold |
 | `aw options` | both | The team's options, their choices, and the one in effect for you (`[choose]` in your individual file) |
 | `aw reset-branch [project…]` | both | Start the lane's branches over from their base, archiving each tip under `refs/aw/archive` first |
 | `aw note ["<text>"] [--done <n>]` | both | Keep a note on the lane of something left to do outside it; recap and a starting session show open notes, finish warns, and sweep keeps the lane |
